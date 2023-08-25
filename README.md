@@ -1,4 +1,4 @@
-# ASPEN: Efficient and Automatically Multiple LoRA and QLoRA Fine-tuning
+# ASPEN: Efficient and Automatical Framework for Multiple LLM Model Fine-tuning
 
 This repository provides tools for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods. It facilitates efficient and streamlined fine-tuning processes for researchers and practitioners.
 
