@@ -1,29 +1,23 @@
-# ASPEN: Efficient Multi-Lora Fine Tuning with Shared-Based Model
+# ASPEN: Efficient Multi-LoRA Fine Tuning with Shared-Based Model
 
-This repository provides tools for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently. It provides the framework to support multiple lora/qlora models fine tunning at the same time. By reusing the shared frozen-based model, multiple fine models can reduce GPU Memory usage greatly.  
+This repository provides tools for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently. It provides the framework to support multiple LoRA/qLoRA models fine tunning at the same time. By reusing the shared frozen-based model, we provide the framework to reduce GPU Memory usage for multiple fine-tuning models.  
 
 ## Table of Contents
 
 - [Updates](#updates)
 - [Overview](#overview)
-- [Installation](#installation)
-- [Getting Started](#started)
+- [Getting Started](#Quickstart)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Updates
+Support 
 
 ## Overview
 
-## Installation
 
-1. **Clone the Repository**:
-   ```bash
-   git clone 
-   cd llm-lora-finetune
-   ```
+## Quickstart
 
-## Started
 The `mlora.py` code is a starting point for finetuning and inference on various datasets.
 Basic command for finetuning a baseline model on the Alpaca dataset:
 ```bash
