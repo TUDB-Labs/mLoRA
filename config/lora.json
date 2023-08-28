@@ -1,0 +1,46 @@
+{
+    "base_model": "/yezhengmao/modules/llama-7b/7B/consolidated.00.pth",
+    "token_model": "/yezhengmao/modules/llama-7b/tokenizer.model",
+    "cutoff_len": 512,
+    "group_by_length": false,
+    "expand_right": true,
+    "device": "cuda:1",
+    "lora": [
+        {
+            "name": "lora_0",
+            "output": "lora_0.bin",
+            "batch_size": 16,
+            "num_epochs": 3,
+            "r": 8,
+            "alpha": 16,
+            "dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true
+            },
+            "data": "data/train_lora_a.json",
+            "prompt_input": "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{output}\n\n",
+            "prompt_no_input": "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n{output}\n\n"
+        },
+        {
+            "name": "lora_1",
+            "output": "lora_1.bin",
+            "batch_size": 16,
+            "num_epochs": 3,
+            "r": 8,
+            "alpha": 16,
+            "dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true
+            },
+            "data": "data/train_lora_b.json",
+            "prompt_input": "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n{output}\n\n",
+            "prompt_no_input": "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{instruction}\n\n### Response:\n{output}\n\n"
+        }
+    ]
+}
