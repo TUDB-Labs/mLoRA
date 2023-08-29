@@ -43,16 +43,22 @@ else:
     exit(-1)
 
 
+if args.model_name_or_path == None:
+    print('error: Argument --model_name_or_path are required.')
+    parser.print_help()
+    exit(-1)
+
+
 def prep_llm():
-    args = aspen.LlamaModelArgs()
+    llama_args = aspen.LlamaModelArgs()
     tokenizer = aspen.Tokenizer(args.model_name_or_path + os.sep + 'tokenizer.model')
     tokenizer.pad_id_ = 0
-    args.max_seq_len_ = 4096
-    args.device = args.device
-    args.vocab_size_ = tokenizer.n_words_
-    args.pad_id_ = tokenizer.pad_id_
-    args.n_heads_ = 32
-    model = aspen.LlamaModel(args)
+    llama_args.max_seq_len_ = 4096
+    llama_args.device = args.device
+    llama_args.vocab_size_ = tokenizer.n_words_
+    llama_args.pad_id_ = tokenizer.pad_id_
+    llama_args.n_heads_ = 32
+    model = aspen.LlamaModel(llama_args)
     aspen.load_llama_tf_weight(model, args.model_name_or_path, args.device)
     return tokenizer, model
 
