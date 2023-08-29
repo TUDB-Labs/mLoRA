@@ -1,7 +1,4 @@
-from aspen import LlamaModel, Tokenizer, DataSet
-from aspen import LlamaModelArgs, MultiLoraBatchData
-from aspen import load_llama_7b_weight, load_random_lora_7b_weight
-from aspen import save_lora_model
+import aspen
 
 import json
 import torch
@@ -10,15 +7,15 @@ import torch.optim
 with open('config/lora.json', 'r', encoding='utf8') as fp:
     config = json.load(fp)
 
-args = LlamaModelArgs()
-tokenizer = Tokenizer(config["token_model"])
+args = aspen.LlamaModelArgs()
+tokenizer = aspen.Tokenizer(config["token_model"])
 tokenizer.pad_id_ = 0
 args.max_seq_len_ = 4096
 args.device = config["device"]
 args.vocab_size_ = tokenizer.n_words_
 args.pad_id_ = tokenizer.pad_id_
 args.n_heads_ = 32
-llama_model = LlamaModel(args)
+llama_model = aspen.LlamaModel(args)
 
 
 def setup_seed(seed):
@@ -26,9 +23,9 @@ def setup_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def init_lora_model(llama_model: LlamaModel):
+def init_lora_model(llama_model: aspen.LlamaModel):
     for lora_config in config["lora"]:
-        load_random_lora_7b_weight(
+        aspen.load_random_lora_7b_weight(
             llama_model,
             lora_config["name"],
             lora_config["r"],
@@ -42,8 +39,8 @@ def init_lora_model(llama_model: LlamaModel):
 if __name__ == "__main__":
     setup_seed(42)
 
-    data_set = DataSet(config, tokenizer)
-    load_llama_7b_weight(llama_model, config["base_model"], config["device"])
+    data_set = aspen.DataSet(config, tokenizer)
+    aspen.load_llama_7b_weight(llama_model, config["base_model"], config["device"])
     init_lora_model(llama_model)
 
     torch.cuda.empty_cache()
@@ -54,7 +51,7 @@ if __name__ == "__main__":
     while not data_set.check_done():
         optimizer.zero_grad()
         loss_fn = torch.nn.CrossEntropyLoss()
-        input: MultiLoraBatchData = data_set.get_batch_data()
+        input: aspen.MultiLoraBatchData = data_set.get_batch_data()
 
         step_cnt += 1
 
@@ -83,9 +80,7 @@ if __name__ == "__main__":
 
         if step_cnt % config["save_step"] == 0:
             for lora_config in config["lora"]:
-                save_lora_model(
-                    llama_model, lora_config["output"] + f".bin{step_cnt}", lora_config["name"])
+                aspen.save_lora_model(llama_model, lora_config["output"] + f".bin{step_cnt}", lora_config["name"])
 
     for lora_config in config["lora"]:
-        save_lora_model(
-            llama_model, lora_config["output"], lora_config["name"])
+        aspen.save_lora_model(llama_model, lora_config["output"], lora_config["name"])
