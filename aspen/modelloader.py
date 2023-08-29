@@ -122,10 +122,10 @@ def load_random_lora_7b_weight(model: LlamaModel,
                     adapter_name, "lora_B", lora_b_weight)
 
 
-def save_lora_model(model: LlamaModel, config: Dict[str, str]):
+def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
     for lora_config in config["lora"]:
         lora_name = lora_config["name"]
-        lora_output_dir = lora_config["output"]
+        lora_output_dir = lora_config["output"] + "_" + dir_suffix
 
         if not os.path.exists(lora_output_dir):
             os.makedirs(lora_output_dir)

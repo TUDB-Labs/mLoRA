@@ -80,6 +80,6 @@ if __name__ == "__main__":
         optimizer.step()
 
         if step_cnt % config["save_step"] == 0:
-            aspen.save_lora_model(llama_model, config)
+            aspen.save_lora_model(llama_model, config, f"{step_cnt}")
 
     aspen.save_lora_model(llama_model, config)

@@ -4,3 +4,4 @@ xformers
 transformers
 bitsandbytes
 sentencepiece
+scipy
