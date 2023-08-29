@@ -14,9 +14,7 @@
 #
 # Copyright (C) 2023 All Rights Reserved.
 #
-# Email:   
 # Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
-# Website: 
 
 import datetime
 import argparse
@@ -31,9 +29,11 @@ parser.add_argument('--log', type=bool, default=True, help='Turn on or off log, 
 
 args = parser.parse_args()
 
-def log(msg:str):
+
+def log(msg: str):
     if args.log:
         print('[%s] ASPEN: %s' % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg))
+
 
 if torch.cuda.is_available():
     log('NVIDIA CUDA initialized successfully.')
@@ -41,6 +41,7 @@ if torch.cuda.is_available():
 else:
     print('ASPEN requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
     exit(-1)
+
 
 def prep_llm():
     args = aspen.LlamaModelArgs()
@@ -54,6 +55,7 @@ def prep_llm():
     model = aspen.LlamaModel(args)
     aspen.load_llama_tf_weight(model, args.model_name_or_path, args.device)
     return tokenizer, model
+
 
 if __name__ == "__main__":
     tokenizer, model = prep_llm()

@@ -1,7 +1,8 @@
+from aspen.model import LlamaModel, Linear, RMSNorm
+
 import sys
 import torch
 
-from aspen import LlamaModel, Linear, RMSNorm
 from transformers import LlamaForCausalLM
 
 
@@ -91,7 +92,12 @@ def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str):
             print(f"Not use layer {layer_name}.", file=sys.stderr)
 
 
-def load_random_lora_7b_weight(model: LlamaModel, adapter_name: str, r: int, dim: int, target_module: str, device: str) -> None:
+def load_random_lora_7b_weight(model: LlamaModel,
+                               adapter_name: str,
+                               r: int,
+                               dim: int,
+                               target_module: str,
+                               device: str) -> None:
     norm_mean = 0
     norm_std = 1e-3
     target_module_name_list = ["q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]

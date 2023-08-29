@@ -1,7 +1,9 @@
+from aspen.modelargs import MultiLoraBatchData, LoraBatchDataConfig
+from aspen.tokenizer import Tokenizer
+
 import math
 import json
 import random
-from aspen import MultiLoraBatchData, LoraBatchDataConfig, Tokenizer
 from typing import Dict, List, Tuple
 
 
@@ -37,7 +39,9 @@ class DataSet():
                             "{output}", raw_data_output).replace("{instruction}", raw_data_instruction)
                     else:
                         text_data = lora_config["prompt_input"].replace(
-                            "{output}", raw_data_output).replace("{instruction}", raw_data_instruction).replace("{input}", raw_data_input)
+                            "{output}", raw_data_output).replace(
+                            "{instruction}", raw_data_instruction).replace(
+                            "{input}", raw_data_input)
                     lora_text_data[lora_name].append(text_data)
 
         return lora_text_data
@@ -122,8 +126,6 @@ class DataSet():
                 f"    epoch: {self.lora_cnt_epochs_[lora_name] + 1} / {self.lora_num_epochs_[lora_name]}")
             print(
                 f"    step : {self.lora_start_idx_[lora_name]} / {len(self.lora_token_data_[lora_name])}")
-            print(
-                f"         : {(self.lora_cnt_epochs_[lora_name] * len(self.lora_token_data_[lora_name]) + self.lora_start_idx_[lora_name]) * 100 / (self.lora_num_epochs_[lora_name] * len(self.lora_token_data_[lora_name]))}%")
 
         # align batch data
         max_token_len = math.ceil(max_token_len / 8) * 8

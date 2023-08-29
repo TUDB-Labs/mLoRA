@@ -1,6 +1,6 @@
 {
-    "base_model": "",
-    "token_model": "",
+    "base_model": "/modules/llama-7b/7B/consolidated.00.pth",
+    "token_model": "/modules/llama-7b/tokenizer.model",
     "cutoff_len": 512,
     "group_by_length": false,
     "expand_right": true,

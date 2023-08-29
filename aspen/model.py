@@ -1,4 +1,4 @@
-from aspen import LlamaModelArgs, MultiLoraBatchData
+from aspen.modelargs import LlamaModelArgs, MultiLoraBatchData
 
 import torch
 import torch.nn.functional as F
@@ -45,7 +45,8 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
     return einops.rearrange(x, "... d r -> ... (d r)")
 
 
-def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, angle: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
+                     angle: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
     # data shape is: batch_size * max_seq_len * n_head * n_dim
     _, max_seq_len, _, dim_head = xq.shape
 
@@ -177,7 +178,11 @@ class Transformer():
                 adapter_name, r, lora_alpha, lora_dropout)
 
     # @torch.compile
-    def forward(self, data: torch.Tensor, mask: torch.Tensor, rope_angle: Tuple[torch.Tensor, torch.Tensor], input_args: MultiLoraBatchData):
+    def forward(self,
+                data: torch.Tensor,
+                mask: torch.Tensor,
+                rope_angle: Tuple[torch.Tensor, torch.Tensor],
+                input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
         attention_norm_data = self.attention_norm_.forward(data)
