@@ -21,7 +21,16 @@ class DataSet():
         lora_text_data = {}
         for lora_config in self.config_["lora"]:
             lora_name = lora_config["name"]
+            lora_template = lora_config["prompt"]
             data_path = lora_config["data"]
+
+            with open(lora_template, 'r', encoding='utf8') as fp:
+                template_config = json.load(fp)
+
+            template_parameter_list = template_config["parameter"]
+            template_prompt = template_config["prompt"]
+            template_prompt_no_input = template_config["prompt_no_input"]
+
             lora_text_data[lora_name] = []
             self.lora_cnt_epochs_[lora_name] = 0
             self.lora_start_idx_[lora_name] = 0
@@ -30,18 +39,27 @@ class DataSet():
 
             with open(data_path, 'r', encoding='utf8') as fp:
                 for raw_data in json.load(fp):
-                    raw_data_input = raw_data["input"]
-                    raw_data_output = raw_data["output"]
-                    raw_data_instruction = raw_data["instruction"]
-                    text_data = ""
-                    if raw_data_input is None or len(raw_data_input) <= 1:
-                        text_data = lora_config["prompt_no_input"].replace(
-                            "{output}", raw_data_output).replace("{instruction}", raw_data_instruction)
+                    raw_data_input = {}
+
+                    no_input_flag = False
+                    for para in template_parameter_list:
+                        if para not in raw_data:
+                            no_input_flag = True
+                            continue
+                        raw_data_input[para] = raw_data[para]
+
+                    text_data: str = ""
+                    if no_input_flag:
+                        text_data = template_prompt_no_input
                     else:
-                        text_data = lora_config["prompt_input"].replace(
-                            "{output}", raw_data_output).replace(
-                            "{instruction}", raw_data_instruction).replace(
-                            "{input}", raw_data_input)
+                        text_data = template_prompt
+
+                    for para in template_parameter_list:
+                        if para not in raw_data_input:
+                            continue
+                        text_data = text_data.replace(
+                            "{" + para + "}", raw_data[para])
+
                     lora_text_data[lora_name].append(text_data)
 
         return lora_text_data
@@ -116,16 +134,16 @@ class DataSet():
             batch_start_idx += len(prompt_and_tokens_list)
             prompts_batch_config_list.append(lora_config)
 
-            self.lora_start_idx_[lora_name] += self.lora_batch_size_[lora_name]
-            if self.lora_start_idx_[lora_name] >= len(self.lora_token_data_[lora_name]):
-                self.lora_start_idx_[lora_name] = 0
-                self.lora_cnt_epochs_[lora_name] += 1
-
             print(f"{lora_name} train data:")
             print(
                 f"    epoch: {self.lora_cnt_epochs_[lora_name] + 1} / {self.lora_num_epochs_[lora_name]}")
             print(
                 f"    step : {self.lora_start_idx_[lora_name]} / {len(self.lora_token_data_[lora_name])}")
+
+            self.lora_start_idx_[lora_name] += self.lora_batch_size_[lora_name]
+            if self.lora_start_idx_[lora_name] >= len(self.lora_token_data_[lora_name]):
+                self.lora_start_idx_[lora_name] = 0
+                self.lora_cnt_epochs_[lora_name] += 1
 
         # align batch data
         max_token_len = math.ceil(max_token_len / 8) * 8
