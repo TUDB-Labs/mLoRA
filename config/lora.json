@@ -1,7 +1,7 @@
 {
-    "base_model": "/modules/llama-7b/7B/consolidated.00.pth",
-    "token_model": "/modules/llama-7b/tokenizer.model",
-    "cutoff_len": 512,
+    "base_model": "",
+    "token_model": "",
+    "cutoff_len": 256,
     "group_by_length": false,
     "expand_right": true,
     "device": "cuda:1",
@@ -9,7 +9,7 @@
     "lora": [
         {
             "name": "lora_0",
-            "output": "lora_0.bin",
+            "output": "lora_0",
             "batch_size": 16,
             "num_epochs": 3,
             "r": 8,
@@ -19,15 +19,17 @@
                 "q_proj": true,
                 "k_proj": true,
                 "v_proj": true,
-                "o_proj": true
+                "o_proj": true,
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
             },
-            "data": "",
-            "prompt_input": "",
-            "prompt_no_input": ""
+            "data": "data/data_demo.json",
+            "prompt": "template/template_demo.json"
         },
         {
             "name": "lora_1",
-            "output": "lora_1.bin",
+            "output": "lora_1",
             "batch_size": 16,
             "num_epochs": 3,
             "r": 8,
@@ -37,11 +39,13 @@
                 "q_proj": true,
                 "k_proj": true,
                 "v_proj": true,
-                "o_proj": true
+                "o_proj": true,
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
             },
-            "data": "",
-            "prompt_input": "",
-            "prompt_no_input": ""
+            "data": "data/data_demo.json",
+            "prompt": "template/template_demo.json"
         }
     ]
 }

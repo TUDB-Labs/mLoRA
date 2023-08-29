@@ -166,3 +166,8 @@ cython_debug/
 __pycache__/
 *.egg-info/
 *.egg
+
+data/*
+template/*
+!data/data_demo.json
+!template/template_demo.json

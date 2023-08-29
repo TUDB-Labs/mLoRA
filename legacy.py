@@ -40,7 +40,8 @@ if __name__ == "__main__":
     setup_seed(42)
 
     data_set = aspen.DataSet(config, tokenizer)
-    aspen.load_llama_7b_weight(llama_model, config["base_model"], config["device"])
+    aspen.load_llama_7b_weight(
+        llama_model, config["base_model"], config["device"])
     init_lora_model(llama_model)
 
     torch.cuda.empty_cache()
@@ -79,8 +80,6 @@ if __name__ == "__main__":
         optimizer.step()
 
         if step_cnt % config["save_step"] == 0:
-            for lora_config in config["lora"]:
-                aspen.save_lora_model(llama_model, lora_config["output"] + f".bin{step_cnt}", lora_config["name"])
+            aspen.save_lora_model(llama_model, config)
 
-    for lora_config in config["lora"]:
-        aspen.save_lora_model(llama_model, lora_config["output"], lora_config["name"])
+    aspen.save_lora_model(llama_model, config)
