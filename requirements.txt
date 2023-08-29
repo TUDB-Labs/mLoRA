@@ -1,5 +1,6 @@
 torch==2.0.1
-sentencepiece
-bitsandbytes
-xformers
 einops
+xformers
+transformers
+bitsandbytes
+sentencepiece
