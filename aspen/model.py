@@ -1,6 +1,5 @@
-from aspen.modelargs import LlamaModelArgs, MultiLoraBatchData
+from aspen import LlamaModelArgs, MultiLoraBatchData
 
-import time
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -18,13 +17,13 @@ def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10
     emb = torch.outer(seq, angles).float()
     emb = einops.repeat(emb, "... n -> ... (n r)", r=2)
     # cos(angle), sin(angle)
-    return (emb.cos().to(torch.float16), emb.sin().to(torch.float16))
+    return (emb.cos().to(torch.float32), emb.sin().to(torch.float32))
 
 
 def precompute_mask(input: MultiLoraBatchData, n_head: int, device: str) -> torch.Tensor:
     mask = torch.full((len(input.prompts_), n_head,
                       input.batch_seq_len_, input.batch_seq_len_), float("-inf"))
-    mask = torch.triu(mask, diagonal=1).to(torch.float16).cuda(device)
+    mask = torch.triu(mask, diagonal=1).to(torch.float32).cuda(device)
 
     for idx, _ in enumerate(input.prompts_):
         zero_len = input.tokens_len_without_pad_[idx]
@@ -36,7 +35,7 @@ def precompute_mask(input: MultiLoraBatchData, n_head: int, device: str) -> torc
             mask[idx] += torch.tensor([float("-inf")] * inf_len + [0] * zero_len).expand(
                 input.batch_seq_len_, input.batch_seq_len_).cuda(device)
 
-    return mask.to(torch.float16)
+    return mask.to(torch.float32)
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -61,13 +60,39 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, angle: Tuple[torch.Tens
 class RMSNorm():
     def __init__(self, weight: torch.Tensor, eps: float = 1e-06):
         self.norm_eps_ = eps
-        self.weight_ = weight
+        self.weight_ = weight.to(torch.float32)
 
     def _norm(self, data: torch.Tensor) -> torch.Tensor:
         return data * torch.rsqrt(data.pow(2).mean(-1, keepdim=True) + self.norm_eps_)
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         return self._norm(data.float()).type_as(data) * self.weight_
+
+
+class Lora():
+    def __init__(self, adapter_name: str):
+        self.adapter_name_: str = adapter_name
+
+        self.lora_a_: torch.Tensor = None
+        self.lora_b_: torch.Tensor = None
+
+        self.r_: int = 0
+        self.alpha_: int = 0
+        self.dropout_: float = 0.0
+        self.scaling_: float = 0.0
+
+    def set_parameter(self, r: int, alpha: int, dropout: float):
+        self.r_ = r
+        self.alpha_ = alpha
+        self.dropout_ = dropout
+        self.scaling_ = alpha / r
+
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
+        data_ = F.dropout(data, self.dropout_)
+        data_ @= self.lora_a_.transpose(0, 1)
+        data_ @= self.lora_b_.transpose(0, 1)
+        data_ *= self.scaling_
+        return data_
 
 
 class Linear():
@@ -80,31 +105,25 @@ class Linear():
         self.use_adapter_: bool = False
         # adapter list
         self.adapter_names_: Set[str] = set()
-        # lora weight
-        self.lora_a_: Dict[str, torch.Tensor] = {}  # r * dim
-        self.lora_b_: Dict[str, torch.Tensor] = {}  # dim * r
-        # common paramas
-        self.lora_dropout_: Dict[str, float] = {}
-        self.r_: Dict[str, int] = {}
-        self.lora_alpha_: Dict[str, int] = {}
-        self.scaling_: Dict[str, float] = {}
+        self.loras_: Dict[str, Lora] = {}
 
-    def update_layer(self, adapter_name: str, r: int, lora_alpha: int, lora_dropout: float):
-        if len(self.adapter_names_) <= 0:
+    def set_lora_layer_parameter(self, adapter_name: str, r: int, lora_alpha: int, lora_dropout: float):
+        if len(self.adapter_names_) <= 0 or not self.use_adapter_:
             return
 
-        self.r_[adapter_name] = r
-        self.lora_alpha_[adapter_name] = lora_alpha
-        self.lora_dropout_[adapter_name] = lora_dropout
-        self.scaling_[adapter_name] = lora_alpha / r
+        self.loras_[adapter_name].set_parameter(r, lora_alpha, lora_dropout)
 
-    def update_lora_weight(self, adapter_name: str, lora_name: str, weight: torch.Tensor):
+    def set_lora_layer_weight(self, adapter_name: str, lora_name: str, weight: torch.Tensor):
+        if adapter_name not in self.loras_:
+            self.loras_[adapter_name] = Lora(adapter_name)
+
         if lora_name == "lora_A":
-            self.lora_a_[adapter_name] = weight
+            self.loras_[adapter_name].lora_a_ = weight
         elif lora_name == "lora_B":
-            self.lora_b_[adapter_name] = weight
+            self.loras_[adapter_name].lora_b_ = weight
         else:
             raise (f"No lora_name {lora_name}")
+
         self.adapter_names_.add(adapter_name)
 
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
@@ -123,12 +142,8 @@ class Linear():
             if adapter_name == "":
                 continue
 
-            data_ = F.dropout(data[start_idx: end_idx],
-                              self.lora_dropout_[adapter_name])
-            data_ @= self.lora_a_[adapter_name].transpose(0, 1)
-            data_ @= self.lora_b_[adapter_name].transpose(0, 1)
-            data_ *= self.scaling_[adapter_name]
-            result[start_idx: end_idx] += data_
+            result[start_idx: end_idx] += self.loras_[
+                adapter_name].forward(data[start_idx:end_idx])
 
         return result
 
@@ -154,14 +169,12 @@ class Transformer():
         self.n_heads_ = args.n_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
 
-    def update_lora_configure(self, adapter_name: str, r: int, lora_alpha: int, lora_dropout: float):
-        self.wk_.update_layer(adapter_name, r, lora_alpha, lora_dropout)
-        self.wq_.update_layer(adapter_name, r, lora_alpha, lora_dropout)
-        self.wv_.update_layer(adapter_name, r, lora_alpha, lora_dropout)
-        self.wo_.update_layer(adapter_name, r, lora_alpha, lora_dropout)
-        self.w1_.update_layer(adapter_name, r, lora_alpha, lora_dropout)
-        self.w2_.update_layer(adapter_name, r, lora_alpha, lora_dropout)
-        self.w3_.update_layer(adapter_name, r, lora_alpha, lora_dropout)
+    def set_lora_parameter(self, adapter_name: str, r: int, lora_alpha: int, lora_dropout: float):
+        linear_layer_list = [self.wk_, self.wq_, self.wv_,
+                             self.wo_, self.w1_, self.w2_, self.w3_]
+        for linear_layer in linear_layer_list:
+            linear_layer.set_lora_layer_parameter(
+                adapter_name, r, lora_alpha, lora_dropout)
 
     # @torch.compile
     def forward(self, data: torch.Tensor, mask: torch.Tensor, rope_angle: Tuple[torch.Tensor, torch.Tensor], input_args: MultiLoraBatchData):
@@ -229,8 +242,8 @@ class LlamaModel():
         self.dim_ = args.dim_
 
     def update_lora_configure(self, adapter_name: str, r: int, lora_alpha: int, lora_dropout: float):
-        for layer in self.layers_:
-            layer.update_lora_configure(
+        for transformer_layer in self.layers_:
+            transformer_layer.set_lora_parameter(
                 adapter_name, r, lora_alpha, lora_dropout)
 
     def forward(self, input: MultiLoraBatchData):
@@ -256,19 +269,16 @@ class LlamaModel():
 
     def get_train_paramas(self, config: Dict[str, str]) -> List[int]:
         train_paramas = []
-        for layer in self.layers_:
+        for transformer_layer in self.layers_:
             for lora_config in config["lora"]:
                 adapter_name = lora_config["name"]
-                if adapter_name in layer.wq_.lora_a_:
-                    train_paramas.append(layer.wq_.lora_a_[adapter_name])
-                    train_paramas.append(layer.wq_.lora_b_[adapter_name])
-                if adapter_name in layer.wk_.lora_a_:
-                    train_paramas.append(layer.wk_.lora_a_[adapter_name])
-                    train_paramas.append(layer.wk_.lora_b_[adapter_name])
-                if adapter_name in layer.wv_.lora_a_:
-                    train_paramas.append(layer.wv_.lora_a_[adapter_name])
-                    train_paramas.append(layer.wv_.lora_b_[adapter_name])
-                if adapter_name in layer.wo_.lora_a_:
-                    train_paramas.append(layer.wo_.lora_a_[adapter_name])
-                    train_paramas.append(layer.wo_.lora_b_[adapter_name])
+                lora_layer_list = [transformer_layer.wq_.loras_, transformer_layer.wk_.loras_,
+                                   transformer_layer.wv_.loras_, transformer_layer.wo_.loras_,
+                                   transformer_layer.w1_.loras_, transformer_layer.w2_.loras_,
+                                   transformer_layer.w3_.loras_]
+
+                for lora_layer in lora_layer_list:
+                    if adapter_name in lora_layer:
+                        train_paramas.append(lora_layer[adapter_name].lora_a_)
+                        train_paramas.append(lora_layer[adapter_name].lora_b_)
         return train_paramas
