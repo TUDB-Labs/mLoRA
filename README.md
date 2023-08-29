@@ -7,16 +7,27 @@ This repository provides tools for fine-tuning large language models (LLMs) usin
 
 - [Updates](#updates)
 - [Overview](#overview)
+- [Installation](#Installation)
 - [Getting Started](#Quickstart)
-- [Contributing](#contributing)
-- [License](#license)
+- [Contributing](#Contributing)
+- [Copyright](#Copyright)
 
 ## Updates
 Support 
 
 ## Overview
 
-
+## Installation
+```bash
+# Optional but recommended
+conda create -n aspen_env python=3.6
+# Install requirements
+pip install -r requirements.txt
+```
+After installation, you can use ASPEN directly in your code:
+```python
+import aspen
+```
 ## Quickstart
 
 The `mlora.py` code is a starting point for finetuning and inference on various datasets.
@@ -27,7 +38,12 @@ python mlora.py --model_name_or_path <path_or_name>
 
 For models larger than 13B, we recommend adjusting the learning rate:
 ```bash
-python mlora.py –learning_rate 0.0001 --model_name_or_path <path_or_name>
+python mlora.py -–learning_rate 0.0001 --model_name_or_path <path_or_name>
+```
+
+You can check detailed usage information by `--help` option:
+```bash
+python mlora.py --help
 ```
    
 ## Contributing
@@ -48,5 +64,21 @@ Submit a pull request with a detailed explanation of your changes.
 }
 ```
 
-## License
-This project is licensed under the Apache 2.0 License - see the LICENSE file for details
+## Copyright
+Copyright © 2023 All Rights Reserved.
+
+This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
+
+```
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
