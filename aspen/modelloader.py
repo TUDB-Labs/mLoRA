@@ -42,7 +42,7 @@ def load_llama_7b_weight(model: LlamaModel, llama_model_path: str, device: str):
         elif "norm.weight" in layer_name:
             model.norm_ = RMSNorm(w, model.norm_eps_)
         elif "output.weight" in layer_name:
-            model.output_ = w
+            model.output_ = w.to(torch.float32)
         else:
             print(f"Not use layer {layer_name}.", file=sys.stderr)
 
@@ -86,123 +86,47 @@ def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str):
         elif "norm.weight" in layer_name:
             model.norm_ = RMSNorm(w, model.norm_eps_)
         elif "lm_head.weight" in layer_name:
-            model.output_ = w
+            model.output_ = w.to(torch.float32)
         else:
             print(f"Not use layer {layer_name}.", file=sys.stderr)
-
-
-def load_alpaca_lora_7b_weight(model: LlamaModel, lora_model_path: str, adapter_name: str, device: str):
-    lora_weight = torch.load(
-        lora_model_path, map_location=torch.device(device))
-    for layer_name in lora_weight:
-        w: torch.Tensor = lora_weight[layer_name].to(torch.float16)
-        w.requires_grad_(True)
-
-        layer_name = layer_name[len("base_model.model.model.layers."):]
-        layer_id = int(layer_name[:layer_name.find(".")])
-        lora_name = ""
-        if "lora_A" in layer_name:
-            lora_name = "lora_A"
-        elif "lora_B" in layer_name:
-            lora_name = "lora_B"
-
-        if "q_proj" in layer_name:
-            model.layers_[layer_id].wq_.update_lora_weight(
-                adapter_name, lora_name, w)
-            model.layers_[layer_id].wq_.use_adapter_ = True
-        elif "k_proj" in layer_name:
-            model.layers_[layer_id].wk_.update_lora_weight(
-                adapter_name, lora_name, w)
-            model.layers_[layer_id].wk_.use_adapter_ = True
-        elif "v_proj" in layer_name:
-            model.layers_[layer_id].wv_.update_lora_weight(
-                adapter_name, lora_name, w)
-            model.layers_[layer_id].wv_.use_adapter_ = True
-        elif "o_proj" in layer_name:
-            model.layers_[layer_id].wo_.update_lora_weight(
-                adapter_name, lora_name, w)
-            model.layers_[layer_id].wo_.use_adapter_ = True
-        else:
-            print(f"Not user layer {layer_name}")
 
 
 def load_random_lora_7b_weight(model: LlamaModel, adapter_name: str, r: int, dim: int, target_module: str, device: str) -> None:
     norm_mean = 0
     norm_std = 1e-3
-    for layer in model.layers_:
-        if target_module["q_proj"] is True:
-            wq_lora_a_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(r, dim), device=device, requires_grad=True, dtype=torch.float16)
-            wq_lora_b_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(dim, r), device=device, requires_grad=True, dtype=torch.float16)
-            layer.wq_.update_lora_weight(
-                adapter_name, "lora_A", wq_lora_a_weight)
-            layer.wq_.update_lora_weight(
-                adapter_name, "lora_B", wq_lora_b_weight)
-            layer.wq_.use_adapter_ = True
-
-        if target_module["k_proj"] is True:
-            wk_lora_a_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(r, dim), device=device, requires_grad=True, dtype=torch.float16)
-            wk_lora_b_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(dim, r), device=device, requires_grad=True, dtype=torch.float16)
-            layer.wk_.update_lora_weight(
-                adapter_name, "lora_A", wk_lora_a_weight)
-            layer.wk_.update_lora_weight(
-                adapter_name, "lora_B", wk_lora_b_weight)
-            layer.wk_.use_adapter_ = True
-
-        if target_module["v_proj"] is True:
-            wv_lora_a_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(r, dim), device=device, requires_grad=True, dtype=torch.float16)
-            wv_lora_b_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(dim, r), device=device, requires_grad=True, dtype=torch.float16)
-            layer.wv_.update_lora_weight(
-                adapter_name, "lora_A", wv_lora_a_weight)
-            layer.wv_.update_lora_weight(
-                adapter_name, "lora_B", wv_lora_b_weight)
-            layer.wv_.use_adapter_ = True
-
-        if target_module["o_proj"] is True:
-            wo_lora_a_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(r, dim), device=device, requires_grad=True, dtype=torch.float16)
-            wo_lora_b_weight = torch.normal(
-                mean=norm_mean, std=norm_std, size=(dim, r), device=device, requires_grad=True, dtype=torch.float16)
-            layer.wo_.update_lora_weight(
-                adapter_name, "lora_A", wo_lora_a_weight)
-            layer.wo_.update_lora_weight(
-                adapter_name, "lora_B", wo_lora_b_weight)
-            layer.wo_.use_adapter_ = True
+    target_module_name_list = ["q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
+    for transformer_layer in model.layers_:
+        target_layer_list = [transformer_layer.wq_, transformer_layer.wk_,
+                             transformer_layer.wv_, transformer_layer.wo_,
+                             transformer_layer.w1_, transformer_layer.w2_,
+                             transformer_layer.w3_]
+        for idx, module_name in enumerate(target_module_name_list):
+            if module_name in target_module and target_module[module_name]:
+                lora_a_weight = torch.normal(
+                    mean=norm_mean, std=norm_std, size=(r, dim), device=device, requires_grad=True, dtype=torch.float32)
+                lora_b_weight = torch.normal(
+                    mean=norm_mean, std=norm_std, size=(dim, r), device=device, requires_grad=True, dtype=torch.float32)
+                target_layer_list[idx].set_lora_layer_weight(
+                    adapter_name, "lora_A", lora_a_weight)
+                target_layer_list[idx].set_lora_layer_weight(
+                    adapter_name, "lora_B", lora_b_weight)
 
 
 def save_lora_model(model: LlamaModel, path: str, lora_name: str):
     lora_weight_dict = {}
-    for idx, layer in enumerate(model.layers_):
+    for idx, transformer_layer in enumerate(model.layers_):
         layer_prefix_name = "base_model.model.model.layers." + \
             str(idx) + "." + "self_attn."
-        if lora_name in layer.wq_.lora_a_:
-            lora_weight_dict[layer_prefix_name +
-                             "q_proj.lora_A.weight"] = layer.wq_.lora_a_[lora_name]
-        if lora_name in layer.wq_.lora_b_:
-            lora_weight_dict[layer_prefix_name +
-                             "q_proj.lora_B.weight"] = layer.wq_.lora_b_[lora_name]
-        if lora_name in layer.wk_.lora_a_:
-            lora_weight_dict[layer_prefix_name +
-                             "k_proj.lora_A.weigth"] = layer.wk_.lora_a_[lora_name]
-        if lora_name in layer.wk_.lora_b_:
-            lora_weight_dict[layer_prefix_name +
-                             "k_proj.lora_B.weight"] = layer.wk_.lora_b_[lora_name]
-        if lora_name in layer.wv_.lora_a_:
-            lora_weight_dict[layer_prefix_name +
-                             "v_proj.lora_A.weight"] = layer.wv_.lora_a_[lora_name]
-        if lora_name in layer.wv_.lora_b_:
-            lora_weight_dict[layer_prefix_name +
-                             "v_proj.lora_B.weight"] = layer.wv_.lora_b_[lora_name]
-        if lora_name in layer.wo_.lora_a_:
-            lora_weight_dict[layer_prefix_name +
-                             "o_proj.lora_A.weight"] = layer.wo_.lora_a_[lora_name]
-        if lora_name in layer.wo_.lora_b_:
-            lora_weight_dict[layer_prefix_name +
-                             "o_proj.lora_B.weight"] = layer.wo_.lora_b_[lora_name]
+        lora_layer_list = [transformer_layer.wq_, transformer_layer.wk_,
+                           transformer_layer.wv_, transformer_layer.wo_,
+                           transformer_layer.w1_, transformer_layer.w2_,
+                           transformer_layer.w3_]
+        lora_layer_name_list = ["q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
+        for idx, lora_layer in enumerate(lora_layer_list):
+            if lora_name in lora_layer.loras_:
+                lora_weight_dict[layer_prefix_name +
+                                 f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
+                lora_weight_dict[layer_prefix_name +
+                                 f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
 
     torch.save(lora_weight_dict, path)
