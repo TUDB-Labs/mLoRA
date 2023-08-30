@@ -1,4 +1,4 @@
-name: Test Project On GPU
+name: Test 7B Llama Models
 
 on:
   push:
@@ -15,7 +15,11 @@ jobs:
         cd /workspace
         rm -rf ./multi-lora-fine-tune
         git clone git@github.com:TUDB-Labs/multi-lora-fine-tune.git
-    - name: test run on gpu
+    - name: test llama-7b
+      run: |
+        cd /workspace/multi-lora-fine-tune
+        python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit true
+    - name: test vicuna-7b-delta-v0
       run: |
         cd /workspace/multi-lora-fine-tune
         python mlora.py --base_model /data/vicuna-7b-delta-v0 --config ./config/finetune.json --load_8bit true
