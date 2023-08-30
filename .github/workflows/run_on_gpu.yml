@@ -1,0 +1,15 @@
+name: Test Project
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+    - name: test run on gpu
+      run: |
+        python mlora.py --base_model /data/vicuna-7b-delta-v0 --config ./config/finetune.json --load_8bit true
