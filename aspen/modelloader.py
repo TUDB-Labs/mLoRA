@@ -52,7 +52,7 @@ def load_llama_7b_weight(model: LlamaModel, llama_model_path: str, device: str):
 
 
 def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str, load_in_8bit: bool = False):
-    weight = LlamaForCausalLM.from_pretrained(llama_model_path).state_dict(keep_vars=True)
+    weight = LlamaForCausalLM.from_pretrained(llama_model_path).state_dict()
 
     for layer_name in weight:
         w: torch.Tensor = weight[layer_name]
