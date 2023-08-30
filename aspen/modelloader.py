@@ -52,8 +52,7 @@ def load_llama_7b_weight(model: LlamaModel, llama_model_path: str, device: str):
 
 
 def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str, load_in_8bit: bool = False):
-    weight = LlamaForCausalLM.from_pretrained(
-        llama_model_path, device_map=dev, load_in_8bit=load_in_8bit).state_dict()
+    weight = LlamaForCausalLM.from_pretrained(llama_model_path).state_dict(keep_vars=True)
 
     for layer_name in weight:
         w: torch.Tensor = weight[layer_name]
@@ -63,34 +62,34 @@ def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str, loa
             layer_name = layer_name[len("model.layers."):]
             layer_id = int(layer_name[:layer_name.find(".")])
             if "self_attn.q_proj" in layer_name:
-                model.layers_[layer_id].wq_ = Linear(w, load_in_8bit)
+                model.layers_[layer_id].wq_ = Linear(w, load_in_8bit, dev)
             elif "self_attn.k_proj" in layer_name:
-                model.layers_[layer_id].wk_ = Linear(w, load_in_8bit)
+                model.layers_[layer_id].wk_ = Linear(w, load_in_8bit, dev)
             elif "self_attn.v_proj" in layer_name:
-                model.layers_[layer_id].wv_ = Linear(w, load_in_8bit)
+                model.layers_[layer_id].wv_ = Linear(w, load_in_8bit, dev)
             elif "self_attn.o_proj" in layer_name:
-                model.layers_[layer_id].wo_ = Linear(w, load_in_8bit)
+                model.layers_[layer_id].wo_ = Linear(w, load_in_8bit, dev)
             elif "mlp.gate_proj" in layer_name:
-                model.layers_[layer_id].w1_ = Linear(w, load_in_8bit)
+                model.layers_[layer_id].w1_ = Linear(w, load_in_8bit, dev)
             elif "mlp.down_proj" in layer_name:
-                model.layers_[layer_id].w2_ = Linear(w, load_in_8bit)
+                model.layers_[layer_id].w2_ = Linear(w, load_in_8bit, dev)
             elif "mlp.up_proj" in layer_name:
-                model.layers_[layer_id].w3_ = Linear(w, load_in_8bit)
+                model.layers_[layer_id].w3_ = Linear(w, load_in_8bit, dev)
             elif "input_layernorm" in layer_name:
                 model.layers_[layer_id].attention_norm_ = RMSNorm(
-                    w, model.norm_eps_)
+                    w.to(device=dev), model.norm_eps_)
             elif "post_attention_layernorm" in layer_name:
                 model.layers_[layer_id].ffn_norm_ = RMSNorm(
-                    w, model.norm_eps_)
+                    w.to(device=dev), model.norm_eps_)
             else:
                 print(
                     f"Not use layer model.layers.{layer_name}.", file=sys.stderr)
         elif "embed_tokens" in layer_name:
-            model.token_embedding_ = w
+            model.token_embedding_ = w.to(device=dev)
         elif "norm.weight" in layer_name:
-            model.norm_ = RMSNorm(w, model.norm_eps_)
+            model.norm_ = RMSNorm(w.to(device=dev), model.norm_eps_)
         elif "lm_head.weight" in layer_name:
-            model.output_ = w.to(torch.float32)
+            model.output_ = w.to(dtype=torch.float32, device=dev)
         else:
             print(f"Not use layer {layer_name}.", file=sys.stderr)
 

@@ -5,3 +5,4 @@ transformers
 bitsandbytes
 sentencepiece
 scipy
+accelerate
