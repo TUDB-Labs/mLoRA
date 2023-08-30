@@ -12,7 +12,7 @@ jobs:
     steps:
     - name: test run on gpu
       run: |
-        cd /workspalce
+        cd /workspace
         rm -rf ./multi-lora-fine-tune
         git clone git@github.com:TUDB-Labs/multi-lora-fine-tune.git
         cd multi-lora-fine-tune
