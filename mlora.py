@@ -102,7 +102,7 @@ def load_base_model() -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
     elif os.path.isfile(args.base_model):
         aspen.load_llama_7b_weight(model, args.base_model, args.device)
     else:
-        raise f"can't find the model file."
+        raise "can't find the model file."
 
     return tokenizer, model
 
