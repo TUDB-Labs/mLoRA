@@ -21,6 +21,7 @@ Support
 ```bash
 # Optional but recommended
 conda create -n aspen_env python=3.6
+conda activate aspen_env
 # Install requirements
 pip install -r requirements.txt
 ```
