@@ -20,7 +20,7 @@ Support
 ## Installation
 ```bash
 # Optional but recommended
-conda create -n aspen_env python=3.6
+conda create -n aspen_env python=3.8
 conda activate aspen_env
 # Install requirements
 pip install -r requirements.txt
@@ -31,18 +31,18 @@ import aspen
 ```
 ## Quickstart
 
-The `mlora.py` code is a starting point for finetuning and inference on various datasets.
+The `mlora.py` code is a starting point for finetuning on various datasets.
 Basic command for finetuning a baseline model on the Alpaca dataset:
 ```bash
-python mlora.py --model_name_or_path <path_or_name>
+python mlora.py \
+  --base_model decapoda-research/llama-7b-hf \
+  --config ./config/alpaca.json \
+  --load_8bit true
 ```
 
-For models larger than 13B, we recommend adjusting the learning rate:
-```bash
-python mlora.py -–learning_rate 0.0001 --model_name_or_path <path_or_name>
-```
+You can check the template finetune configuration in [template](./template/) folder.
 
-You can check detailed usage information by `--help` option:
+For further detailed usage information, please use `--help` option:
 ```bash
 python mlora.py --help
 ```

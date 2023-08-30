@@ -1,0 +1,48 @@
+{
+    "cutoff_len": 256,
+    "group_by_length": false,
+    "expand_right": true,
+    "save_step": 200,
+    "lora": [
+        {
+            "name": "lora_0",
+            "output": "lora_0",
+            "batch_size": 16,
+            "num_epochs": 3,
+            "r": 8,
+            "alpha": 16,
+            "dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true,
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
+            },
+            "data": "data/data_demo.json",
+            "prompt": "template/template_demo.json"
+        },
+        {
+            "name": "lora_1",
+            "output": "lora_1",
+            "batch_size": 16,
+            "num_epochs": 3,
+            "r": 8,
+            "alpha": 16,
+            "dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true,
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
+            },
+            "data": "data/data_demo.json",
+            "prompt": "template/template_demo.json"
+        }
+    ]
+}
