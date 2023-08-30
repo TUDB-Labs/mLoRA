@@ -40,7 +40,7 @@ python mlora.py \
   --load_8bit true
 ```
 
-You can check the template finetune configuration in [config](./config/) folder.
+You can check the template finetune configuration in [template](./template/) folder.
 
 For further detailed usage information, please use `--help` option:
 ```bash
