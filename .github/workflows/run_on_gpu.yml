@@ -1,4 +1,4 @@
-name: Test Project
+name: Test Project On GPU
 
 on:
   push:
