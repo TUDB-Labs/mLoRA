@@ -7,6 +7,9 @@
         {
             "name": "lora_0",
             "output": "lora_0",
+            "optim": "sgd",
+            "lr": 1e-2,
+            "momentum": 0.9,
             "batch_size": 16,
             "num_epochs": 3,
             "r": 8,
@@ -27,6 +30,8 @@
         {
             "name": "lora_1",
             "output": "lora_1",
+            "optim": "adamw",
+            "lr": 3e-4,
             "batch_size": 16,
             "num_epochs": 3,
             "r": 8,

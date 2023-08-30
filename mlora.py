@@ -16,18 +16,21 @@
 #
 # Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
 
-import datetime
-import argparse
+import os
+import json
 import torch
 import aspen
-import json
-import os
+import datetime
+import argparse
+from typing import Dict, Tuple, List
 
 # Command Line Arguments
 
 parser = argparse.ArgumentParser(description='ASPEN main program')
 parser.add_argument('--base_model', type=str,
                     help='Path to or name of base model')
+parser.add_argument('--tokenizer', type=str,
+                    help='Path to or name of tokenizer')
 parser.add_argument('--load_8bit', type=bool, default=False,
                     help='Load model in 8bit mode')
 parser.add_argument('--device', type=str, default='cuda:0',
@@ -76,9 +79,15 @@ def setup_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def load_base_model():
+def load_base_model() -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
     llama_args = aspen.LlamaModelArgs()
-    tokenizer = aspen.Tokenizer(args.base_model + os.sep + 'tokenizer.model')
+
+    if args.tokenizer:
+        tokenizer = aspen.Tokenizer(args.tokenizer)
+    else:
+        tokenizer = aspen.Tokenizer(
+            args.base_model + os.sep + 'tokenizer.model')
+
     tokenizer.pad_id_ = 0
     llama_args.max_seq_len_ = 4096
     llama_args.device = args.device
@@ -86,31 +95,58 @@ def load_base_model():
     llama_args.pad_id_ = tokenizer.pad_id_
     llama_args.n_heads_ = 32
     model = aspen.LlamaModel(llama_args)
-    aspen.load_llama_tf_weight(
-        model, args.base_model, args.device, args.load_8bit)
+
+    if os.path.isdir(args.base_model):
+        aspen.load_llama_tf_weight(
+            model, args.base_model, args.device, args.load_8bit)
+    elif os.path.isfile(args.base_model):
+        aspen.load_llama_7b_weight(model, args.base_model, args.device)
+    else:
+        raise "can't find the model file."
+
     return tokenizer, model
 
 
-def init_lora_model(config: dict, llama_model: aspen.LlamaModel):
+def init_lora_model(config: Dict[str, any], llama_model: aspen.LlamaModel):
     for lora_config in config["lora"]:
-        aspen.load_random_lora_7b_weight(
-            llama_model,
-            lora_config["name"],
-            lora_config["r"],
-            llama_model.dim_,
-            lora_config["target_modules"],
-            llama_model.device_)
-        llama_model.update_lora_configure(
-            lora_config["name"], lora_config["r"], lora_config["alpha"], lora_config["dropout"])
+        llama_model.init_random_lora_weight(lora_config["name"],
+                                            lora_config["r"],
+                                            lora_config["alpha"],
+                                            lora_config["dropout"],
+                                            lora_config["target_modules"])
 
 
-def train(config: dict, llama_model: aspen.LlamaModel):
-    torch.cuda.empty_cache()
-    optimizer = torch.optim.AdamW(llama_model.get_train_paramas(config))
+def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]):
+    optimizer_list: List[torch.optim.Optimizer] = []
+    for lora_config in config["lora"]:
+        adapter_name = lora_config["name"]
+        optim_name = lora_config["optim"]
+        lr = lora_config["lr"]
+        if optim_name == "sgd":
+            momentum = 0
+            if "momentum" in lora_config:
+                momentum = lora_config["momentum"]
+            optimizer_list.append(torch.optim.SGD(
+                train_paramas[adapter_name], lr=lr, momentum=momentum))
+        elif optim_name == "adamw":
+            optimizer_list.append(torch.optim.AdamW(
+                train_paramas[adapter_name], lr=lr))
+        else:
+            raise f"unkown optimizer {optim_name}"
+    return optimizer_list
+
+
+def train(config: Dict[str, any], llama_model: aspen.LlamaModel, data_set: aspen.DataSet):
+    train_paramas = llama_model.get_train_paramas(config)
+
+    loss_fn = torch.nn.CrossEntropyLoss()
+    optimizer_list = get_optimizer(config, train_paramas)
+
     step_cnt = 0
     while not data_set.check_done():
-        optimizer.zero_grad()
-        loss_fn = torch.nn.CrossEntropyLoss()
+        for optim in optimizer_list:
+            optim.zero_grad()
+
         input: aspen.MultiLoraBatchData = data_set.get_batch_data()
 
         step_cnt += 1
@@ -127,7 +163,7 @@ def train(config: dict, llama_model: aspen.LlamaModel):
                                                    :].contiguous().view(-1, llama_model.vocab_size_)
             loss_target = labels[start_idx:end_idx][...,
                                                     1:].contiguous().view(-1)
-            loss = loss_fn(loss_input, loss_target)
+            loss = loss_fn(loss_input, loss_target) / (end_idx - start_idx)
             print(
                 f"    adapter: {lora_config.adapter_name_} loss: {loss}")
             if total_loss is None:
@@ -136,7 +172,8 @@ def train(config: dict, llama_model: aspen.LlamaModel):
                 total_loss += loss
 
         total_loss.backward()
-        optimizer.step()
+        for optim in optimizer_list:
+            optim.step()
 
         if step_cnt % config["save_step"] == 0:
             aspen.save_lora_model(llama_model, config, f"{step_cnt}")
@@ -149,9 +186,15 @@ def train(config: dict, llama_model: aspen.LlamaModel):
 
 if __name__ == "__main__":
     setup_seed(args.seed)
+
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
+
     tokenizer, model = load_base_model()
-    data_set = aspen.DataSet(config, tokenizer)
     init_lora_model(config, model)
-    train(config, model)
+
+    torch.cuda.empty_cache()
+
+    data_set = aspen.DataSet(config, tokenizer)
+
+    train(config, model, data_set)
