@@ -7,7 +7,6 @@ import einops
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from typing import List, Dict, Set, Tuple
-from bitsandbytes.nn import Linear8bitLt, Int8Params
 
 
 def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -97,12 +96,18 @@ class Lora():
 
 
 class Linear():
-    def __init__(self, weight: torch.Tensor):
+    def __init__(self, weight: torch.Tensor, load_in_8bit: bool = True, device: str = None):
+        if device is None:
+            device = weight.device
         row, col = weight.shape
-        self.weight_ = Linear8bitLt(
-            input_features=col, output_features=row, bias=False, has_fp16_weights=False)
-        self.weight_.weight = Int8Params(
-            weight.data, requires_grad=False).cuda(weight.device)
+        if load_in_8bit:
+            from bitsandbytes.nn import Linear8bitLt, Int8Params
+            self.weight_ = Linear8bitLt(
+                input_features=col, output_features=row, bias=False, has_fp16_weights=False, device=device)
+            self.weight_.weight = Int8Params(
+                weight.data, requires_grad=False).cuda(device)
+        else:
+            self.weight_ = torch.nn.Linear(in_features=col, out_features=row, bias=False, device=device)
         self.use_adapter_: bool = False
         # adapter list
         self.adapter_names_: Set[str] = set()

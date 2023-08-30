@@ -24,6 +24,7 @@ import os
 
 parser = argparse.ArgumentParser(description='ASPEN main program')
 parser.add_argument('--model_name_or_path', type=str, help='Path to or name of base model')
+parser.add_argument('--load_in_8bit', type=bool, default=False, help='Load model in 8bit mode')
 parser.add_argument('--device', type=str, default='cuda:0', help='Specify which GPU to be used, default is cuda:0')
 parser.add_argument('--log', type=bool, default=True, help='Turn on or off log, default is true')
 
@@ -43,17 +44,23 @@ else:
     exit(-1)
 
 
+if args.model_name_or_path is None:
+    print('error: Argument --model_name_or_path are required.')
+    parser.print_help()
+    exit(-1)
+
+
 def prep_llm():
-    args = aspen.LlamaModelArgs()
+    llama_args = aspen.LlamaModelArgs()
     tokenizer = aspen.Tokenizer(args.model_name_or_path + os.sep + 'tokenizer.model')
     tokenizer.pad_id_ = 0
-    args.max_seq_len_ = 4096
-    args.device = args.device
-    args.vocab_size_ = tokenizer.n_words_
-    args.pad_id_ = tokenizer.pad_id_
-    args.n_heads_ = 32
-    model = aspen.LlamaModel(args)
-    aspen.load_llama_tf_weight(model, args.model_name_or_path, args.device)
+    llama_args.max_seq_len_ = 4096
+    llama_args.device = args.device
+    llama_args.vocab_size_ = tokenizer.n_words_
+    llama_args.pad_id_ = tokenizer.pad_id_
+    llama_args.n_heads_ = 32
+    model = aspen.LlamaModel(llama_args)
+    aspen.load_llama_tf_weight(model, args.model_name_or_path, args.device, args.load_in_8bit)
     return tokenizer, model
 
 
