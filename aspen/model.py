@@ -97,7 +97,7 @@ class Lora():
 
 class Linear():
     def __init__(self, weight: torch.Tensor, load_in_8bit: bool = True, device: str = None):
-        if device == None:
+        if device is None:
             device = weight.device
         row, col = weight.shape
         if load_in_8bit:

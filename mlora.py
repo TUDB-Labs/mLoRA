@@ -44,7 +44,7 @@ else:
     exit(-1)
 
 
-if args.model_name_or_path == None:
+if args.model_name_or_path is None:
     print('error: Argument --model_name_or_path are required.')
     parser.print_help()
     exit(-1)
