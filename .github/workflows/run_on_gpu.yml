@@ -1,0 +1,21 @@
+name: Test Project On GPU
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+    - name: clone repository
+      run: |
+        cd /workspace
+        rm -rf ./multi-lora-fine-tune
+        git clone git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+    - name: test run on gpu
+      run: |
+        cd /workspace/multi-lora-fine-tune
+        python mlora.py --base_model /data/vicuna-7b-delta-v0 --config ./config/finetune.json --load_8bit true
