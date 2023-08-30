@@ -17,5 +17,5 @@ jobs:
         git clone git@github.com:TUDB-Labs/multi-lora-fine-tune.git
     - name: test run on gpu
       run: |
-        cd multi-lora-fine-tune
+        cd /workspace/multi-lora-fine-tune
         python mlora.py --base_model /data/vicuna-7b-delta-v0 --config ./config/finetune.json --load_8bit true
