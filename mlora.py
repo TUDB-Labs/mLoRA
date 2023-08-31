@@ -94,6 +94,8 @@ def load_base_model() -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
         tokenizer = aspen.Tokenizer(
             args.base_model + os.sep + 'tokenizer.model')
 
+    # Need fix
+    model.pad_id_ = 0
     tokenizer.pad_id_ = model.pad_id_
 
     return tokenizer, model
