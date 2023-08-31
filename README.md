@@ -1,5 +1,5 @@
 # ASPEN: Efficient Multi-LoRA Fine Tuning with Shared-Based Model
-[![Python application](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-app.yml/badge.svg)](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-app.yml)
+[![Test on Main](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml/badge.svg)](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml)
 
 This repository provides tools for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently. It provides the framework to support multiple LoRA/qLoRA models fine tunning at the same time. By reusing the shared frozen-based model, we provide the framework to reduce GPU Memory usage for multiple fine-tuning models.  
 
