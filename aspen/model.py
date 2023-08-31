@@ -1,4 +1,5 @@
 from aspen.modelargs import LlamaModelArgs, MultiLoraBatchData
+from transformers import LlamaForCausalLM
 
 import math
 import torch
@@ -254,6 +255,47 @@ class LlamaModel():
         self.vocab_size_ = args.vocab_size_
         self.pad_id_ = args.pad_id_
         self.dim_ = args.dim_
+
+    def from_pretrained(path: str, device: str, load_in_8bit: bool = True):
+        llama_model = LlamaForCausalLM.from_pretrained(
+            path, load_in_8bit=load_in_8bit, device_map=device)
+
+        llama_args = LlamaModelArgs()
+        llama_args.dim_ = llama_model.config.hidden_size
+        llama_args.n_heads_ = llama_model.config.num_attention_heads
+        llama_args.n_layers_ = llama_model.config.num_hidden_layers
+        llama_args.norm_eps_ = llama_model.config.rms_norm_eps
+        llama_args.vocab_size_ = llama_model.config.vocab_size
+        llama_args.pad_id_ = llama_model.config.pad_token_id
+        llama_args.max_seq_len_ = llama_model.config.max_sequence_length
+        llama_args.device = device
+        model = LlamaModel(llama_args)
+
+        model.token_embedding_ = llama_model.model.embed_tokens.weight.to(
+            device=device)
+        model.output_ = llama_model.lm_head.weight.to(
+            dtype=torch.float32, device=device)
+        model.norm_ = RMSNorm(llama_model.model.norm.weight.to(
+            device=device), model.norm_eps_)
+
+        for idx, layer in enumerate(llama_model.model.layers):
+            model.layers_[idx].wq_ = Linear(
+                layer.self_attn.q_proj, device=device)
+            model.layers_[idx].wk_ = Linear(
+                layer.self_attn.k_proj, device=device)
+            model.layers_[idx].wv_ = Linear(
+                layer.self_attn.v_proj, device=device)
+            model.layers_[idx].wo_ = Linear(
+                layer.self_attn.o_proj, device=device)
+            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=device)
+            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=device)
+            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=device)
+            model.layers_[idx].attention_norm_ = RMSNorm(
+                layer.input_layernorm.weight.to(device=device), model.norm_eps_)
+            model.layers_[idx].ffn_norm_ = RMSNorm(
+                layer.post_attention_layernorm.weight.to(device=device), model.norm_eps_)
+
+        return model
 
     def forward(self, input: MultiLoraBatchData):
         tokens = torch.tensor(input.batch_tokens_,
