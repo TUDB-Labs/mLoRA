@@ -5,7 +5,7 @@ import unittest
 
 from typing import List
 
-with open('config/lora.json', 'r', encoding='utf8') as fp:
+with open('config/finetune.json', 'r', encoding='utf8') as fp:
     config = json.load(fp)
 
 
