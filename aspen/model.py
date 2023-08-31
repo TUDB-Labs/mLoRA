@@ -98,18 +98,16 @@ class Lora():
 
 
 class Linear():
-    def __init__(self, weight: torch.Tensor, load_in_8bit: bool = True, device: str = None):
+    def __init__(self, weight: torch.Tensor, device: str = None):
         if device is None:
             self.device_ = weight.device
         else:
             self.device_ = device
 
-        if load_in_8bit:
+        if not isinstance(weight, torch.nn.Linear):
             import bitsandbytes
             assert isinstance(
                 weight, bitsandbytes.nn.Linear8bitLt), "error type."
-        else:
-            assert isinstance(weight, torch.nn.Linear), "error type."
 
         self.weight_ = weight
         self.enable_lora_: bool = False
@@ -289,19 +287,16 @@ class LlamaModel():
 
         for idx, layer in enumerate(llama_model.model.layers):
             model.layers_[idx].wq_ = Linear(
-                layer.self_attn.q_proj, device=device, load_in_8bit=load_in_8bit)
+                layer.self_attn.q_proj, device=device)
             model.layers_[idx].wk_ = Linear(
-                layer.self_attn.k_proj, device=device, load_in_8bit=load_in_8bit)
+                layer.self_attn.k_proj, device=device)
             model.layers_[idx].wv_ = Linear(
-                layer.self_attn.v_proj, device=device, load_in_8bit=load_in_8bit)
+                layer.self_attn.v_proj, device=device)
             model.layers_[idx].wo_ = Linear(
-                layer.self_attn.o_proj, device=device, load_in_8bit=load_in_8bit)
-            model.layers_[idx].w1_ = Linear(
-                layer.mlp.gate_proj, device=device, load_in_8bit=load_in_8bit)
-            model.layers_[idx].w2_ = Linear(
-                layer.mlp.down_proj, device=device, load_in_8bit=load_in_8bit)
-            model.layers_[idx].w3_ = Linear(
-                layer.mlp.up_proj, device=device, load_in_8bit=load_in_8bit)
+                layer.self_attn.o_proj, device=device)
+            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=device)
+            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=device)
+            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=device)
             model.layers_[idx].attention_norm_ = RMSNorm(
                 layer.input_layernorm.weight.to(device=device), model.norm_eps_)
             model.layers_[idx].ffn_norm_ = RMSNorm(
