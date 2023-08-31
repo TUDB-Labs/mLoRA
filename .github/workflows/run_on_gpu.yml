@@ -18,7 +18,7 @@ jobs:
     - name: test llama-7b
       run: |
         cd /workspace/multi-lora-fine-tune
-        python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit true
+        python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit
   test-vicuna-7b:
     runs-on: self-hosted
     steps:
@@ -30,4 +30,4 @@ jobs:
     - name: test vicuna-7b-v1.1
       run: |
         cd /workspace/multi-lora-fine-tune
-        python mlora.py --base_model /data/vicuna-7b-v1.1 --config ./config/finetune.json --load_8bit true
+        python mlora.py --base_model /data/vicuna-7b-v1.1 --config ./config/finetune.json --load_8bit
