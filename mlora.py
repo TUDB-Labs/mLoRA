@@ -80,7 +80,13 @@ def setup_seed(seed):
 
 
 def load_base_model() -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
-    llama_args = aspen.LlamaModelArgs()
+    if not os.path.isdir(args.base_model):
+        raise "can't find the model file."
+
+    model = aspen.LlamaModel.from_pretrained(
+        path=args.base_model,
+        device=args.device,
+        load_in_8bit=args.load_8bit)
 
     if args.tokenizer:
         tokenizer = aspen.Tokenizer(args.tokenizer)
@@ -88,21 +94,9 @@ def load_base_model() -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
         tokenizer = aspen.Tokenizer(
             args.base_model + os.sep + 'tokenizer.model')
 
-    tokenizer.pad_id_ = 0
-    llama_args.max_seq_len_ = 4096
-    llama_args.device = args.device
-    llama_args.vocab_size_ = tokenizer.n_words_
-    llama_args.pad_id_ = tokenizer.pad_id_
-    llama_args.n_heads_ = 32
-    model = aspen.LlamaModel(llama_args)
-
-    if os.path.isdir(args.base_model):
-        aspen.load_llama_tf_weight(
-            model, args.base_model, args.device, args.load_8bit)
-    elif os.path.isfile(args.base_model):
-        aspen.load_llama_7b_weight(model, args.base_model, args.device)
-    else:
-        raise "can't find the model file."
+    # Need fix
+    model.pad_id_ = 0
+    tokenizer.pad_id_ = model.pad_id_
 
     return tokenizer, model
 
