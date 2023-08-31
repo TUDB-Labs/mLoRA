@@ -1,13 +1,14 @@
 from aspen.modelargs import LlamaModelArgs, MultiLoraBatchData
-from transformers import LlamaForCausalLM
 
 import math
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import einops
+import bitsandbytes
 import xformers.ops
 import xformers.ops.fmha.attn_bias
+from transformers import LlamaForCausalLM
 from typing import List, Dict, Tuple
 
 
@@ -105,12 +106,12 @@ class Linear():
             self.device_ = device
 
         if load_in_8bit:
-            self.weight_ = weight
+            assert isinstance(
+                weight, bitsandbytes.nn.Linear8bitLt), "error type."
         else:
-            row, col = weight.shape
-            self.weight_ = torch.nn.Linear(
-                in_features=col, out_features=row, bias=False, device=self.device_)
+            assert isinstance(weight, torch.nn.Linear), "error type."
 
+        self.weight_ = weight
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
@@ -253,10 +254,12 @@ class LlamaModel():
         self.device_ = args.device
         self.n_heads_ = args.n_heads_
         self.vocab_size_ = args.vocab_size_
-        self.pad_id_ = args.pad_id_
+        self.pad_token_id_ = args.pad_token_id_
         self.dim_ = args.dim_
 
-    def from_pretrained(path: str, device: str, load_in_8bit: bool = True):
+    def from_pretrained(path: str,
+                        device: str,
+                        load_in_8bit: bool = True):
         llama_model = LlamaForCausalLM.from_pretrained(
             path, load_in_8bit=load_in_8bit, device_map=device)
 
@@ -266,9 +269,11 @@ class LlamaModel():
         llama_args.n_layers_ = llama_model.config.num_hidden_layers
         llama_args.norm_eps_ = llama_model.config.rms_norm_eps
         llama_args.vocab_size_ = llama_model.config.vocab_size
-        llama_args.pad_id_ = llama_model.config.pad_token_id
-        llama_args.max_seq_len_ = llama_model.config.max_sequence_length
+        llama_args.max_seq_len_ = 4096 if hasattr(
+            llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
+        llama_args.pad_token_id_ = -1
         llama_args.device = device
+
         model = LlamaModel(llama_args)
 
         model.token_embedding_ = llama_model.model.embed_tokens.weight.to(
@@ -301,7 +306,7 @@ class LlamaModel():
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int).to(self.device_)
         data = F.embedding(tokens, self.token_embedding_,
-                           padding_idx=self.pad_id_).requires_grad_(True)
+                           padding_idx=self.pad_token_id_).requires_grad_(True)
         mask = precompute_mask(input, self.n_heads_, self.device_)
 
         def create_forward_for_checkpoint(module: Transformer):
