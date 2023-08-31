@@ -5,7 +5,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import einops
-import bitsandbytes
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
@@ -99,17 +98,18 @@ class Lora():
 
 
 class Linear():
-    def __init__(self, weight: torch.Tensor, load_in_8bit: bool = True, device: str = None):
+    def __init__(self, weight: torch.nn.Module, device: str = None):
         if device is None:
             self.device_ = weight.device
         else:
             self.device_ = device
 
-        if load_in_8bit:
+        if not isinstance(weight, torch.nn.Linear):
+            import bitsandbytes
             assert isinstance(
                 weight, bitsandbytes.nn.Linear8bitLt), "error type."
         else:
-            assert isinstance(weight, torch.nn.Linear), "error type."
+            self.weight_ = weight
 
         self.weight_ = weight
         self.enable_lora_: bool = False
@@ -257,11 +257,50 @@ class LlamaModel():
         self.pad_token_id_ = args.pad_token_id_
         self.dim_ = args.dim_
 
+    def forward(self, input: MultiLoraBatchData):
+        tokens = torch.tensor(input.batch_tokens_,
+                              dtype=torch.int).to(self.device_)
+        data = F.embedding(tokens, self.token_embedding_,
+                           padding_idx=self.pad_token_id_).requires_grad_(True)
+        mask = precompute_mask(input, self.n_heads_, self.device_)
+
+        def create_forward_for_checkpoint(module: Transformer):
+            def forward_for_checkpoint(*inputs):
+                return module.forward(*inputs)
+            return forward_for_checkpoint
+
+        for layer in self.layers_:
+            data = torch.utils.checkpoint.checkpoint(
+                create_forward_for_checkpoint(layer), data, mask, self.rope_angle_, input)
+
+        data = self.norm_.forward(data)
+        data @= self.output_.transpose(0, 1)
+
+        return data
+
+    def init_random_lora_weight(self, adapter_name: str,
+                                r: int,
+                                lora_alpha: int,
+                                lora_dropout: float,
+                                target: Dict[str, bool]):
+        for transformer_layer in self.layers_:
+            transformer_layer.init_lora_layer_weight(
+                adapter_name, r, lora_alpha, lora_dropout, target)
+
     def from_pretrained(path: str,
                         device: str,
                         load_in_8bit: bool = True):
-        llama_model = LlamaForCausalLM.from_pretrained(
-            path, load_in_8bit=load_in_8bit, device_map=device)
+        if load_in_8bit:
+            llama_model = LlamaForCausalLM.from_pretrained(
+                path,
+                load_in_8bit=True,
+                device_map=device,
+                torch_dtype=torch.float16)
+        else:
+            llama_model = LlamaForCausalLM.from_pretrained(
+                path,
+                device_map=device,
+                torch_dtype=torch.float32)
 
         llama_args = LlamaModelArgs()
         llama_args.dim_ = llama_model.config.hidden_size
@@ -301,36 +340,6 @@ class LlamaModel():
                 layer.post_attention_layernorm.weight.to(device=device), model.norm_eps_)
 
         return model
-
-    def forward(self, input: MultiLoraBatchData):
-        tokens = torch.tensor(input.batch_tokens_,
-                              dtype=torch.int).to(self.device_)
-        data = F.embedding(tokens, self.token_embedding_,
-                           padding_idx=self.pad_token_id_).requires_grad_(True)
-        mask = precompute_mask(input, self.n_heads_, self.device_)
-
-        def create_forward_for_checkpoint(module: Transformer):
-            def forward_for_checkpoint(*inputs):
-                return module.forward(*inputs)
-            return forward_for_checkpoint
-
-        for layer in self.layers_:
-            data = torch.utils.checkpoint.checkpoint(
-                create_forward_for_checkpoint(layer), data, mask, self.rope_angle_, input)
-
-        data = self.norm_.forward(data)
-        data @= self.output_.transpose(0, 1)
-
-        return data
-
-    def init_random_lora_weight(self, adapter_name: str,
-                                r: int,
-                                lora_alpha: int,
-                                lora_dropout: float,
-                                target: Dict[str, bool]):
-        for transformer_layer in self.layers_:
-            transformer_layer.init_lora_layer_weight(
-                adapter_name, r, lora_alpha, lora_dropout, target)
 
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}

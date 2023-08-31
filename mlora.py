@@ -31,7 +31,7 @@ parser.add_argument('--base_model', type=str,
                     help='Path to or name of base model')
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
-parser.add_argument('--load_8bit', type=bool, default=False,
+parser.add_argument('--load_8bit', action="store_true",
                     help='Load model in 8bit mode')
 parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
