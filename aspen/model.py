@@ -5,7 +5,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import einops
-import bitsandbytes
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
@@ -106,6 +105,7 @@ class Linear():
             self.device_ = device
 
         if load_in_8bit:
+            import bitsandbytes
             assert isinstance(
                 weight, bitsandbytes.nn.Linear8bitLt), "error type."
         else:
