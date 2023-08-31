@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  test-llama-7b:
     runs-on: self-hosted
     steps:
     - name: clone repository
@@ -19,6 +19,14 @@ jobs:
       run: |
         cd /workspace/multi-lora-fine-tune
         python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit true
+  test-vicuna-7b:
+    runs-on: self-hosted
+    steps:
+    - name: clone repository
+      run: |
+        cd /workspace
+        rm -rf ./multi-lora-fine-tune
+        git clone git@github.com:TUDB-Labs/multi-lora-fine-tune.git
     - name: test vicuna-7b-delta-v0
       run: |
         cd /workspace/multi-lora-fine-tune
