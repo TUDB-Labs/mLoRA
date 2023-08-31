@@ -4,8 +4,8 @@ import os
 import sys
 import json
 import torch
-from typing import Dict
 
+from typing import Dict
 from transformers import LlamaForCausalLM
 
 
@@ -52,7 +52,8 @@ def load_llama_7b_weight(model: LlamaModel, llama_model_path: str, device: str):
 
 
 def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str, load_in_8bit: bool = False):
-    weight = LlamaForCausalLM.from_pretrained(llama_model_path).state_dict()
+    weight = LlamaForCausalLM.from_pretrained(
+        llama_model_path).state_dict(keep_vars=True)
 
     for layer_name in weight:
         w: torch.Tensor = weight[layer_name]
@@ -94,37 +95,13 @@ def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str, loa
             print(f"Not use layer {layer_name}.", file=sys.stderr)
 
 
-def load_random_lora_7b_weight(model: LlamaModel,
-                               adapter_name: str,
-                               r: int,
-                               dim: int,
-                               target_module: str,
-                               device: str) -> None:
-    norm_mean = 0
-    norm_std = 1e-3
-    target_module_name_list = ["q_proj", "k_proj",
-                               "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
-    for transformer_layer in model.layers_:
-        target_layer_list = [transformer_layer.wq_, transformer_layer.wk_,
-                             transformer_layer.wv_, transformer_layer.wo_,
-                             transformer_layer.w1_, transformer_layer.w2_,
-                             transformer_layer.w3_]
-        for idx, module_name in enumerate(target_module_name_list):
-            if module_name in target_module and target_module[module_name]:
-                lora_a_weight = torch.normal(
-                    mean=norm_mean, std=norm_std, size=(r, dim), device=device, requires_grad=True, dtype=torch.float32)
-                lora_b_weight = torch.normal(
-                    mean=norm_mean, std=norm_std, size=(dim, r), device=device, requires_grad=True, dtype=torch.float32)
-                target_layer_list[idx].set_lora_layer_weight(
-                    adapter_name, "lora_A", lora_a_weight)
-                target_layer_list[idx].set_lora_layer_weight(
-                    adapter_name, "lora_B", lora_b_weight)
-
-
 def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
     for lora_config in config["lora"]:
         lora_name = lora_config["name"]
-        lora_output_dir = lora_config["output"] + "_" + dir_suffix
+        lora_output_dir = lora_config["output"]
+        if dir_suffix != "":
+            lora_output_dir += os.sep + \
+                lora_config["output"] + "_" + dir_suffix
 
         if not os.path.exists(lora_output_dir):
             os.makedirs(lora_output_dir)
@@ -150,7 +127,7 @@ def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
                                      f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
 
         torch.save(lora_weight_dict, lora_output_dir +
-                   "/" + "adapter_model.bin")
+                   os.sep + "adapter_model.bin")
 
         adapter_config = {}
         adapter_config["lora_alpha"] = lora_config["alpha"]
@@ -161,5 +138,5 @@ def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
         adapter_config["bias"] = "none"
         adapter_config["target_modules"] = target_modules
 
-        with open(lora_output_dir + "/" + "adapter_config.json", "w") as f:
+        with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)
