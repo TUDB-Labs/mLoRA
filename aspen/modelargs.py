@@ -18,7 +18,7 @@ class LlamaModelArgs:
     n_layers_: int = 32
     norm_eps_: float = 1e-06
     vocab_size_: int = -1
-    pad_id_: int = -1
+    pad_token_id_: int = -1
     max_seq_len_: int = 2048
     device: str = ""
 

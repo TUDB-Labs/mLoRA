@@ -2,6 +2,7 @@
     "cutoff_len": 256,
     "group_by_length": false,
     "expand_right": true,
+    "pad_token_id": -1,
     "save_step": 200,
     "lora": [
         {

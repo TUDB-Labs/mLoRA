@@ -79,7 +79,7 @@ def setup_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def load_base_model() -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
+def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
     if not os.path.isdir(args.base_model):
         raise "can't find the model file."
 
@@ -94,9 +94,15 @@ def load_base_model() -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
         tokenizer = aspen.Tokenizer(
             args.base_model + os.sep + 'tokenizer.model')
 
-    # Need fix
-    model.pad_id_ = 0
-    tokenizer.pad_id_ = model.pad_id_
+    if config["pad_token_id"] == -1:
+        if config["expand_right"]:
+            model.pad_token_id_ = tokenizer.eos_id_
+        else:
+            model.pad_token_id_ = tokenizer.bos_id_
+    else:
+        model.pad_token_id_ = config["pad_token_id"]
+
+    tokenizer.pad_id_ = model.pad_token_id_
 
     return tokenizer, model
 
@@ -184,7 +190,7 @@ if __name__ == "__main__":
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
 
-    tokenizer, model = load_base_model()
+    tokenizer, model = load_base_model(config)
     init_lora_model(config, model)
 
     torch.cuda.empty_cache()
