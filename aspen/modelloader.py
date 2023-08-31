@@ -1,7 +1,6 @@
 from aspen.model import LlamaModel, Linear, RMSNorm
 
 import os
-import sys
 import json
 import torch
 
