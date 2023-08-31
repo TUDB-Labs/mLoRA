@@ -9,90 +9,24 @@ from typing import Dict
 from transformers import LlamaForCausalLM
 
 
-def load_llama_7b_weight(model: LlamaModel, llama_model_path: str, device: str):
-    weight = torch.load(llama_model_path, map_location=torch.device(device))
-
-    for layer_name in weight:
-        w: torch.Tensor = weight[layer_name]
-        w.requires_grad_(False)
-
-        if "layers" in layer_name:
-            layer_name = layer_name[len("layers."):]
-            layer_id = int(layer_name[:layer_name.find(".")])
-            if "wq" in layer_name:
-                model.layers_[layer_id].wq_ = Linear(w)
-            elif "wk" in layer_name:
-                model.layers_[layer_id].wk_ = Linear(w)
-            elif "wv" in layer_name:
-                model.layers_[layer_id].wv_ = Linear(w)
-            elif "wo" in layer_name:
-                model.layers_[layer_id].wo_ = Linear(w)
-            elif "w1" in layer_name:
-                model.layers_[layer_id].w1_ = Linear(w)
-            elif "w2" in layer_name:
-                model.layers_[layer_id].w2_ = Linear(w)
-            elif "w3" in layer_name:
-                model.layers_[layer_id].w3_ = Linear(w)
-            elif "attention_norm" in layer_name:
-                model.layers_[layer_id].attention_norm_ = RMSNorm(
-                    w, model.norm_eps_)
-            elif "ffn_norm" in layer_name:
-                model.layers_[layer_id].ffn_norm_ = RMSNorm(
-                    w, model.norm_eps_)
-            else:
-                print(f"Not use layer {layer_name}.", file=sys.stderr)
-        elif "tok_embeddings" in layer_name:
-            model.token_embedding_ = w
-        elif "norm.weight" in layer_name:
-            model.norm_ = RMSNorm(w, model.norm_eps_)
-        elif "output.weight" in layer_name:
-            model.output_ = w.to(torch.float32)
-        else:
-            print(f"Not use layer {layer_name}.", file=sys.stderr)
-
-
 def load_llama_tf_weight(model: LlamaModel, llama_model_path: str, dev: str, load_in_8bit: bool = False):
-    weight = LlamaForCausalLM.from_pretrained(
-        llama_model_path).state_dict(keep_vars=True)
+    llama_model = LlamaForCausalLM.from_pretrained(
+        llama_model_path, load_in_8bit=load_in_8bit, device_map=dev)
 
-    for layer_name in weight:
-        w: torch.Tensor = weight[layer_name]
-        w.requires_grad_(False)
+    model.token_embedding_ = llama_model.model.embed_tokens.weight.to(device=dev)
+    model.output_ = llama_model.lm_head.weight.to(dtype=torch.float32, device=dev)
+    model.norm_ = RMSNorm(llama_model.model.norm.weight.to(device=dev), model.norm_eps_)
 
-        if "model.layers" in layer_name:
-            layer_name = layer_name[len("model.layers."):]
-            layer_id = int(layer_name[:layer_name.find(".")])
-            if "self_attn.q_proj" in layer_name:
-                model.layers_[layer_id].wq_ = Linear(w, load_in_8bit, dev)
-            elif "self_attn.k_proj" in layer_name:
-                model.layers_[layer_id].wk_ = Linear(w, load_in_8bit, dev)
-            elif "self_attn.v_proj" in layer_name:
-                model.layers_[layer_id].wv_ = Linear(w, load_in_8bit, dev)
-            elif "self_attn.o_proj" in layer_name:
-                model.layers_[layer_id].wo_ = Linear(w, load_in_8bit, dev)
-            elif "mlp.gate_proj" in layer_name:
-                model.layers_[layer_id].w1_ = Linear(w, load_in_8bit, dev)
-            elif "mlp.down_proj" in layer_name:
-                model.layers_[layer_id].w2_ = Linear(w, load_in_8bit, dev)
-            elif "mlp.up_proj" in layer_name:
-                model.layers_[layer_id].w3_ = Linear(w, load_in_8bit, dev)
-            elif "input_layernorm" in layer_name:
-                model.layers_[layer_id].attention_norm_ = RMSNorm(
-                    w.to(device=dev), model.norm_eps_)
-            elif "post_attention_layernorm" in layer_name:
-                model.layers_[layer_id].ffn_norm_ = RMSNorm(
-                    w.to(device=dev), model.norm_eps_)
-            else:
-                print(
-                    f"Not use layer model.layers.{layer_name}.", file=sys.stderr)
-        elif "embed_tokens" in layer_name:
-            model.token_embedding_ = w.to(device=dev)
-        elif "norm.weight" in layer_name:
-            model.norm_ = RMSNorm(w.to(device=dev), model.norm_eps_)
-        elif "lm_head.weight" in layer_name:
-            model.output_ = w.to(dtype=torch.float32, device=dev)
-        else:
-            print(f"Not use layer {layer_name}.", file=sys.stderr)
+    for idx, layer in enumerate(llama_model.model.layers):
+        model.layers_[idx].wq_ = Linear(layer.self_attn.q_proj, device=dev)
+        model.layers_[idx].wk_ = Linear(layer.self_attn.k_proj, device=dev)
+        model.layers_[idx].wv_ = Linear(layer.self_attn.v_proj, device=dev)
+        model.layers_[idx].wo_ = Linear(layer.self_attn.o_proj, device=dev)
+        model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=dev)
+        model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=dev)
+        model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=dev)
+        model.layers_[idx].attention_norm_ = RMSNorm(layer.input_layernorm.weight.to(device=dev), model.norm_eps_)
+        model.layers_[idx].ffn_norm_ = RMSNorm(layer.post_attention_layernorm.weight.to(device=dev), model.norm_eps_)
 
 
 def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):

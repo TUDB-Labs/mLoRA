@@ -103,15 +103,10 @@ class Linear():
         else:
             self.device_ = device
 
-        row, col = weight.shape
-
         if load_in_8bit:
-            from bitsandbytes.nn import Linear8bitLt, Int8Params
-            self.weight_ = Linear8bitLt(
-                input_features=col, output_features=row, bias=False, has_fp16_weights=False, device=self.device_)
-            self.weight_.weight = Int8Params(
-                weight.data, requires_grad=False).cuda(self.device_)
+            self.weight_ = weight
         else:
+            row, col = weight.shape
             self.weight_ = torch.nn.Linear(
                 in_features=col, out_features=row, bias=False, device=self.device_)
 
