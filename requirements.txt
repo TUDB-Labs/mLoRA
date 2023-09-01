@@ -1,6 +1,6 @@
-torch==2.0.1
+torch @ git+https://github.com/pytorch/pytorch@v2.1.0-rc2
+xformers @ git+https://github.com/facebookresearch/xformers@v0.0.21
 einops
-xformers
 transformers
 bitsandbytes
 sentencepiece
