@@ -289,17 +289,20 @@ class LlamaModel():
 
     def from_pretrained(path: str,
                         device: str,
-                        load_in_8bit: bool = True):
+                        load_in_8bit: bool = True,
+                        device_map: str = None):
+        if device_map is None:
+            device_map = device
         if load_in_8bit:
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
                 load_in_8bit=True,
-                device_map=device,
+                device_map=device_map,
                 torch_dtype=torch.float16)
         else:
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
-                device_map=device,
+                device_map=device_map,
                 torch_dtype=torch.float32)
 
         llama_args = LlamaModelArgs()
@@ -323,17 +326,13 @@ class LlamaModel():
             device=device), model.norm_eps_)
 
         for idx, layer in enumerate(llama_model.model.layers):
-            model.layers_[idx].wq_ = Linear(
-                layer.self_attn.q_proj, device=device)
-            model.layers_[idx].wk_ = Linear(
-                layer.self_attn.k_proj, device=device)
-            model.layers_[idx].wv_ = Linear(
-                layer.self_attn.v_proj, device=device)
-            model.layers_[idx].wo_ = Linear(
-                layer.self_attn.o_proj, device=device)
-            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=device)
-            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=device)
-            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=device)
+            model.layers_[idx].wq_ = Linear(layer.self_attn.q_proj)
+            model.layers_[idx].wk_ = Linear(layer.self_attn.k_proj)
+            model.layers_[idx].wv_ = Linear(layer.self_attn.v_proj)
+            model.layers_[idx].wo_ = Linear(layer.self_attn.o_proj)
+            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj)
+            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj)
+            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj)
             model.layers_[idx].attention_norm_ = RMSNorm(
                 layer.input_layernorm.weight.to(device=device), model.norm_eps_)
             model.layers_[idx].ffn_norm_ = RMSNorm(
