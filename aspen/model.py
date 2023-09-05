@@ -98,20 +98,20 @@ class Lora():
 
 
 class Linear():
-    def __init__(self, weight: torch.nn.Module, device: str = None):
+    def __init__(self, model: torch.nn.Module, device: str = None):
         if device is None:
-            self.device_ = weight.device
+            self.device_ = model.weight.device
         else:
             self.device_ = device
 
-        if not isinstance(weight, torch.nn.Linear):
+        if not isinstance(model, torch.nn.Linear):
             import bitsandbytes
             assert isinstance(
-                weight, bitsandbytes.nn.Linear8bitLt), "error type."
+                model, bitsandbytes.nn.Linear8bitLt), "error type."
         else:
-            self.weight_ = weight
+            self.weight_ = model
 
-        self.weight_ = weight
+        self.weight_ = model
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
@@ -290,9 +290,7 @@ class LlamaModel():
     def from_pretrained(path: str,
                         device: str,
                         load_in_8bit: bool = True,
-                        device_map: str = None):
-        if device_map is None:
-            device_map = device
+                        device_map: str = "auto"):
         if load_in_8bit:
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
