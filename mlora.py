@@ -163,7 +163,7 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, data_set: aspen
                                                    :].contiguous().view(-1, llama_model.vocab_size_)
             loss_target = labels[start_idx:end_idx][...,
                                                     1:].contiguous().view(-1)
-            loss = loss_fn(loss_input, loss_target) / (end_idx - start_idx)
+            loss = loss_fn(loss_input, loss_target)
             print(
                 f"    adapter: {lora_config.adapter_name_} loss: {loss}")
             if total_loss is None:
