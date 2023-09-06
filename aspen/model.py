@@ -51,8 +51,8 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
     # data shape is: batch_size * max_seq_len * n_head * n_dim
     _, max_seq_len, _, dim_head = xq.shape
 
-    cos = angle[0][:max_seq_len].view(max_seq_len, 1, dim_head)
-    sin = angle[1][:max_seq_len].view(max_seq_len, 1, dim_head)
+    cos = angle[0][:max_seq_len].view(max_seq_len, 1, dim_head).to(xq.device)
+    sin = angle[1][:max_seq_len].view(max_seq_len, 1, dim_head).to(xq.device)
 
     xq = (xq * cos) + (rotate_half(xq) * sin)
     xk = (xk * cos) + (rotate_half(xk) * sin)
@@ -68,7 +68,7 @@ class RMSNorm():
         return data * torch.rsqrt(data.pow(2).mean(-1, keepdim=True) + self.norm_eps_)
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        return self._norm(data.float()).type_as(data) * self.weight_
+        return self._norm(data.float()).type_as(data).to(self.weight_.device) * self.weight_
 
 
 class Lora():
@@ -217,11 +217,11 @@ class Transformer():
         # attention_score = flash_attn_func(xq, xk, xv, causal=True)
         # attention_score = attention_score.view(batch_size, max_seq_len, -1)
         attention_score = xformers.ops.memory_efficient_attention(
-            xq, xk, xv, mask)
+            xq, xk, xv, mask.to(xq.device))
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
         # get output attention score
-        data = data + self.wo_.forward(attention_score, input_args)
+        data = data.to(self.wo_.device_) + self.wo_.forward(attention_score, input_args)
 
         # feed forward fully connected
         score_norm_data = self.ffn_norm_.forward(data)
@@ -324,17 +324,18 @@ class LlamaModel():
             device=device), model.norm_eps_)
 
         for idx, layer in enumerate(llama_model.model.layers):
-            model.layers_[idx].wq_ = Linear(layer.self_attn.q_proj)
-            model.layers_[idx].wk_ = Linear(layer.self_attn.k_proj)
-            model.layers_[idx].wv_ = Linear(layer.self_attn.v_proj)
-            model.layers_[idx].wo_ = Linear(layer.self_attn.o_proj)
-            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj)
-            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj)
-            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj)
+            layer_dev = layer.self_attn.q_proj.weight.device
+            model.layers_[idx].wq_ = Linear(layer.self_attn.q_proj, device=layer_dev)
+            model.layers_[idx].wk_ = Linear(layer.self_attn.k_proj, device=layer_dev)
+            model.layers_[idx].wv_ = Linear(layer.self_attn.v_proj, device=layer_dev)
+            model.layers_[idx].wo_ = Linear(layer.self_attn.o_proj, device=layer_dev)
+            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=layer_dev)
+            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=layer_dev)
+            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=layer_dev)
             model.layers_[idx].attention_norm_ = RMSNorm(
-                layer.input_layernorm.weight.to(device=device), model.norm_eps_)
+                layer.input_layernorm.weight.to(device=layer_dev), model.norm_eps_)
             model.layers_[idx].ffn_norm_ = RMSNorm(
-                layer.post_attention_layernorm.weight.to(device=device), model.norm_eps_)
+                layer.post_attention_layernorm.weight.to(device=layer_dev), model.norm_eps_)
 
         return model
 
