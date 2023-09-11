@@ -42,12 +42,12 @@ def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
                 if lora_name in lora_layer.loras_:
                     if lora_layer_name_list[idx] not in target_modules:
                         target_modules.append(lora_layer_name_list[idx])
-                    lora_weight_dict[layer_prefix_name +
+                    lora_weight_dict[layer_prefix_name + \
                                      f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
-                    lora_weight_dict[layer_prefix_name +
+                    lora_weight_dict[layer_prefix_name + \
                                      f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
 
-        torch.save(lora_weight_dict, lora_output_dir +
+        torch.save(lora_weight_dict, lora_output_dir + \
                    os.sep + "adapter_model.bin")
 
         adapter_config = {}
