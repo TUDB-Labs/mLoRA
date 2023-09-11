@@ -198,8 +198,7 @@ def main(
 
         if stream_output:
             # Stream the reply 1 token at a time.
-            # This is based on the trick of using 'stopping_criteria' to create an iterator,
-            # from https://github.com/oobabooga/text-generation-webui/blob/ad37f396fc8bcbab90e11ecf17c56c97bfbd4a9c/modules/text_generation.py#L216-L243.
+            # This is based on the trick of using 'stopping_criteria' to create an iterator.
 
             def generate_with_callback(callback=None, **kwargs):
                 kwargs.setdefault(
