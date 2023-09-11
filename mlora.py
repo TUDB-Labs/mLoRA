@@ -20,6 +20,7 @@ import os
 import json
 import torch
 import aspen
+import random
 import datetime
 import argparse
 from typing import Dict, Tuple, List
@@ -77,6 +78,7 @@ if args.config is None:
 def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    random.seed(seed)
 
 
 def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
