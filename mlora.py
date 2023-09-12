@@ -88,10 +88,10 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.Llam
         raise "can't find the model file."
 
     model = aspen.LlamaModel.from_pretrained(
-        path = args.base_model,
-        device = args.device,
-        bits = (8 if args.load_8bit else (4 if args.load_4bit else None)),
-        log_fn = log
+        path=args.base_model,
+        device=args.device,
+        bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+        log_fn=log
     )
 
     if args.tokenizer:

@@ -107,7 +107,9 @@ class Linear():
 
         if not isinstance(weight, torch.nn.Linear):
             import bitsandbytes
-            assert isinstance(weight, bitsandbytes.nn.Linear8bitLt) or isinstance(weight, bitsandbytes.nn.Linear4bit), "error type."
+            assert isinstance(weight,
+                              bitsandbytes.nn.Linear8bitLt) or isinstance(weight,
+                                                                          bitsandbytes.nn.Linear4bit), "error type."
         else:
             self.weight_ = weight
 
@@ -295,12 +297,13 @@ class LlamaModel():
                         bf16: bool = True,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
-                        log_fn = None):
+                        log_fn=None):
         if bits in [4, 8]:
-            if not log_fn is None:
+            if log_fn is not None:
                 log_fn('Loading model with quantization, bits = %i' % bits)
             from transformers import BitsAndBytesConfig
-            compute_dtype = (torch.float16 if fp16 else (torch.bfloat16 if bf16 else torch.float32))
+            compute_dtype = (torch.float16 if fp16 else (
+                torch.bfloat16 if bf16 else torch.float32))
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
                 load_in_4bit=bits == 4,
