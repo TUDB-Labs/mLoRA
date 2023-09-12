@@ -34,6 +34,8 @@ parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
 parser.add_argument('--load_8bit', action="store_true",
                     help='Load model in 8bit mode')
+parser.add_argument('--load_4bit', action="store_true",
+                    help='Load model in 4bit mode')
 parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
 parser.add_argument('--config', type=str,
@@ -86,9 +88,11 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.Llam
         raise "can't find the model file."
 
     model = aspen.LlamaModel.from_pretrained(
-        path=args.base_model,
-        device=args.device,
-        load_in_8bit=args.load_8bit)
+        path = args.base_model,
+        device = args.device,
+        bits = (8 if args.load_8bit else (4 if args.load_4bit else None)),
+        log_fn = log
+    )
 
     if args.tokenizer:
         tokenizer = aspen.Tokenizer(args.tokenizer)
