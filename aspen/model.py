@@ -1,6 +1,5 @@
 from aspen.modelargs import LlamaModelArgs, MultiLoraBatchData
 from aspen.checkpoint import CheckpointRecomputeFunction
-from aspen.checkpoint import CheckpointOffloadFunction
 
 import math
 import torch
