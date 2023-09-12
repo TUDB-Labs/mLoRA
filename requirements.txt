@@ -1,8 +1,8 @@
 torch==2.0.1
-einops
-xformers
-transformers
-bitsandbytes
-sentencepiece
+einops==0.6.1
+accelerate==0.21.0
+transformers==4.31.0
+bitsandbytes==0.40.0
+sentencepiece==0.1.99
 scipy
-accelerate
+xformers
