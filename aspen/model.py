@@ -1,4 +1,5 @@
 from aspen.modelargs import LlamaModelArgs, MultiLoraBatchData
+from aspen.checkpoint import CheckpointFunction
 
 import math
 import torch
@@ -270,8 +271,8 @@ class LlamaModel():
             return forward_for_checkpoint
 
         for layer in self.layers_:
-            data = torch.utils.checkpoint.checkpoint(
-                create_forward_for_checkpoint(layer), data, mask, self.rope_angle_, input)
+            data = CheckpointFunction.apply(create_forward_for_checkpoint(
+                layer), data, mask, self.rope_angle_, input)
 
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
