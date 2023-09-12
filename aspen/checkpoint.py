@@ -52,8 +52,19 @@ def _get_autocast_kwargs():
 
     return gpu_autocast_kwargs, cpu_autocast_kwargs
 
+def pack_hook(to_offload: torch.Tensor) -> Tuple[torch.device, torch.Tensor]:
+    return to_offload.device, to_offload.to("cpu")
 
-class CheckpointFunction(torch.autograd.Function):
+def unpack_hook(to_offload_info: Tuple[torch.device, torch.Tensor]) -> torch.Tensor:
+    device, to_offload = to_offload_info
+    return to_offload.to(device)
+
+def CheckpointOffloadFunction(run_function, *args):
+    with torch.autograd.graph.saved_tensors_hooks(pack_hook, unpack_hook):
+        outputs = run_function(*args)
+    return outputs
+
+class CheckpointRecomputeFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, run_function, *args):
         check_backward_validity(args)
