@@ -1,11 +1,11 @@
 torch==2.0.1
 einops==0.6.1
 accelerate==0.21.0
-transformers=4.31.0
+transformers==4.31.0
 bitsandbytes==0.40.0
 sentencepiece==0.1.99
 scipy==1.10.1
-xformers=0.0.20
+xformers==0.0.20
 nltk
 jieba
 gradio
