@@ -8,6 +8,5 @@ scipy==1.10.1
 xformers==0.0.20
 nltk
 jieba
-gradio
 rouge
 rouge_chinese
