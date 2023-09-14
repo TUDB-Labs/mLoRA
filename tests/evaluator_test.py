@@ -6,11 +6,13 @@ generated_summary = "The dog slept on the couch."
 reference_summary = "The cat sat on the mat."
 
 rouge_score = evaluator.calculate_ROUGE(generated_summary, reference_summary)
-print(rouge_score)
+assert 0.5 == rouge_score['rouge-1']
+assert 0.2 == rouge_score['rouge-2']
+assert 0.5 == rouge_score['rouge-l']
 
 n = 2
 bleu_score = evaluator.calculate_BLEU(generated_summary, reference_summary, n)
-print(bleu_score)
+assert 0.32 == bleu_score['bleu-2']
 
 generated_summary = "刚刚发声，A股这种情况十分罕见！大聪明逆市抄底330亿，一篇研报引爆全球，市场逻辑生变？"
 reference_summary = """刚刚过去的这个月，美股总市值暴跌了将近6万亿美元（折合人民币超过40万亿），这背后的原因可能不仅仅是加息这么简单。
@@ -18,8 +20,10 @@ reference_summary = """刚刚过去的这个月，美股总市值暴跌了将近
 在该文中，Zoltan Polzsar直指美国通胀的本质和其长期性。同期，A股市场亦出现了大幅杀跌的情况。"""
 
 rouge_score = evaluator.calculate_ROUGE(generated_summary, reference_summary)
-print(rouge_score)
+assert 0.13 == rouge_score['rouge-1']
+assert 0.02 == rouge_score['rouge-2']
+assert 0.1 == rouge_score['rouge-l']
 
 n = 2
 bleu_score = evaluator.calculate_BLEU(generated_summary, reference_summary, n)
-print(bleu_score)
+assert 0.01 == bleu_score['bleu-2']
