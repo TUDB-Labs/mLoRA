@@ -15,6 +15,7 @@ class Evaluator:
                 return True
         return False
 
+    # calculate rouge-1, rouge-2, rouge-l
     def calculate_ROUGE(self, sentence_out: str, sentence_in: str) -> dict:
         if self.is_contains_chinese(sentence_in):
             rouger = self.rouge_zh
@@ -30,7 +31,7 @@ class Evaluator:
         return {'rouge-1': rouge_1_score, 'rouge-2': rouge_2_score, 'rouge-l': rouge_l_score}
 
     def calculate_BLEU(self, sentence_out: str, sentence_in: str, n_gram: int) -> dict:
-        # Tokenize the generated summary and reference summary
+        # Tokenize the sentence_in and sentence_out
         if self.is_contains_chinese(sentence_in):
             sentence_out = ' '.join(jieba.cut(sentence_out))
             sentence_in = ' '.join(jieba.cut(sentence_in))
