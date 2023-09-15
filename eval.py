@@ -3,11 +3,12 @@ import torch
 import argparse
 from peft import PeftModel
 from aspen.evaluator import Evaluator
-from transformers import LlamaTokenizer, LlamaForCausalLM, GenerationConfig
+from transformers import LlamaTokenizer, LlamaForCausalLM, GenerationConfig, BitsAndBytesConfig
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--no_lora', type=bool, default=False)
 parser.add_argument('--load_8bit', type=bool, default=False)
+parser.add_argument('--load_4bit', type=bool, default=False)
 parser.add_argument('--base_model', type=str)
 parser.add_argument('--lora_weights', type=str)  # lora checkpoint
 parser.add_argument('--model_type', default="llama", choices=['llama', 'chatglm', 'bloom'])
@@ -31,16 +32,22 @@ if args.no_lora is False:
         parser.print_help()
         exit(-1)
 
+if args.load_8bit and args.load_4bit:
+    print('error: only one of --load_4bit and --load_8bit can be true.')
+    parser.print_help()
+    exit(-1)
+
 print(args)
 
 NO_LORA = args.no_lora
 LOAD_8BIT = args.load_8bit
+LOAD_4BIT = args.load_4bit
 BASE_MODEL = args.base_model
 LORA_WEIGHTS = args.lora_weights
 DATASET = args.dataset
 
 if args.model_type == "llama":
-    tokenizer = LlamaTokenizer.from_pretrained(BASE_MODEL)
+    tokenizer = LlamaTokenizer.from_pretrained(BASE_MODEL, legacy=False)
 else:
     raise "currently only the llama model is supported."
 
@@ -51,11 +58,17 @@ else:
 
 if device == "cuda":
     device = args.device
+    compute_dtype = (torch.float16 if LOAD_8BIT else (torch.bfloat16 if LOAD_4BIT else torch.float32))
     model = LlamaForCausalLM.from_pretrained(
         BASE_MODEL,
         load_in_8bit=LOAD_8BIT,
-        torch_dtype=torch.float16,
+        load_in_4bit=LOAD_4BIT,
         device_map=args.device,
+        quantization_config=BitsAndBytesConfig(
+            load_in_4bit=LOAD_4BIT,
+            load_in_8bit=LOAD_8BIT,
+            bnb_4bit_compute_dtype=compute_dtype,
+        )
     )
     if not NO_LORA:
         model = PeftModel.from_pretrained(
@@ -112,7 +125,7 @@ def get_scores(data_path: str, temperature=1.0, top_p=0.9, top_k=40, num_beams=4
             inst = item_data['instruction']
             data_in = item_data['input']
             true_out = item_data['output']
-            gen_out = evaluate(inst, data_in, temperature, top_p, top_k, num_beams, max_new_tokens, **kwargs)
+            gen_out = evaluate(inst, data_in)
 
             score_dict = evaluator.calculate_ROUGE(gen_out, true_out)
             scores['rouge-1'] = scores['rouge-1'] + score_dict['rouge-1']
@@ -127,38 +140,14 @@ def get_scores(data_path: str, temperature=1.0, top_p=0.9, top_k=40, num_beams=4
         return scores
 
 
-def evaluate(instruction,
-             input=None,
-             temperature=1.0,
-             top_p=0.9,
-             top_k=40,
-             num_beams=4,
-             max_new_tokens=1024,
-             **kwargs):
+def evaluate(instruction, input=None, max_new_tokens=1024, ):
     prompt = generate_prompt(instruction, input)
     inputs = tokenizer(prompt, return_tensors="pt")
     input_ids = inputs["input_ids"].to(device)
-    generation_config = GenerationConfig(
-        temperature=temperature,
-        top_p=top_p,
-        top_k=top_k,
-        num_beams=num_beams,
-        do_sample=True,
-        no_repeat_ngram_size=6,
-        repetition_penalty=1.8,
-        **kwargs,
-    )
-
-    generation_output = model.generate(
-        input_ids=input_ids,
-        generation_config=generation_config,
-        return_dict_in_generate=True,
-        output_scores=True,
-        max_new_tokens=max_new_tokens,
-    )
-    s = generation_output.sequences[0]
-    output = tokenizer.decode(s[:-1])  # remove the padding
-    return output.split("### Response:")[1].strip()
+    generate_ids = model.generate(input_ids, max_new_tokens=max_new_tokens)
+    output = tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
+    output = output.split("### Response:")[1].strip()
+    return output
 
 
 if __name__ == '__main__':
