@@ -131,7 +131,7 @@ def get_scores(data_path: str, temperature=1.0, top_p=0.9, top_k=40, num_beams=4
             scores['rouge-1'] = scores['rouge-1'] + score_dict['rouge-1']
             scores['rouge-2'] = scores['rouge-2'] + score_dict['rouge-2']
             scores['rouge-l'] = scores['rouge-l'] + score_dict['rouge-l']
-            scores['bleu-2'] = evaluator.calculate_BLEU(gen_out, true_out, 2)['bleu-2']
+            scores['bleu-2'] = scores['bleu-2'] + evaluator.calculate_BLEU(gen_out, true_out, 2)['bleu-2']
 
         scores['rouge-1'] = round(scores['rouge-1'] / datasize, 2)
         scores['rouge-2'] = round(scores['rouge-2'] / datasize, 2)
