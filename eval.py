@@ -79,9 +79,11 @@ else:  # cpu
 evaluator = Evaluator()
 model.eval()
 
+
 def generate_prompt(instruction, input=None):
     if input:
-        return f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+        return f"""Below is an instruction that describes a task, paired with an input that provides further context.
+         Write a response that appropriately completes the request.
 
 ### Instruction:
 {instruction}
@@ -91,7 +93,8 @@ def generate_prompt(instruction, input=None):
 
 ### Response:"""
     else:
-        return f"""Below is an instruction that describes a task. Write a response that appropriately completes the request.
+        return f"""Below is an instruction that describes a task.
+         Write a response that appropriately completes the request.
 
 ### Instruction:
 {instruction}
@@ -99,7 +102,8 @@ def generate_prompt(instruction, input=None):
 ### Response:"""
 
 
-def get_scores(data_path: str, temperature=1.0, top_p=0.9, top_k=40, num_beams=4, max_new_tokens=1024, **kwargs) -> dict:
+def get_scores(data_path: str, temperature=1.0, top_p=0.9, top_k=40, num_beams=4, max_new_tokens=1024,
+               **kwargs) -> dict:
     with open(data_path, 'r', encoding='utf8') as fp:
         dataset = json.load(fp)
         datasize = len(dataset)
