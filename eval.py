@@ -3,7 +3,7 @@ import torch
 import argparse
 from peft import PeftModel
 from aspen.evaluator import Evaluator
-from transformers import LlamaTokenizer, LlamaForCausalLM, GenerationConfig, BitsAndBytesConfig
+from transformers import LlamaTokenizer, LlamaForCausalLM, BitsAndBytesConfig
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--no_lora', type=bool, default=False)
