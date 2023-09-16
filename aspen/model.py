@@ -212,14 +212,26 @@ class Transformer():
         # apply rotary embedding
         xq, xk = apply_rotary_emb(xq, xk, rope_angle)
 
-        # score shape is: batch_size * n_head * seq_len * dim_head
-        # convert shape to: batch_size * seq_len * dim
-        # attention_score = attention_score.transpose(
-        #     1, 2).contiguous().view(batch_size, max_seq_len, -1)
-        # attention_score = flash_attn_func(xq, xk, xv, causal=True)
-        # attention_score = attention_score.view(batch_size, max_seq_len, -1)
-        attention_score = xformers.ops.memory_efficient_attention(
-            xq, xk, xv, mask)
+        # inference model use cache-kv
+        if input_args.inference_model_:
+            if len(input_args.cache_key_) <= self.layer_id_:
+                input_args.cache_key_.append(xk)
+                input_args.cache_value_.append(xv)
+            else:
+                xk = torch.cat(
+                    (input_args.cache_key_[self.layer_id_], xk), dim=1)
+                xv = torch.cat(
+                    (input_args.cache_value_[self.layer_id_], xv), dim=1)
+                input_args.cache_key_[self.layer_id_] = xk
+                input_args.cache_value_[self.layer_id_] = xv
+
+        if input_args.inference_model_:
+            attention_score = xformers.ops.memory_efficient_attention(
+                xq, xk, xv, attn_bias=xformers.ops.fmha.attn_bias.LowerTriangularMask()
+            )
+        else:
+            attention_score = xformers.ops.memory_efficient_attention(
+                xq, xk, xv, mask)
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
         # get output attention score
@@ -259,12 +271,46 @@ class LlamaModel():
         self.pad_token_id_ = args.pad_token_id_
         self.dim_ = args.dim_
 
-    def forward(self, input: MultiLoraBatchData):
+    # train model: output is probs
+    # inference model: output is tokens
+    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int).to(self.device_)
+        if input.inference_model_:
+            mask = None
+            input_mask = tokens != self.pad_token_id_
+        else:
+            mask = precompute_mask(input, self.n_heads_, self.device_)
+
+        # only for inference
+        if input.inference_model_:
+            start_idx = 0
+            for end_idx in range(input.min_token_size_, input.max_cutoff_len_):
+                # [start_idx, end_idx)
+                input_tokens = tokens[..., start_idx:end_idx]
+                input_data = F.embedding(input_tokens, self.token_embedding_,
+                                         padding_idx=self.pad_token_id_)
+                for layer in self.layers_:
+                    input_data = layer.forward(
+                        input_data, mask, self.rope_angle_, input)
+
+                input_data = self.norm_.forward(input_data)
+                # only get the last be the predict token
+                input_data = input_data[:, -1,
+                                        :] @ self.output_.transpose(0, 1)
+                # the predict output is input_data
+                next_token = torch.argmax(input_data, dim=-1)
+                next_token = torch.where(
+                    input_mask[:, end_idx], tokens[:, end_idx], next_token)
+                # attach to result
+                tokens[:, end_idx] = next_token
+                # need early stop when the next_token is end
+                start_idx = end_idx
+            return tokens
+
+        # only for train
         data = F.embedding(tokens, self.token_embedding_,
                            padding_idx=self.pad_token_id_).requires_grad_(True)
-        mask = precompute_mask(input, self.n_heads_, self.device_)
 
         def create_forward_for_checkpoint(module: Transformer):
             def forward_for_checkpoint(*inputs):
