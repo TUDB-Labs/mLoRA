@@ -141,6 +141,19 @@ def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]
             raise f"unkown optimizer {optim_name}"
     return optimizer_list
 
+# to get test result and want early stop it
+
+
+def test_data_need_early_stop(llama_model: aspen.LlamaModel,
+                              data_set: aspen.DataSet) -> bool:
+    with torch.no_grad():
+        while not data_set.check_test_done():
+            input_data: aspen.MultiLoraBatchData = data_set.get_test_barch_data()
+            output = llama_model.forward(input_data)
+            output = output.tolist()
+            # to check the output
+    return True
+
 
 def train(config: Dict[str, any], llama_model: aspen.LlamaModel, data_set: aspen.DataSet):
     train_paramas = llama_model.get_train_paramas(config)
@@ -183,6 +196,9 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, data_set: aspen
 
         if step_cnt % config["save_step"] == 0:
             aspen.save_lora_model(llama_model, config, f"{step_cnt}")
+
+        if step_cnt % config["test_step"] == 0:
+            _ = test_data_need_early_stop(llama_model, data_set)
 
     aspen.save_lora_model(llama_model, config)
 

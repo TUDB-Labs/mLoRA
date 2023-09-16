@@ -1,3 +1,4 @@
+import torch
 from dataclasses import dataclass
 from typing import List
 
@@ -41,3 +42,11 @@ class MultiLoraBatchData:
 
     batch_tokens_: List[List[int]] = None
     tokens_len_without_pad_: List[int] = None
+
+    # just for inference
+    inference_model_: bool = False
+    cache_key_: List[torch.Tensor] = None
+    cache_value_: List[torch.Tensor] = None
+    min_token_size_: int = -1
+    max_token_size_: int = -1
+    max_cutoff_len_: int = 4096

@@ -170,4 +170,5 @@ __pycache__/
 data/*
 template/*
 !data/data_demo.json
+!template/test_data_demo.json
 !template/template_demo.json

@@ -4,6 +4,7 @@
     "expand_right": true,
     "pad_token_id": -1,
     "save_step": 200,
+    "test_step": 200,
     "lora": [
         {
             "name": "lora_0",
@@ -12,6 +13,7 @@
             "lr": 1e-2,
             "momentum": 0.9,
             "batch_size": 16,
+            "test_batch_size": 32,
             "num_epochs": 3,
             "r": 8,
             "alpha": 16,
@@ -26,6 +28,7 @@
                 "w3_proj": false
             },
             "data": "data/data_demo.json",
+            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json"
         },
         {
@@ -34,6 +37,7 @@
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 16,
+            "test_batch_size": 32,
             "num_epochs": 3,
             "r": 8,
             "alpha": 16,
@@ -48,6 +52,7 @@
                 "w3_proj": false
             },
             "data": "data/data_demo.json",
+            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json"
         }
     ]
