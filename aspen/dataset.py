@@ -121,7 +121,7 @@ class DataSet():
                 target[lora_name].append((text, tokens))
                 if idx % 10000 == 0:
                     print(
-                        f"encode text data: {idx}/{len(lora_text_data[lora_name])}")
+                        f"encode text data {lora_name}: {idx}/{len(lora_text_data[lora_name])}")
 
             # only train data need group by length or shuffle
             if is_train_data:
@@ -206,7 +206,7 @@ class DataSet():
         # append pad to align
         for tokens in batch_tokens_list:
             while len(tokens) < self.config_["cutoff_len"]:
-                tokens.append(self.tokenizer_.pad_id_)
+                tokens.append(self.tokenizer_.eos_id_)
 
         return MultiLoraBatchData(prompts_=prompts_list,
                                   lora_batch_data_config_=prompts_batch_config_list,
