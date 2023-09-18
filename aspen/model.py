@@ -271,11 +271,14 @@ class LlamaModel():
         self.pad_token_id_ = args.pad_token_id_
         self.dim_ = args.dim_
 
+        # need to set
+        self.eos_token_id_ = -1
+
     # train model: output is probs
     # inference model: output is tokens
     def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         tokens = torch.tensor(input.batch_tokens_,
-                              dtype=torch.int).to(self.device_)
+                              dtype=torch.int64).to(self.device_)
         if input.inference_model_:
             mask = None
             input_mask = tokens != self.pad_token_id_
@@ -285,9 +288,20 @@ class LlamaModel():
         # only for inference
         if input.inference_model_:
             start_idx = 0
+            need_inference_row = list(range(0, tokens.shape[0]))
+
             for end_idx in range(input.min_token_size_, input.max_cutoff_len_):
+                if len(need_inference_row) <= 0:
+                    break
                 # [start_idx, end_idx)
-                input_tokens = tokens[..., start_idx:end_idx]
+                row_index = torch.as_tensor(
+                    need_inference_row, dtype=torch.long, device=self.device_)
+                col_index = torch.arange(
+                    start_idx, end_idx, dtype=torch.long, device=self.device_)
+
+                input_tokens = torch.index_select(tokens, 0, row_index)
+                input_tokens = torch.index_select(input_tokens, 1, col_index)
+
                 input_data = F.embedding(input_tokens, self.token_embedding_,
                                          padding_idx=self.pad_token_id_)
                 for layer in self.layers_:
@@ -301,14 +315,29 @@ class LlamaModel():
                 # the predict output is input_data
                 next_token = torch.argmax(input_data, dim=-1)
                 next_token = torch.where(
-                    input_mask[:, end_idx], tokens[:, end_idx], next_token)
+                    input_mask[need_inference_row, end_idx],
+                    tokens[need_inference_row, end_idx], next_token)
                 # attach to result
-                tokens[:, end_idx] = next_token
+                tokens[need_inference_row, end_idx] = next_token
+                # delete the end sentence
+                delete_inference_idx = []
+                for idx, item in enumerate(next_token):
+                    if item.item() == self.eos_token_id_:
+                        delete_inference_idx.append(idx)
+                for idx in reversed(delete_inference_idx):
+                    need_inference_row.pop(idx)
+                    # delete the cache-kv
+                    for layer_id, _ in enumerate(self.layers_):
+                        input.cache_key_[layer_id] = torch.cat(
+                            (input.cache_key_[layer_id][:idx, ...], input.cache_key_[layer_id][idx+1:, ...]))
+                        input.cache_value_[layer_id] = torch.cat(
+                            (input.cache_value_[layer_id][:idx, ...], input.cache_value_[layer_id][idx+1:, ...]))
                 # need early stop when the next_token is end
                 start_idx = end_idx
             return tokens
 
         # only for train
+
         data = F.embedding(tokens, self.token_embedding_,
                            padding_idx=self.pad_token_id_).requires_grad_(True)
 
