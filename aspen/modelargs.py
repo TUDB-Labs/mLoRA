@@ -2,6 +2,8 @@ import torch
 from dataclasses import dataclass
 from typing import List
 
+Tokens = List[int]
+
 
 @dataclass
 class TokenizerArgs:
@@ -37,11 +39,13 @@ class MultiLoraBatchData:
     lora_batch_data_config_: List[LoraBatchDataConfig] = None
 
     # batch seq len
+    # the expand right and tokens without pad len
+    # be need by the mask matrix
     batch_seq_len_: int = None
     expand_right_: int = True
 
-    batch_tokens_: List[List[int]] = None
-    tokens_len_without_pad_: List[int] = None
+    batch_tokens_: List[Tokens] = None
+    tokens_len_without_pad_: Tokens = None
 
     # just for inference
     inference_model_: bool = False

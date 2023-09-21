@@ -21,7 +21,7 @@ class TestDataSet(unittest.TestCase):
     def test_load_dataset(self):
         dataset = DataSet(config, MockTokenizer())
         input_data = dataset.get_batch_data()
-        self.assertEqual(len(input_data.prompts_), 4)
+        self.assertEqual(len(input_data.prompts_), 6)
         for p in input_data.prompts_:
             if "Input" in p:
                 self.assertEqual(
@@ -29,7 +29,7 @@ class TestDataSet(unittest.TestCase):
             else:
                 self.assertEqual(
                     "### Instruction:\nInstruction demo.\n\n### Output:\nOutput demo.\n", p)
-        self.assertEqual(len(input_data.lora_batch_data_config_), 2)
+        self.assertEqual(len(input_data.lora_batch_data_config_), 3)
         self.assertEqual(input_data.lora_batch_data_config_[
                          0].batch_start_idx_, 0)
         self.assertEqual(input_data.lora_batch_data_config_[
