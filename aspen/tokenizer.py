@@ -3,6 +3,8 @@ from aspen.modelargs import TokenizerArgs
 from sentencepiece import SentencePieceProcessor
 from typing import List
 
+Tokens = List[int]
+
 
 class Tokenizer:
     def __init__(self, model_path: str):
@@ -12,7 +14,7 @@ class Tokenizer:
         self.eos_id_ = self.token_model_.eos_id()
         self.pad_id_ = self.token_model_.pad_id()
 
-    def encode(self, data: str, bos: bool, eos: bool) -> List[int]:
+    def encode(self, data: str, bos: bool, eos: bool) -> Tokens:
         ret = self.token_model_.encode(data)
         if bos:
             ret = [self.bos_id_] + ret
@@ -20,7 +22,7 @@ class Tokenizer:
             ret = ret + [self.eos_id_]
         return ret
 
-    def decode(self, data: List[int]) -> str:
+    def decode(self, data: Tokens) -> str:
         return self.token_model_.decode(data)
 
     def get_args(self) -> TokenizerArgs:

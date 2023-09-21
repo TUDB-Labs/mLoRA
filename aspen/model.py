@@ -117,15 +117,17 @@ class Linear():
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
-    def init_lora_weight(self, adapter_name: str, r: int, dim: int, alpha: int, dropout: float):
+    def init_lora_weight(self, adapter_name: str, r: int, alpha: int, dropout: float):
         if adapter_name not in self.loras_:
             self.loras_[adapter_name] = Lora(adapter_name)
 
+        out_dim, in_dim = self.weight_.weight.shape
+
         self.loras_[adapter_name].set_parameter(r, alpha, dropout)
         self.loras_[adapter_name].lora_a_ = torch.zeros(
-            size=(r, dim), device=self.device_, requires_grad=True, dtype=torch.float32)
+            size=(r, in_dim), device=self.device_, requires_grad=True, dtype=torch.float32)
         self.loras_[adapter_name].lora_b_ = torch.zeros(
-            size=(dim, r), device=self.device_, requires_grad=True, dtype=torch.float32)
+            size=(out_dim, r), device=self.device_, requires_grad=True, dtype=torch.float32)
 
         torch.nn.init.kaiming_normal_(
             self.loras_[adapter_name].lora_a_, a=math.sqrt(5))
@@ -144,7 +146,7 @@ class Linear():
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
 
-            if adapter_name == "":
+            if adapter_name == "" or adapter_name not in self.loras_:
                 continue
 
             result[start_idx: end_idx] += self.loras_[
@@ -188,7 +190,7 @@ class Transformer():
         for idx, layer_name in enumerate(linear_layer_name_list):
             if layer_name in target and target[layer_name]:
                 linear_layer_list[idx].init_lora_weight(
-                    adapter_name, r, self.head_dim_ * self.n_heads_, lora_alpha, lora_dropout)
+                    adapter_name, r, lora_alpha, lora_dropout)
 
     # @torch.compile
     def forward(self,
@@ -329,9 +331,9 @@ class LlamaModel():
                     # delete the cache-kv
                     for layer_id, _ in enumerate(self.layers_):
                         input.cache_key_[layer_id] = torch.cat(
-                            (input.cache_key_[layer_id][:idx, ...], input.cache_key_[layer_id][idx+1:, ...]))
+                            (input.cache_key_[layer_id][:idx, ...], input.cache_key_[layer_id][idx + 1:, ...]))
                         input.cache_value_[layer_id] = torch.cat(
-                            (input.cache_value_[layer_id][:idx, ...], input.cache_value_[layer_id][idx+1:, ...]))
+                            (input.cache_value_[layer_id][:idx, ...], input.cache_value_[layer_id][idx + 1:, ...]))
                 # need early stop when the next_token is end
                 start_idx = end_idx
             return tokens

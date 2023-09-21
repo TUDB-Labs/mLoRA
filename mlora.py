@@ -26,7 +26,6 @@ import argparse
 from typing import Dict, Tuple, List
 
 # Command Line Arguments
-
 parser = argparse.ArgumentParser(description='ASPEN main program')
 parser.add_argument('--base_model', type=str,
                     help='Path to or name of base model')
@@ -75,8 +74,6 @@ if args.config is None:
 
 
 # Functions
-
-
 def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -124,8 +121,10 @@ def init_lora_model(config: Dict[str, any], llama_model: aspen.LlamaModel):
                                             lora_config["target_modules"])
 
 
-def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]):
-    optimizer_list: List[torch.optim.Optimizer] = []
+def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
+    # get optimizer per lora model
+    optimizer: Dict[str, torch.optim.Optimizer] = {}
+
     for lora_config in config["lora"]:
         adapter_name = lora_config["name"]
         optim_name = lora_config["optim"]
@@ -134,14 +133,15 @@ def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]
             momentum = 0
             if "momentum" in lora_config:
                 momentum = lora_config["momentum"]
-            optimizer_list.append(torch.optim.SGD(
+            optimizer[adapter_name] = (torch.optim.SGD(
                 train_paramas[adapter_name], lr=lr, momentum=momentum))
         elif optim_name == "adamw":
-            optimizer_list.append(torch.optim.AdamW(
+            optimizer[adapter_name] = (torch.optim.AdamW(
                 train_paramas[adapter_name], lr=lr))
         else:
             raise f"unkown optimizer {optim_name}"
-    return optimizer_list
+
+    return optimizer
 
 # to get test result and want early stop it
 
@@ -157,18 +157,20 @@ def test_data_need_early_stop(llama_model: aspen.LlamaModel,
     return True
 
 
-def train(config: Dict[str, any], llama_model: aspen.LlamaModel, data_set: aspen.DataSet):
-    train_paramas = llama_model.get_train_paramas(config)
+def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: aspen.Dispatcher):
+    # the train paramas per lora model
+    all_train_paramas: Dict[str, List[torch.Tensor]
+                            ] = llama_model.get_train_paramas(config)
+    all_optimizer: Dict[str, torch.optim.Optimizer] = get_optimizer(
+        config, all_train_paramas)
 
     loss_fn = torch.nn.CrossEntropyLoss()
-    optimizer_list = get_optimizer(config, train_paramas)
 
     step_cnt = 0
-    while not data_set.check_done():
-        for optim in optimizer_list:
-            optim.zero_grad()
-
-        input: aspen.MultiLoraBatchData = data_set.get_batch_data()
+    while not dispatcher.check_task_done():
+        input: aspen.MultiLoraBatchData = dispatcher.get_train_data()
+        for lora in input.lora_batch_data_config_:
+            all_optimizer[lora.adapter_name_].zero_grad()
 
         step_cnt += 1
 
@@ -193,21 +195,16 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, data_set: aspen
                 total_loss += loss
 
         total_loss.backward()
-        for optim in optimizer_list:
-            optim.step()
+        for lora in input.lora_batch_data_config_:
+            all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
             aspen.save_lora_model(llama_model, config, f"{step_cnt}")
-
-        if step_cnt % config["test_step"] == 0:
-            _ = test_data_need_early_stop(llama_model, data_set)
 
     aspen.save_lora_model(llama_model, config)
 
 
 # Main Function
-
-
 if __name__ == "__main__":
     setup_seed(args.seed)
 
@@ -219,6 +216,6 @@ if __name__ == "__main__":
 
     torch.cuda.empty_cache()
 
-    data_set = aspen.DataSet(config, tokenizer)
+    dispatcher = aspen.Dispatcher(config, tokenizer)
 
-    train(config, model, data_set)
+    train(config, model, dispatcher)
