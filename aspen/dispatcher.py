@@ -172,7 +172,7 @@ class TrainTask():
         start_idx = self.next_train_data_start_idx_
         assert start_idx < len(self.train_token_data_)
         # in this strategy must sort
-        return len(self.train_token_data_[start_idx])
+        return len(self.train_token_data_[start_idx].tokens_)
 
     # non reentry function
     def get_train_data(self) -> List[TrainData]:
@@ -226,6 +226,7 @@ class Dispatcher():
         self.train_lora_candidate_num_ = config["train_lora_candidate_num"]
         self.train_lora_simultaneously_num_ = config["train_lora_simultaneously_num"]
         self.expand_right_ = config["expand_right"]
+        self.strategy_ = config["train_strategy"]
 
         # create ready task
         for lora in config["lora"]:
@@ -252,7 +253,7 @@ class Dispatcher():
         min_need_pad_len = sys.maxsize
         win_start_idx = 0
         for sidx in range(0, len(task_len) - self.train_lora_simultaneously_num_ + 1):
-            win = task_len[sidx:sidx+self.train_lora_simultaneously_num_]
+            win = task_len[sidx:sidx + self.train_lora_simultaneously_num_]
             need_pad_len = 0
             for i in range(1, len(win)):
                 need_pad_len += (win[i][1] - win[0][0])
@@ -267,6 +268,8 @@ class Dispatcher():
             task_idx = result_task_len[0]
             ret_train_data[self.running_train_task_[
                 task_idx].adapter_name_] = self.running_train_task_[task_idx].get_train_data()
+
+        return ret_train_data
 
     def none_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
         ret_train_data = {}
