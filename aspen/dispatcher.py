@@ -248,7 +248,7 @@ class Dispatcher():
         for idx, task in enumerate(self.running_train_task_):
             task_len[idx] = task.get_train_deta_max_seq_len()
         # sort to get the seq most similar data
-        task_len = sorted(task_len.items(), key=lambda x: x[1])
+        task_len = sorted(task_len.items(), key=lambda x: x[1], reverse=True)
         # find the mini diff
         min_need_pad_len = sys.maxsize
         win_start_idx = 0
@@ -256,7 +256,8 @@ class Dispatcher():
             win = task_len[sidx:sidx + self.train_lora_simultaneously_num_]
             need_pad_len = 0
             for i in range(1, len(win)):
-                need_pad_len += (win[i][1] - win[0][0])
+                # aligin to the max seq len
+                need_pad_len += abs(win[i][1] - win[0][1])
             if need_pad_len < min_need_pad_len:
                 min_need_pad_len = need_pad_len
                 win_start_idx = sidx
