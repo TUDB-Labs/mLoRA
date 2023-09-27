@@ -2,6 +2,7 @@ from aspen import Tokenizer
 from aspen import MultiLoraBatchData
 from aspen import LoraBatchDataConfig
 
+import sys
 import math
 import json
 import random
@@ -166,6 +167,13 @@ class TrainTask():
     def reset_test_status(self):
         self.next_test_data_start_idx_ = 0
 
+    # reentry function
+    def get_train_deta_max_seq_len(self) -> int:
+        start_idx = self.next_train_data_start_idx_
+        assert start_idx < len(self.train_token_data_)
+        # in this strategy must sort
+        return len(self.train_token_data_[start_idx])
+
     # non reentry function
     def get_train_data(self) -> List[TrainData]:
         start_idx = self.next_train_data_start_idx_
@@ -195,9 +203,13 @@ class Dispatcher():
     running_train_task_: List[TrainTask] = None
     done_train_task_: List[TrainTask] = None
 
-    # the number of max training lora model
-    # len(running_train_task) <= train_lora_num
-    train_lora_num_: int = 0
+    # the number of max candidate training lora model
+    # can chose train data from this dataset
+    train_lora_candidate_num_: int = 0
+    # the number of simultaneously train lora model
+    train_lora_simultaneously_num_: int = 0
+
+    strategy_: str = ""
 
     expand_right_: bool = True
 
@@ -211,7 +223,8 @@ class Dispatcher():
         self.running_train_task_ = []
         self.done_train_task_ = []
 
-        self.train_lora_num_ = config["train_lora_num"]
+        self.train_lora_candidate_num_ = config["train_lora_candidate_num"]
+        self.train_lora_simultaneously_num_ = config["train_lora_simultaneously_num"]
         self.expand_right_ = config["expand_right"]
 
         # create ready task
@@ -228,6 +241,43 @@ class Dispatcher():
                           train_cutoff_len=config["cutoff_len"],
                           group_by_length=config["group_by_length"])
             )
+
+    def optim_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
+        task_len = {}
+        for idx, task in enumerate(self.running_train_task_):
+            task_len[idx] = task.get_train_deta_max_seq_len()
+        # sort to get the seq most similar data
+        task_len = sorted(task_len.items(), key=lambda x: x[1])
+        # find the mini diff
+        min_need_pad_len = sys.maxsize
+        win_start_idx = 0
+        for sidx in range(0, len(task_len) - self.train_lora_simultaneously_num_ + 1):
+            win = task_len[sidx:sidx+self.train_lora_simultaneously_num_]
+            need_pad_len = 0
+            for i in range(1, len(win)):
+                need_pad_len += (win[i][1] - win[0][0])
+            if need_pad_len < min_need_pad_len:
+                min_need_pad_len = need_pad_len
+                win_start_idx = sidx
+        # the result is win_start_idx
+        result_win = task_len[win_start_idx:win_start_idx +
+                              self.train_lora_simultaneously_num_]
+        ret_train_data = {}
+        for result_task_len in result_win:
+            task_idx = result_task_len[0]
+            ret_train_data[self.running_train_task_[
+                task_idx].adapter_name_] = self.running_train_task_[task_idx].get_train_data()
+
+    def none_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
+        ret_train_data = {}
+        cnt = 0
+        for task in self.running_train_task_:
+            assert not task.is_train_done()
+            if cnt >= self.train_lora_simultaneously_num_:
+                break
+            ret_train_data[task.adapter_name_] = task.get_train_data()
+            cnt += 1
+        return ret_train_data
 
     def check_task_done(self) -> bool:
         if len(self.ready_train_task_) == 0 and len(self.running_train_task_) == 0:
@@ -246,11 +296,12 @@ class Dispatcher():
 
     # ready task -> running task
     def __dispatch_task_in(self):
-        assert len(self.running_train_task_) <= self.train_lora_num_
-        if len(self.running_train_task_) == self.train_lora_num_:
+        assert len(
+            self.running_train_task_) <= self.train_lora_candidate_num_
+        if len(self.running_train_task_) == self.train_lora_candidate_num_:
             return
         # chose task into running
-        while len(self.running_train_task_) < self.train_lora_num_ and len(self.ready_train_task_) > 0:
+        while len(self.running_train_task_) < self.train_lora_candidate_num_ and len(self.ready_train_task_) > 0:
             # TODO to dispatch task
             task = self.ready_train_task_.pop(0)
             # to lazy load data
@@ -273,10 +324,12 @@ class Dispatcher():
 
         # get task train data
         all_train_data: Dict[str, List[TrainData]] = {}
-        for task in self.running_train_task_:
-            assert not task.is_train_done()
-            train_data: List[TrainData] = task.get_train_data()
-            all_train_data[task.adapter_name_] = train_data
+        if self.strategy_ == "none":
+            all_train_data = self.none_dispatch_strategy()
+        elif self.strategy_ == "optim":
+            all_train_data = self.optim_dispatch_strategy()
+        else:
+            raise "unkown strategy"
 
         batch_seq_len: int = -1
         # to align batch token data
