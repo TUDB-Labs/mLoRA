@@ -134,25 +134,64 @@ class Linear():
         self.enable_lora_ = True
 
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
-        # data shape is: batch_size * max_seq_len * dim
-        # result = data @ self.weight_.transpose(0, 1)
-        result = self.weight_.forward(data)
+        return LinearFunction.apply(data, self.weight_, self.loras_, input_args)
 
-        if not self.enable_lora_:
+
+class LinearFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, data, weight, loras, input_args):
+        ctx.save_for_backward(data)  # Assuming data is a Tensor
+        ctx.weight = weight  # Save non-tensor object directly in ctx
+        ctx.loras = loras  # Save non-tensor object directly in ctx
+        ctx.input_args = input_args  # Save non-tensor object directly in ctx
+        
+        # data shape is: batch_size * max_seq_len * dim
+        result = weight.forward(data)
+        
+        if not any(loras.values()):
             return result
 
+        streams = []
+        results = []
         for lora_config in input_args.lora_batch_data_config_:
             adapter_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
 
-            if adapter_name == "" or adapter_name not in self.loras_:
+            if adapter_name == "" or adapter_name not in loras:
                 continue
+            
+            stream = torch.cuda.Stream()
+            streams.append(stream)
+            with torch.cuda.stream(stream):
+                partial_result = loras[adapter_name].forward(data[start_idx:end_idx])
+                results.append((start_idx, end_idx, partial_result))
 
-            result[start_idx: end_idx] += self.loras_[
-                adapter_name].forward(data[start_idx:end_idx])
+        # Synchronize all streams
+        torch.cuda.synchronize()
 
+        # Accumulate the results
+        for start_idx, end_idx, partial_result in results:
+            result[start_idx:end_idx] += partial_result
+        
         return result
+    
+    @staticmethod
+    def backward(ctx, grad_output):
+        data, = ctx.saved_tensors  # Retrieve saved tensor
+        weight = ctx.weight  # Retrieve non-tensor object from ctx
+        
+        grad_data = grad_weight = None
+
+        if ctx.needs_input_grad[0]:
+            grad_data = grad_output @ weight.weight  # 获取 Linear 层的权重张量
+        
+        if ctx.needs_input_grad[1]:
+            grad_weight = data.T @ grad_output
+        
+        # 如果 loras 和 input_args 不需要梯度，可以返回 None。
+        return grad_data, grad_weight, None, None
+
 
 
 class Transformer():
