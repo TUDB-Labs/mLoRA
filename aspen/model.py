@@ -197,19 +197,19 @@ class LinearFunction(torch.autograd.Function):
             lora = loras[adapter_name]
             partial_grad_output = grad_output[start_idx:end_idx]  # 取出这部分的梯度
             partial_data = data[start_idx:end_idx]  # 取出这部分的数据
-            print("partial_data.shape: ", partial_data.shape)
-            print("partial_grad_output.shape: ", partial_grad_output.shape)
-            print("lora.lora_b_.shape: ", lora.lora_b_.shape)
-            print("lora.lora_a_.shape: ", lora.lora_a_.shape)
+            # print("partial_data.shape: ", partial_data.shape)
+            # print("partial_grad_output.shape: ", partial_grad_output.shape)
+            # print("lora.lora_b_.shape: ", lora.lora_b_.shape)
+            # print("lora.lora_a_.shape: ", lora.lora_a_.shape)
             with torch.cuda.stream(torch.cuda.Stream()):
                 grad_lora_b = (partial_data @ lora.lora_a_.transpose(0, 1)).transpose(-2,-1) @ partial_grad_output
-                print("grad_lora_b.shape", grad_lora_b.shape)
+                # print("grad_lora_b.shape", grad_lora_b.shape)
                 grad_data_ = partial_grad_output @ lora.lora_b_
-                print("grad_data_.shape", grad_data_.shape)
+                # print("grad_data_.shape", grad_data_.shape)
                 grad_lora_a = partial_data.transpose(-2,-1) @ grad_data_
-                print("grad_lora_a.shape", grad_lora_a.shape)
+                # print("grad_lora_a.shape", grad_lora_a.shape)
                 grad_data_ = grad_data_ @ lora.lora_a_
-                print("grad_data_.shape", grad_data_.shape)
+                # print("grad_data_.shape", grad_data_.shape)
                 lora.lora_a_ +=  torch.mean(grad_lora_a.transpose(-2, -1), dim=0)
                 lora.lora_b_ +=  torch.mean(grad_lora_b.transpose(-2, -1), dim=0)   
         torch.cuda.synchronize()
