@@ -173,25 +173,48 @@ class LinearFunction(torch.autograd.Function):
         # Accumulate the results
         for start_idx, end_idx, partial_result in results:
             result[start_idx:end_idx] += partial_result
-        
         return result
     
     @staticmethod
     def backward(ctx, grad_output):
-        data, = ctx.saved_tensors  # Retrieve saved tensor
-        weight = ctx.weight  # Retrieve non-tensor object from ctx
-        
-        grad_data = grad_weight = None
+        data, = ctx.saved_tensors
+        weight = ctx.weight
+        loras = ctx.loras
+        input_args = ctx.input_args
+    
 
         if ctx.needs_input_grad[0]:
-            grad_data = grad_output @ weight.weight  # 获取 Linear 层的权重张量
+            grad_data = grad_output @ weight.weight  # 计算data的梯度, 注意可能需要调整权重的形状来匹配grad_output
         
-        if ctx.needs_input_grad[1]:
-            grad_weight = data.T @ grad_output
+        for lora_config in input_args.lora_batch_data_config_:
+            adapter_name = lora_config.adapter_name_
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
+            
+            if adapter_name == "" or adapter_name not in loras:
+                continue
+            
+            lora = loras[adapter_name]
+            partial_grad_output = grad_output[start_idx:end_idx]  # 取出这部分的梯度
+            partial_data = data[start_idx:end_idx]  # 取出这部分的数据
+            print("partial_data.shape: ", partial_data.shape)
+            print("partial_grad_output.shape: ", partial_grad_output.shape)
+            print("lora.lora_b_.shape: ", lora.lora_b_.shape)
+            print("lora.lora_a_.shape: ", lora.lora_a_.shape)
+            with torch.cuda.stream(torch.cuda.Stream()):
+                grad_lora_b = (partial_data @ lora.lora_a_.transpose(0, 1)).transpose(-2,-1) @ partial_grad_output
+                print("grad_lora_b.shape", grad_lora_b.shape)
+                grad_data_ = partial_grad_output @ lora.lora_b_
+                print("grad_data_.shape", grad_data_.shape)
+                grad_lora_a = partial_data.transpose(-2,-1) @ grad_data_
+                print("grad_lora_a.shape", grad_lora_a.shape)
+                grad_data_ = grad_data_ @ lora.lora_a_
+                print("grad_data_.shape", grad_data_.shape)
+                lora.lora_a_ +=  torch.mean(grad_lora_a.transpose(-2, -1), dim=0)
+                lora.lora_b_ +=  torch.mean(grad_lora_b.transpose(-2, -1), dim=0)   
+        torch.cuda.synchronize()
         
-        # 如果 loras 和 input_args 不需要梯度，可以返回 None。
-        return grad_data, grad_weight, None, None
-
+        return None, None, None, None
 
 
 class Transformer():
