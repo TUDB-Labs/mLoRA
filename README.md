@@ -17,6 +17,8 @@ Support
 
 ## Overview
 
+<img src="./assets/ASPEN-LoRA.png" width="50%">
+
 ### Disadvantages of LORA-based Approaches:
 - Memory Consumption: Some Lora techniques might be efficient, but the introduction of low-rank approximations can sometimes heighten memory usage, particularly if one has to store both original and approximated parameters.
 
