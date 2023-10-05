@@ -7,17 +7,8 @@
 
 This repository provides tools for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently. It provides the framework to support multiple LoRA/qLoRA models fine tunning at the same time. By reusing the shared frozen-based model, we provide the framework to reduce GPU Memory usage for multiple fine-tuning models.  
 
-## Table of Contents
-
-- [Updates](#updates)
-- [Overview](#overview)
-- [Getting Started](#Quickstart)
-- [Installation](#Installation)
-- [Contributing](#Contributing)
-- [Copyright](#Copyright)
-
 ## Updates
-Support 
+- Beta version: Support multiple LLaMA fine-tuning via LORA in one GPU 
 
 ## Overview
 
@@ -94,7 +85,7 @@ Submit a pull request with a detailed explanation of your changes.
 
 ```bibtex
 @software{Ye_Multi-LoRA_2023,
-  author = {Ye, Zhengmao and Li, Dengchun and Lan, Tingfeng and Tang, Mingjie},
+  author = {Zhengmao Ye, Dengchen Li, Tingfen Lan, Yanbo Liang, Yexi Jiang, Jie Zuo, Hui Lu, Lei Duan, Mingjie Tang},
   month = oct,
   title = {{Multi-LoRA}},
   url = {https://github.com/TUDB-Labs/multi-lora-fine-tune},
