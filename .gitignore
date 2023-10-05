@@ -168,6 +168,7 @@ __pycache__/
 *.egg
 
 data/*
+!data/AlpacaDataCleaned/
 template/*
 !data/data_demo.json
 !template/test_data_demo.json
