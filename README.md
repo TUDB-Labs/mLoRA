@@ -21,7 +21,7 @@ Support
 
 ## Overview
 
-<center><img src="./assets/ASPEN-LoRA.png" width="50%"></center>
+<div align="center"><img src="./assets/ASPEN-LoRA.png" width="75%"></div>
 
 **ASPEN** is written in Python3 and compatible with HuggingFace-Transformers LLaMA Models.
 
