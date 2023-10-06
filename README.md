@@ -85,7 +85,7 @@ Submit a pull request with a detailed explanation of your changes.
 
 ```bibtex
 @software{Ye_Multi-LoRA_2023,
-  author = {Zhengmao Ye, Dengchen Li, Tingfen Lan, Yanbo Liang, Yexi Jiang, Jie Zuo, Hui Lu, Lei Duan, Mingjie Tang},
+  author = {Zhengmao Ye, Dengchun Li, Tingfeng Lan, Yanbo Liang, Yexi Jiang, Jie Zuo, Hui Lu, Lei Duan, Mingjie Tang},
   month = oct,
   title = {{Multi-LoRA}},
   url = {https://github.com/TUDB-Labs/multi-lora-fine-tune},
