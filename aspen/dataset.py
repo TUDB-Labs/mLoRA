@@ -81,7 +81,7 @@ class DataSet():
 
             self.lora_cnt_epochs_[lora_name] = 0
             self.lora_start_idx_[lora_name] = 0
-            self.lora_batch_size_[lora_name] = lora_config["batch_size"]
+            self.lora_batch_size_[lora_name] = lora_config["micro_batch_size"]
             self.lora_num_epochs_[lora_name] = lora_config["num_epochs"]
 
             self.lora_test_data_batch_size_[
