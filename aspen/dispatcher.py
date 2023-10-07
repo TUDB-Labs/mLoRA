@@ -43,6 +43,7 @@ class TrainTask():
     # train parameter
     total_epoch_num_: int = -1
     max_train_batch_size_: int = -1
+    max_train_micro_batch_size_: int = -1
     max_test_batch_size_: int = -1
 
     train_cutoff_len_: int = -1
@@ -61,6 +62,7 @@ class TrainTask():
                  prompt_template_path: str,
                  total_epoch_num: int,
                  max_train_batch_size: int,
+                 max_train_micro_batch_size: int,
                  max_test_batch_size: int,
                  train_cutoff_len: int = 256,
                  group_by_length: bool = True):
@@ -71,6 +73,7 @@ class TrainTask():
         self.prompt_template_path_ = prompt_template_path
         self.total_epoch_num_ = total_epoch_num
         self.max_train_batch_size_ = max_train_batch_size
+        self.max_train_micro_batch_size_ = max_train_micro_batch_size
         self.max_test_batch_size_ = max_test_batch_size
         self.train_cutoff_len_ = train_cutoff_len
         self.group_by_length_ = group_by_length
@@ -177,7 +180,7 @@ class TrainTask():
     # non reentry function
     def get_train_data(self) -> List[TrainData]:
         start_idx = self.next_train_data_start_idx_
-        end_idx = start_idx + self.max_train_batch_size_
+        end_idx = start_idx + self.max_train_micro_batch_size_
 
         ret_data = self.train_token_data_[start_idx:end_idx]
 
@@ -186,7 +189,7 @@ class TrainTask():
             f"    epoch: {self.epoch_cnt_}/{self.total_epoch_num_} \
             step in epoch: {start_idx}/{len(self.train_token_data_)}")
 
-        self.next_train_data_start_idx_ += self.max_train_batch_size_
+        self.next_train_data_start_idx_ += self.max_train_micro_batch_size_
         if self.next_train_data_start_idx_ >= len(self.train_token_data_):
             self.next_train_data_start_idx_ = 0
             self.epoch_cnt_ += 1
@@ -238,6 +241,7 @@ class Dispatcher():
                           prompt_template_path=lora["prompt"],
                           total_epoch_num=lora["num_epochs"],
                           max_train_batch_size=lora["batch_size"],
+                          max_train_micro_batch_size=lora["micro_batch_size"],
                           max_test_batch_size=lora["test_batch_size"],
                           train_cutoff_len=config["cutoff_len"],
                           group_by_length=config["group_by_length"])

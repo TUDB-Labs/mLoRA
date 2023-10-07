@@ -143,6 +143,18 @@ def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]
 
     return optimizer
 
+
+def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
+    ret_accumulation_step = {}
+    for lora_config in config["lora"]:
+        batch_size = lora_config["batch_size"]
+        micro_batch_size = lora_config["micro_batch_size"]
+        if batch_size < micro_batch_size or batch_size % micro_batch_size != 0:
+            raise f"error batch_size {batch_size} and micro batch size {micro_batch_size}"
+        ret_accumulation_step[lora_config["name"]
+                              ] = batch_size / micro_batch_size
+    return ret_accumulation_step
+
 # to get test result and want early stop it
 
 
@@ -163,6 +175,7 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: asp
                             ] = llama_model.get_train_paramas(config)
     all_optimizer: Dict[str, torch.optim.Optimizer] = get_optimizer(
         config, all_train_paramas)
+    accumulation_step: Dict[str, int] = get_accumulation_steps(config)
 
     loss_fn = torch.nn.CrossEntropyLoss()
 
@@ -186,7 +199,8 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: asp
                                                    :].contiguous().view(-1, llama_model.vocab_size_)
             loss_target = labels[start_idx:end_idx][...,
                                                     1:].contiguous().view(-1)
-            loss = loss_fn(loss_input, loss_target)
+            loss = loss_fn(loss_input, loss_target) / \
+                accumulation_step[lora_config.adapter_name_]
             print(
                 f"    adapter: {lora_config.adapter_name_} loss: {loss}")
             if total_loss is None:
@@ -196,7 +210,8 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: asp
 
         total_loss.backward()
         for lora in input.lora_batch_data_config_:
-            all_optimizer[lora.adapter_name_].step()
+            if step_cnt % accumulation_step[lora.adapter_name_] == 0:
+                all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
             aspen.save_lora_model(llama_model, config, f"{step_cnt}")
