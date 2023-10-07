@@ -5,18 +5,32 @@
 [![](https://img.shields.io/github/v/release/TUDB-Labs/multi-lora-fine-tune)](https://github.com/TUDB-Labs/multi-lora-fine-tune/releases/latest)
 [![](https://img.shields.io/github/languages/top/TUDB-Labs/multi-lora-fine-tune)](https://www.python.org/)  
 
-This repository provides tools for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently. It provides the framework to support multiple LoRA/qLoRA models fine tunning at the same time. By reusing the shared frozen-based model, we provide the framework to reduce GPU Memory usage for multiple fine-tuning models.  
+ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient  multiple LoRA/qLoRA methods. Key features of ASPEN include:
+
+- Efficient LoRA/qLoRA: ASPEN optimizes the fine-tuning process, significantly reducing GPU memory usage by leveraging a shared frozen-based model.
+
+- Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/qLoRA adapters.
+
+## Contents
+
+- [Updates](#updates)
+- [Overview](#overview)
+- [Getting Started](#Quickstart)
+- [Installation](#Installation)
+- [Contributing](#Contributing)
+- [Copyright](#Copyright)
 
 ## Updates
 - Beta version: Support multiple LLaMA fine-tuning via LORA in one GPU 
 
 ## Overview
 
-<center><img src="./assets/ASPEN-LoRA.png" width="50%"></center>
-
 **ASPEN** is written in Python3 and compatible with HuggingFace-Transformers LLaMA Models.
 
 This picture shows the basic principle of Multi-LoRA.
+
+<div align="center"><img src="./assets/ASPEN-LoRA.png" width="75%"></div>
+
 
 ### Disadvantages of LoRA-based Approaches:
 - Memory Consumption: Some Lora techniques might be efficient, but the introduction of low-rank approximations can sometimes heighten memory usage, particularly if one has to store both original and approximated parameters.
