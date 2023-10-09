@@ -5,7 +5,7 @@
 [![](https://img.shields.io/github/v/release/TUDB-Labs/multi-lora-fine-tune)](https://github.com/TUDB-Labs/multi-lora-fine-tune/releases/latest)
 [![](https://img.shields.io/github/languages/top/TUDB-Labs/multi-lora-fine-tune)](https://www.python.org/)  
 
-ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient  multiple LoRA/qLoRA methods. Key features of ASPEN include:
+ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient multiple LoRA/QLoRA methods. Key features of ASPEN include:
 
 - Efficient LoRA/qLoRA: ASPEN optimizes the fine-tuning process, significantly reducing GPU memory usage by leveraging a shared frozen-based model.
 
@@ -29,8 +29,9 @@ ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) u
 
 This picture shows the basic principle of Multi-LoRA.
 
-<div align="center"><img src="./assets/ASPEN-LoRA.png" width="75%"></div>
+<div align="center"><img src="./assets/ASPEN-LoRA.png" width="50%"></div>
 
+ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://developer.nvidia.com/cuda-toolkit) compatible GPUs.
 
 ### Disadvantages of LoRA-based Approaches:
 - Memory Consumption: Some Lora techniques might be efficient, but the introduction of low-rank approximations can sometimes heighten memory usage, particularly if one has to store both original and approximated parameters.
@@ -43,6 +44,12 @@ This picture shows the basic principle of Multi-LoRA.
 - GPU Memory Conservation: Leveraging the base model more can help in significant GPU memory conservation, an essential aspect for efficient operations.
 - Automatic Parameter Learning: Introducing automation in the learning process for hyperparameters during model fine-tuning can speed up the process and guarantee optimal model results.
 - Early Stopping Mechanism: Implementing this approach ensures no overfitting occurs, and resources are utilized effectively. It stops training once the model's improvement becomes negligible.
+
+### Experiment Results
+
+<div align="center"><img src="./assets/ASPEN-MemTest.png" width="50%"></div>
+
+This picture shows the peak memory usage of the existing method compared to our method on one NVIDIA RTX A6000 GPU. The existing method triggered an OOM error after 4 parallel tasks, while our method can handle twice that amount.
 
 ### Use Cases:
 - Domain-Specific Fine-Tuning: This involves adapting a single model with various parameters particularly for one domain.
@@ -61,7 +68,7 @@ pip install -r requirements.txt
 ```
 
 The `mlora.py` code is a starting point for finetuning on various datasets.
-Basic command for finetuning a baseline model on the Alpaca dataset:
+Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
 python mlora.py \
   --base_model decapoda-research/llama-7b-hf \
@@ -96,15 +103,15 @@ Create a new branch for your feature or fix.
 Submit a pull request with a detailed explanation of your changes.
 
 ## Citation
-
+Please cite the repo if you use the code in this repo.
 ```bibtex
-@software{Ye_Multi-LoRA_2023,
-  author = {Zhengmao Ye, Dengchun Li, Tingfeng Lan, Yanbo Liang, Yexi Jiang, Jie Zuo, Hui Lu, Lei Duan, Mingjie Tang},
-  month = oct,
-  title = {{Multi-LoRA}},
-  url = {https://github.com/TUDB-Labs/multi-lora-fine-tune},
-  version = {0.1},
-  year = {2023}
+@misc{Multi-LoRA,
+  author = {Zhengmao, Ye\textsuperscript{*} and Dengchun, Li\textsuperscript{*} and Tingfeng, Lan and Yanbo, Liang and Yexi, Jiang and Jie, Zuo and Hui, Lu and Lei, Duan and Mingjie, Tang},
+  title = {ASPEN: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization},
+  year = {2023},
+  publisher = {GitHub},
+  howpublished = {\url{https://github.com/TUDB-Labs/multi-lora-fine-tune}},
+  note={\textsuperscript{*}: these authors contributed equally to this work.}
 }
 ```
 
