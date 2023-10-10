@@ -51,6 +51,10 @@ ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://develop
 
 This picture shows the peak memory usage of the existing method compared to our method on one NVIDIA RTX A6000 GPU. The existing method triggered an OOM error after 4 parallel tasks, while our method can handle twice that amount.
 
+<div align="center"><img src="./assets/ASPEN-TimeCost.png" width="50%"></div>
+
+This image illustrates the execution of four fine-tuning tasks on a single GPU. It is evident that conventional methods can only accommodate the simultaneous execution of three tasks. Moreover, due to resource contention and other factors, the concurrent execution time for three tasks is longer than their sequential execution. In contrast, our approach demonstrates significantly faster execution times compared to both sequential and parallel execution.
+
 ### Use Cases:
 - Domain-Specific Fine-Tuning: This involves adapting a single model with various parameters particularly for one domain.
 - Cross-Domain Fine-Tuning: This method leverages the base model to fine-tune multiple models, each intended for a different domain.
