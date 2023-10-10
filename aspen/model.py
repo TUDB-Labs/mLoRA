@@ -408,7 +408,7 @@ class LlamaModel():
         llama_args.n_layers_ = llama_model.config.num_hidden_layers
         llama_args.norm_eps_ = llama_model.config.rms_norm_eps
         llama_args.vocab_size_ = llama_model.config.vocab_size
-        llama_args.max_seq_len_ = 4096 if hasattr(
+        llama_args.max_seq_len_ = 4096 if not hasattr(
             llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
         llama_args.pad_token_id_ = -1
         llama_args.device = device
