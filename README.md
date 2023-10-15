@@ -7,7 +7,7 @@
 
 ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient multiple LoRA/QLoRA methods. Key features of ASPEN include:
 
-- Efficient LoRA/qLoRA: ASPEN optimizes the fine-tuning process, significantly reducing GPU memory usage by leveraging a shared frozen-based model.
+- Efficient LoRA/QLoRA: ASPEN optimizes the fine-tuning process, significantly reducing GPU memory usage by leveraging a shared frozen-based model.
 
 - Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/qLoRA adapters.
 
@@ -47,13 +47,27 @@ ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://develop
 
 ### Experiment Results
 
-<div align="center"><img src="./assets/ASPEN-MemTest.png" width="50%"></div>
+Baseline Method: [Alpaca-LoRA](https://github.com/tloen/alpaca-lora)
 
-This picture shows the peak memory usage of the existing method compared to our method on one NVIDIA RTX A6000 GPU. The existing method triggered an OOM error after 4 parallel tasks, while our method can handle twice that amount.
+Experimental Setup: NVIDIA RTX A6000 with Intel Xeon Silver 4314 on Ubuntu 22.04.3
 
-<div align="center"><img src="./assets/ASPEN-TimeCost.png" width="50%"></div>
+#### Job Complete Time
 
-This image illustrates the execution of four fine-tuning tasks on a single GPU. It is evident that conventional methods can only accommodate the simultaneous execution of three tasks. Moreover, due to resource contention and other factors, the concurrent execution time for three tasks is longer than their sequential execution. In contrast, our approach demonstrates significantly faster execution times compared to both sequential and parallel execution.
+<div align="center"><img src="./assets/Exp-JCT.png" width="50%"></div>
+
+This image illustrates the execution of four fine-tuning tasks on a single GPU. It is evident that baseline method can only accommodate the simultaneous execution of two tasks. Moreover, due to resource contention and other factors, the concurrent execution time for two tasks is longer than their sequential execution. In contrast, our approach demonstrates significantly faster execution times compared to both sequential and parallel execution.
+
+#### Video Memory Usage
+
+<div align="center"><img src="./assets/Exp-Mem.png" width="75%"></div>
+
+This picture shows the peak memory usage of the existing method compared to our method on one a single GPU with batch size = 4, 6 and 8. The baseline method triggered an OOM error after 3 parallel tasks when batch size = 8, while our method can handle twice that amount.
+
+#### Batching Strategies
+
+<div align="center"><img src="./assets/Exp-Batch.png" width="100%"></div>
+
+`M1, M2, M3` represent three batch strategies of ASPEN: *Optimal-Fit, Trivial, and Fast-Fit*. `BASELINE` denotes the baseline method of sequential execution. The *Optimal-Fit* strategy represented by `M1` performs the best across all four metrics, while the other two strategies also outperform the baseline method other than training latency.
 
 ### Use Cases:
 - Domain-Specific Fine-Tuning: This involves adapting a single model with various parameters particularly for one domain.
