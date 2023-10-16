@@ -47,27 +47,39 @@ ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://develop
 
 ### Experiment Results
 
-Baseline Method: [Alpaca-LoRA](https://github.com/tloen/alpaca-lora)
+Environment: NVIDIA RTX A6000 with Intel Xeon Silver 4314 on Ubuntu 22.04.3
 
-Experimental Setup: NVIDIA RTX A6000 with Intel Xeon Silver 4314 on Ubuntu 22.04.3
+Baseline: We utilized the widely adopted [Alpaca-LoRA](https://github.com/tloen/alpaca-lora) as a foundation. On a single GPU, we independently ran multiple Alpaca-LoRA processes in parallel (marked as *Baseline@SYNC*) and sequentially (marked as *Baseline@SEQ*), forming two baseline methods for the experiments.
 
-#### Job Complete Time
+#### Training Latency
 
 <div align="center"><img src="./assets/Exp-JCT.png" width="50%"></div>
 
-This image illustrates the execution of four fine-tuning tasks on a single GPU. It is evident that baseline method can only accommodate the simultaneous execution of two tasks. Moreover, due to resource contention and other factors, the concurrent execution time for two tasks is longer than their sequential execution. In contrast, our approach demonstrates significantly faster execution times compared to both sequential and parallel execution.
+We conducted four identical fine-tuning jobs with same dataset and same hyper-parameters, incorporating two baselines and ASPEN. During the experimental process, we collected the completion times for each task in the baseline methods and calculated the time taken by the slowest task as the *Training Latency*. As shown in Figure, ASPEN exhibits lower *Training Latency* compared to both baseline methods. Specifically, ASPEN is 9.99% faster than *Baseline@SEQ* and 3.92% faster than *Baseline@SYNC*.
 
 #### Video Memory Usage
 
 <div align="center"><img src="./assets/Exp-Mem.png" width="75%"></div>
 
-This picture shows the peak memory usage of the existing method compared to our method on one a single GPU with batch size = 4, 6 and 8. The baseline method triggered an OOM error after 3 parallel tasks when batch size = 8, while our method can handle twice that amount.
+We conducted several fine-tuning jobs with same dataset and `batch_size = {4, 6, 8}`, incorporating  *Baseline@SYNC* and ASPEN. 
+
+*Baseline@SYNC* triggered OOM error after 3 parallel tasks when batch size = 8, while ASPEN can handle twice that amount.
 
 #### Batching Strategies
 
 <div align="center"><img src="./assets/Exp-Batch.png" width="100%"></div>
 
-`M1, M2, M3` represent three batch strategies of ASPEN: *Optimal-Fit, Trivial, and Fast-Fit*. `BASELINE` denotes the baseline method of sequential execution. The *Optimal-Fit* strategy represented by `M1` performs the best across all four metrics, while the other two strategies also outperform the baseline method other than training latency.
+We conducted four fine-tuning jobs with different dataset but same hyper-parameters, incorporating  *Baseline@SEQ* and ASPEN. 
+
+During the experimental process, we collected following metrics:
+ + *Training Latency* = Job completion time
+ + *Throughput* = The number of passed tokens in model forward process / training latency
+ + *Memory Usage* = Peak video memory usage
+ + *GPU Utilization* = Average GPU utilization
+
+All metrics are computed for each job. `M1, M2, M3` represent three batch strategies of ASPEN: *Optimal-Fit, Trivial, and Fast-Fit*. `BASELINE` denotes *Baseline@SEQ*.
+
+The *Optimal-Fit* strategy performs the best across all four metrics, while the other two strategies also outperform the baseline method other than training latency.
 
 ### Use Cases:
 - Domain-Specific Fine-Tuning: This involves adapting a single model with various parameters particularly for one domain.
