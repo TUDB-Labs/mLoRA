@@ -101,7 +101,7 @@ For further detailed usage information, please use `--help` option:
 python mlora.py --help
 ```
 ## Demo on Colab
-You can run finetune on Colab by following this example: `https://colab.research.google.com/drive/13ABrrcOv5iG1TCdKGZvxy9QN6YwPpOoI?usp=sharing`. Make sure to switch the runtime environment to GPU before running it.
+You can run finetune on Colab by following this example: [Google Colab Example](https://colab.research.google.com/drive/13ABrrcOv5iG1TCdKGZvxy9QN6YwPpOoI?usp=sharing). Make sure to switch the runtime environment to GPU before running it.
 ## Installation
 You can also install ASPEN into your environment:
 ```bash
