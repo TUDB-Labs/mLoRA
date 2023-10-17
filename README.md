@@ -103,7 +103,7 @@ Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://gi
 python mlora.py \
   --base_model decapoda-research/llama-7b-hf \
   --config ./config/alpaca.json \
-  --load_8bit true
+  --load_8bit
 ```
 
 You can check the template finetune configuration in [template](./template/) folder.
@@ -112,6 +112,8 @@ For further detailed usage information, please use `--help` option:
 ```bash
 python mlora.py --help
 ```
+## Demo on Colab
+You can run finetune on Colab by following this example: `https://colab.research.google.com/drive/13ABrrcOv5iG1TCdKGZvxy9QN6YwPpOoI?usp=sharing`. Make sure to switch the runtime environment to GPU before running it.
 ## Installation
 You can also install ASPEN into your environment:
 ```bash
