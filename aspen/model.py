@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import einops
+import bitsandbytes
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
@@ -106,12 +107,9 @@ class Linear():
             self.device_ = device
 
         if not isinstance(weight, torch.nn.Linear):
-            import bitsandbytes
             assert isinstance(weight,
                               bitsandbytes.nn.Linear8bitLt) or isinstance(weight,
                                                                           bitsandbytes.nn.Linear4bit), "error type."
-        else:
-            self.weight_ = weight
 
         self.weight_ = weight
         self.enable_lora_: bool = False
@@ -121,7 +119,11 @@ class Linear():
         if adapter_name not in self.loras_:
             self.loras_[adapter_name] = Lora(adapter_name)
 
-        out_dim, in_dim = self.weight_.weight.shape
+        if isinstance(self.weight_, bitsandbytes.nn.Linear4bit):
+            out_dim = self.weight_.out_features
+            in_dim = self.weight_.in_features
+        else:
+            out_dim, in_dim = self.weight_.weight.shape
 
         self.loras_[adapter_name].set_parameter(r, alpha, dropout)
         self.loras_[adapter_name].lora_a_ = torch.zeros(
