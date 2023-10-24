@@ -18,6 +18,7 @@ class LlamaModelArgs:
     dim_: int = 4096
     multiple_of_: int = 256
     n_heads_: int = 32
+    n_kv_heads_: int = 32
     n_layers_: int = 32
     norm_eps_: float = 1e-06
     vocab_size_: int = -1
