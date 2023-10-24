@@ -61,6 +61,13 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
     return (xq, xk)
 
 
+def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
+    batch_size, seq_len, n_kv_heads, head_dim = x.shape
+    if n_rep == 1:
+        return x
+    return x[:, :, :, None, :].expand(batch_size, seq_len, n_kv_heads, n_rep, head_dim).reshape(batch_size, seq_len, n_kv_heads * n_rep, head_dim)
+
+
 class RMSNorm():
     def __init__(self, weight: torch.Tensor, eps: float = 1e-06):
         self.norm_eps_ = eps
@@ -176,6 +183,8 @@ class Transformer():
         self.layer_id_ = layer_id
         self.norm_eps_ = args.norm_eps_
         self.n_heads_ = args.n_heads_
+        self.n_kv_heads_ = args.n_kv_heads_
+        self.n_rep = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
 
     def init_lora_layer_weight(self,
@@ -210,8 +219,8 @@ class Transformer():
 
         # conver shape to multi head
         xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_)
-        xk = xk.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_)
-        xv = xv.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_)
+        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_)
+        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_)
 
         # apply rotary embedding
         xq, xk = apply_rotary_emb(xq, xk, rope_angle)
@@ -228,6 +237,12 @@ class Transformer():
                     (input_args.cache_value_[self.layer_id_], xv), dim=1)
                 input_args.cache_key_[self.layer_id_] = xk
                 input_args.cache_value_[self.layer_id_] = xv
+
+        # for llama2 need to repeat the heads
+        # before dim: batch_size, seq_len, n_kv_head, head_dim
+        # after dim: batch_size, seq_len, n_head, head_dim
+        xq = repeat_kv(xq, self.n_rep)
+        xv = repeat_kv(xq, self.n_rep)
 
         if input_args.inference_model_:
             attention_score = xformers.ops.memory_efficient_attention(
@@ -407,6 +422,8 @@ class LlamaModel():
         llama_args = LlamaModelArgs()
         llama_args.dim_ = llama_model.config.hidden_size
         llama_args.n_heads_ = llama_model.config.num_attention_heads
+        llama_args.n_kv_heads_ = llama_args.n_heads_ if not hasattr(
+            llama_model.config, "num_key_value_heads") else llama_model.config.num_key_value_heads
         llama_args.n_layers_ = llama_model.config.num_hidden_layers
         llama_args.norm_eps_ = llama_model.config.rms_norm_eps
         llama_args.vocab_size_ = llama_model.config.vocab_size
