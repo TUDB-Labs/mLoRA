@@ -8,11 +8,13 @@ import random
 import datasets
 from typing import Dict, List, Tuple
 
+
 def load_dataset(data_path: str):
     if data_path.endswith(".json") or data_path.endswith(".jsonl"):
         return datasets.load_dataset("text", data_files={"train": data_path})
     else:
         return datasets.load_dataset(data_path)
+
 
 class DataSet():
     config_ = None
@@ -35,10 +37,10 @@ class DataSet():
 
     # read text data and template data
     def __parse_data_with_template(self,
-                                       data: List,
-                                       template_parameter_list: List[str],
-                                       template_prompt_no_input: str,
-                                       template_prompt: str) -> List[str]:
+                                   data: List,
+                                   template_parameter_list: List[str],
+                                   template_prompt_no_input: str,
+                                   template_prompt: str) -> List[str]:
         ret_text_data = []
         for raw_data in data:
             raw_data_input = {}

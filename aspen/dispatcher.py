@@ -10,7 +10,9 @@ import datasets
 from dataclasses import dataclass
 from typing import Dict, List
 
+
 Tokens = List[int]
+
 
 @dataclass
 class TrainData:
@@ -97,7 +99,7 @@ class TrainTask():
 
     # read from file and replace the template
     def __parse_data_with_template(self,
-                                       data: List) -> List[str]:
+                                   data: List) -> List[str]:
 
         ret_data_text: List[str] = []
         for raw_data in data:
