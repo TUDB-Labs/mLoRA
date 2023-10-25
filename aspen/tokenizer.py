@@ -1,14 +1,18 @@
 from aspen.modelargs import TokenizerArgs
 
 from sentencepiece import SentencePieceProcessor
+from transformers import LlamaTokenizer
 from typing import List
 
 Tokens = List[int]
 
 
 class Tokenizer:
-    def __init__(self, model_path: str):
-        self.token_model_ = SentencePieceProcessor(model_file=model_path)
+    def __init__(self, model_path: str, from_file: bool = False):
+        if from_file:
+            self.token_model_ = SentencePieceProcessor(model_file=model_path)
+        else:
+            self.token_model_ = LlamaTokenizer.from_pretrained(model_path).sp_model
         self.n_words_ = self.token_model_.vocab_size()
         self.bos_id_ = self.token_model_.bos_id()
         self.eos_id_ = self.token_model_.eos_id()
