@@ -8,7 +8,7 @@ import json
 import random
 import datasets
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 
 Tokens = List[int]
@@ -43,7 +43,7 @@ class TrainTask():
     prompt_template_path_: str = ""
 
     # the token list for train and test
-    val_set_size: int = -1
+    val_set_size: Tuple[int, float] = -1
     train_token_data_: List[TrainData] = None
     test_token_data_: List[TrainData] = None
 
@@ -67,7 +67,7 @@ class TrainTask():
                  tokenzer: Tokenizer,
                  adapter_name: str,
                  data_path: str,
-                 val_set_size: int,
+                 val_set_size: Tuple[int, float],
                  test_data_path: str,
                  prompt_template_path: str,
                  total_epoch_num: int,
@@ -158,9 +158,13 @@ class TrainTask():
         self.__load_template_data()
         data = load_dataset(self.data_path_)
         if self.test_data_path_ is None:
-            train_val = data["train"].train_test_split(test_size=self.val_set_size)
-            self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["train"]), True)
-            self.test_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["test"]), True)
+            if self.val_set_size is None or self.val_set_size <= 0:
+                self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["train"]), True)
+                self.test_token_data_ = []
+            else:
+                train_val = data["train"].train_test_split(test_size=self.val_set_size)
+                self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["train"]), True)
+                self.test_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["test"]), True)
         else:
             train_data = load_dataset(self.test_data_path_)
             self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(data["train"]), True)
