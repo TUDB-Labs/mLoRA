@@ -159,7 +159,7 @@ class TrainTask():
         data = load_dataset(self.data_path_)
         if self.test_data_path_ is None:
             if self.val_set_size is None or self.val_set_size <= 0:
-                self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["train"]), True)
+                self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(data["train"]), True)
                 self.test_token_data_ = []
             else:
                 train_val = data["train"].train_test_split(test_size=self.val_set_size)
