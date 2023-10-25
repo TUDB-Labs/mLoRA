@@ -8,7 +8,7 @@ import json
 import random
 import datasets
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Union
 
 
 Tokens = List[int]
@@ -43,7 +43,7 @@ class TrainTask():
     prompt_template_path_: str = ""
 
     # the token list for train and test
-    val_set_size: Tuple[int, float] = -1
+    val_set_size: Union[int, float] = -1
     train_token_data_: List[TrainData] = None
     test_token_data_: List[TrainData] = None
 
@@ -67,7 +67,7 @@ class TrainTask():
                  tokenzer: Tokenizer,
                  adapter_name: str,
                  data_path: str,
-                 val_set_size: Tuple[int, float],
+                 val_set_size: Union[int, float],
                  test_data_path: str,
                  prompt_template_path: str,
                  total_epoch_num: int,
