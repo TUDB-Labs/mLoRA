@@ -30,8 +30,7 @@
                 "w2_proj": false,
                 "w3_proj": false
             },
-            "data": "./data/AlpacaDataCleaned/alpaca_data.json",
-            "test_data": "./data/AlpacaDataCleaned/alpaca_data.json",
+            "data": "yahma/alpaca-cleaned",
             "prompt": "template/template_demo.json"
         },
         {
@@ -55,8 +54,7 @@
                 "w2_proj": false,
                 "w3_proj": false
             },
-            "data": "./data/AlpacaDataCleaned/alpaca_data_cleaned.json",
-            "test_data": "./data/AlpacaDataCleaned/alpaca_data_cleaned.json",
+            "data": "yahma/alpaca-cleaned",
             "prompt": "template/template_demo.json"
         }
     ]
