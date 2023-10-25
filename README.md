@@ -92,7 +92,6 @@ Firstly, you should clone this repository and install dependencies:
 # Clone Repository
 git clone https://github.com/TUDB-Labs/multi-lora-fine-tune
 cd multi-lora-fine-tune
-git submodule update --init
 # Install requirements
 pip install -r requirements.txt
 ```

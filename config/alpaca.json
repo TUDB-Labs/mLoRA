@@ -15,7 +15,7 @@
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 16,
-	    "micro_batch_size": 4,
+            "micro_batch_size": 4,
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 8,
@@ -30,8 +30,7 @@
                 "w2_proj": false,
                 "w3_proj": false
             },
-            "data": "./data/AlpacaDataCleaned/alpaca_data.json",
-            "test_data": "./data/AlpacaDataCleaned/alpaca_data.json",
+            "data": "yahma/alpaca-cleaned",
             "prompt": "template/template_demo.json"
         },
         {
@@ -40,7 +39,7 @@
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 16,
-	    "micro_batch_size": 4,
+            "micro_batch_size": 4,
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 8,
@@ -55,8 +54,7 @@
                 "w2_proj": false,
                 "w3_proj": false
             },
-            "data": "./data/AlpacaDataCleaned/alpaca_data_cleaned.json",
-            "test_data": "./data/AlpacaDataCleaned/alpaca_data_cleaned.json",
+            "data": "yahma/alpaca-cleaned",
             "prompt": "template/template_demo.json"
         }
     ]

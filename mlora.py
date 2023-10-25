@@ -81,9 +81,6 @@ def setup_seed(seed):
 
 
 def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
-    if not os.path.isdir(args.base_model):
-        raise "can't find the model file."
-
     model = aspen.LlamaModel.from_pretrained(
         path=args.base_model,
         device=args.device,

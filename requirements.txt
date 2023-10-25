@@ -10,3 +10,4 @@ nltk
 jieba
 rouge
 rouge_chinese
+datasets

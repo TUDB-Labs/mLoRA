@@ -6,6 +6,7 @@ import sys
 import math
 import json
 import random
+import datasets
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -26,6 +27,13 @@ class TemplateData:
     prompt_without_input_: str = ""
 
 
+def load_dataset(data_path: str):
+    if data_path.endswith(".json") or data_path.endswith(".jsonl"):
+        return datasets.load_dataset("json", data_files=data_path)
+    else:
+        return datasets.load_dataset(data_path)
+
+
 class TrainTask():
     tokenizer_: Tokenizer = None
 
@@ -35,6 +43,7 @@ class TrainTask():
     prompt_template_path_: str = ""
 
     # the token list for train and test
+    val_set_size: int = -1
     train_token_data_: List[TrainData] = None
     test_token_data_: List[TrainData] = None
 
@@ -58,6 +67,7 @@ class TrainTask():
                  tokenzer: Tokenizer,
                  adapter_name: str,
                  data_path: str,
+                 val_set_size: int,
                  test_data_path: str,
                  prompt_template_path: str,
                  total_epoch_num: int,
@@ -69,6 +79,7 @@ class TrainTask():
         self.tokenizer_ = tokenzer
         self.adapter_name_ = adapter_name
         self.data_path_ = data_path
+        self.val_set_size = val_set_size
         self.test_data_path_ = test_data_path
         self.prompt_template_path_ = prompt_template_path
         self.total_epoch_num_ = total_epoch_num
@@ -89,34 +100,33 @@ class TrainTask():
         )
 
     # read from file and replace the template
-    def __read_text_data_with_template(self,
-                                       data_path: str) -> List[str]:
+    def __parse_data_with_template(self,
+                                   data: List) -> List[str]:
 
         ret_data_text: List[str] = []
-        with open(data_path, "r", encoding="utf8") as fp:
-            for raw_data in json.load(fp):
-                raw_data_obj = {}
+        for raw_data in data:
+            raw_data_obj = {}
 
-                check_without_input_flag = False
-                for para in self.template_data_.parameter_:
-                    if para not in raw_data:
-                        check_without_input_flag = True
-                        continue
-                    raw_data_obj[para] = raw_data[para]
+            check_without_input_flag = False
+            for para in self.template_data_.parameter_:
+                if para not in raw_data or raw_data[para] is None:
+                    check_without_input_flag = True
+                    continue
+                raw_data_obj[para] = raw_data[para]
 
-                text_data: str = ""
-                if check_without_input_flag:
-                    text_data = self.template_data_.prompt_without_input_
-                else:
-                    text_data = self.template_data_.prompt_
+            text_data: str = ""
+            if check_without_input_flag:
+                text_data = self.template_data_.prompt_without_input_
+            else:
+                text_data = self.template_data_.prompt_
 
-                for para in self.template_data_.parameter_:
-                    if para not in raw_data_obj:
-                        continue
-                    text_data = text_data.replace(
-                        "{" + para + "}", raw_data[para])
+            for para in self.template_data_.parameter_:
+                if para not in raw_data_obj:
+                    continue
+                text_data = text_data.replace(
+                    "{" + para + "}", raw_data[para])
 
-                ret_data_text.append(text_data)
+            ret_data_text.append(text_data)
 
         return ret_data_text
 
@@ -144,18 +154,17 @@ class TrainTask():
 
         return ret
 
-    def __load_train_data(self):
-        train_data = self.__read_text_data_with_template(self.data_path_)
-        self.train_token_data_ = self.__encode_prompt(train_data, True)
-
-    def __load_test_data(self):
-        test_data = self.__read_text_data_with_template(self.test_data_path_)
-        self.test_token_data_ = self.__encode_prompt(test_data, False)
-
     def load_data(self):
         self.__load_template_data()
-        self.__load_train_data()
-        self.__load_test_data()
+        data = load_dataset(self.data_path_)
+        if self.test_data_path_ is None:
+            train_val = data["train"].train_test_split(test_size=self.val_set_size)
+            self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["train"]), True)
+            self.test_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["test"]), True)
+        else:
+            train_data = load_dataset(self.test_data_path_)
+            self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(data["train"]), True)
+            self.test_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_data["train"]), True)
 
     def is_train_done(self):
         if self.epoch_cnt_ <= self.total_epoch_num_:
@@ -237,7 +246,8 @@ class Dispatcher():
                 TrainTask(tokenzer=self.tokenizer_,
                           adapter_name=lora["name"],
                           data_path=lora["data"],
-                          test_data_path=lora["test_data"],
+                          val_set_size=lora.get("val_set_size", -1),
+                          test_data_path=lora.get("test_data", None),
                           prompt_template_path=lora["prompt"],
                           total_epoch_num=lora["num_epochs"],
                           max_train_batch_size=lora["batch_size"],

@@ -5,7 +5,15 @@ import sys
 import math
 import json
 import random
+import datasets
 from typing import Dict, List, Tuple
+
+
+def load_dataset(data_path: str):
+    if data_path.endswith(".json") or data_path.endswith(".jsonl"):
+        return datasets.load_dataset("json", data_files=data_path)
+    else:
+        return datasets.load_dataset(data_path)
 
 
 class DataSet():
@@ -28,36 +36,34 @@ class DataSet():
     lora_test_data_start_index_: Dict[str, int] = {}
 
     # read text data and template data
-    def __read_text_data_with_template(self,
-                                       data_path: str,
-                                       template_parameter_list: List[str],
-                                       template_prompt_no_input: str,
-                                       template_prompt: str) -> List[str]:
+    def __parse_data_with_template(self,
+                                   data: List,
+                                   template_parameter_list: List[str],
+                                   template_prompt_no_input: str,
+                                   template_prompt: str) -> List[str]:
         ret_text_data = []
-        with open(data_path, 'r', encoding='utf8') as fp:
-            for raw_data in json.load(fp):
-                raw_data_input = {}
+        for raw_data in data:
+            raw_data_input = {}
 
-                no_input_flag = False
-                for para in template_parameter_list:
-                    if para not in raw_data:
-                        no_input_flag = True
-                        continue
-                    raw_data_input[para] = raw_data[para]
+            no_input_flag = False
+            for para in template_parameter_list:
+                if para not in raw_data or raw_data[para] is None:
+                    no_input_flag = True
+                    continue
+                raw_data_input[para] = raw_data[para]
 
-                text_data: str = ""
-                if no_input_flag:
-                    text_data = template_prompt_no_input
-                else:
-                    text_data = template_prompt
+            text_data: str = ""
+            if no_input_flag:
+                text_data = template_prompt_no_input
+            else:
+                text_data = template_prompt
 
-                for para in template_parameter_list:
-                    if para not in raw_data_input:
-                        continue
-                    text_data = text_data.replace(
-                        "{" + para + "}", raw_data[para])
-                ret_text_data.append(text_data)
-
+            for para in template_parameter_list:
+                if para not in raw_data_input:
+                    continue
+                text_data = text_data.replace(
+                    "{" + para + "}", raw_data[para])
+            ret_text_data.append(text_data)
         return ret_text_data
 
     # get different train data and test data
@@ -70,7 +76,8 @@ class DataSet():
             lora_name = lora_config["name"]
             lora_template = lora_config["prompt"]
             data_path = lora_config["data"]
-            test_data_path = lora_config["test_data"]
+            test_data_path = lora_config.get("test_data", None)
+            val_set_size = lora_config.get("val_set_size", -1)
 
             with open(lora_template, 'r', encoding='utf8') as fp:
                 template_config = json.load(fp)
@@ -88,14 +95,28 @@ class DataSet():
                 lora_name] = lora_config["test_batch_size"]
             self.lora_test_data_start_index_[lora_name] = 0
 
-            train_text_data = self.__read_text_data_with_template(data_path,
+            data = load_dataset(data_path)
+            if test_data_path is None:
+                train_val = data["train"].train_test_split(test_size=val_set_size)
+                train_text_data = self.__parse_data_with_template(train_val["train"].
                                                                   template_parameter_list,
                                                                   template_prompt_no_input,
                                                                   template_prompt)
-            test_text_data = self.__read_text_data_with_template(test_data_path,
+                test_text_data = self.__parse_data_with_template(train_val["test"],
                                                                  template_parameter_list,
                                                                  template_prompt_no_input,
                                                                  template_prompt)
+            else:
+                train_data = load_dataset(test_data_path)
+                train_text_data = self.__parse_data_with_template(data["train"],
+                                                                  template_parameter_list,
+                                                                  template_prompt_no_input,
+                                                                  template_prompt)
+                test_text_data = self.__parse_data_with_template(train_data["train"],
+                                                                 template_parameter_list,
+                                                                 template_prompt_no_input,
+                                                                 template_prompt)
+
             if lora_name not in lora_train_text_data:
                 lora_train_text_data[lora_name] = []
                 lora_test_text_data[lora_name] = []
