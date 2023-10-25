@@ -43,7 +43,7 @@ class TrainTask():
     prompt_template_path_: str = ""
 
     # the token list for train and test
-    val_set_size: int = 2000
+    val_set_size: int = -1
     train_token_data_: List[TrainData] = None
     test_token_data_: List[TrainData] = None
 
@@ -67,6 +67,7 @@ class TrainTask():
                  tokenzer: Tokenizer,
                  adapter_name: str,
                  data_path: str,
+                 val_set_size: int,
                  test_data_path: str,
                  prompt_template_path: str,
                  total_epoch_num: int,
@@ -78,6 +79,7 @@ class TrainTask():
         self.tokenizer_ = tokenzer
         self.adapter_name_ = adapter_name
         self.data_path_ = data_path
+        self.val_set_size = val_set_size
         self.test_data_path_ = test_data_path
         self.prompt_template_path_ = prompt_template_path
         self.total_epoch_num_ = total_epoch_num
@@ -244,6 +246,7 @@ class Dispatcher():
                 TrainTask(tokenzer=self.tokenizer_,
                           adapter_name=lora["name"],
                           data_path=lora["data"],
+                          val_set_size=lora.get("val_set_size", -1),
                           test_data_path=lora.get("test_data", None),
                           prompt_template_path=lora["prompt"],
                           total_epoch_num=lora["num_epochs"],

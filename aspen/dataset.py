@@ -77,6 +77,7 @@ class DataSet():
             lora_template = lora_config["prompt"]
             data_path = lora_config["data"]
             test_data_path = lora_config.get("test_data", None)
+            val_set_size = lora_config.get("val_set_size", -1)
 
             with open(lora_template, 'r', encoding='utf8') as fp:
                 template_config = json.load(fp)
@@ -94,27 +95,27 @@ class DataSet():
                 lora_name] = lora_config["test_batch_size"]
             self.lora_test_data_start_index_[lora_name] = 0
 
-            with load_dataset(data_path) as data:
-                if test_data_path is None:
-                    train_val = data["train"].train_test_split(test_size=self.val_set_size)
-                    train_text_data = self.__parse_data_with_template(train_val["train"].
-                                                                      template_parameter_list,
-                                                                      template_prompt_no_input,
-                                                                      template_prompt)
-                    test_text_data = self.__parse_data_with_template(train_val["test"],
-                                                                     template_parameter_list,
-                                                                     template_prompt_no_input,
-                                                                     template_prompt)
-                else:
-                    train_data = load_dataset(test_data_path)
-                    train_text_data = self.__parse_data_with_template(data["train"],
-                                                                      template_parameter_list,
-                                                                      template_prompt_no_input,
-                                                                      template_prompt)
-                    test_text_data = self.__parse_data_with_template(train_data["train"],
-                                                                     template_parameter_list,
-                                                                     template_prompt_no_input,
-                                                                     template_prompt)
+            data = load_dataset(data_path)
+            if test_data_path is None:
+                train_val = data["train"].train_test_split(test_size=val_set_size)
+                train_text_data = self.__parse_data_with_template(train_val["train"].
+                                                                  template_parameter_list,
+                                                                  template_prompt_no_input,
+                                                                  template_prompt)
+                test_text_data = self.__parse_data_with_template(train_val["test"],
+                                                                 template_parameter_list,
+                                                                 template_prompt_no_input,
+                                                                 template_prompt)
+            else:
+                train_data = load_dataset(test_data_path)
+                train_text_data = self.__parse_data_with_template(data["train"],
+                                                                  template_parameter_list,
+                                                                  template_prompt_no_input,
+                                                                  template_prompt)
+                test_text_data = self.__parse_data_with_template(train_data["train"],
+                                                                 template_parameter_list,
+                                                                 template_prompt_no_input,
+                                                                 template_prompt)
 
             if lora_name not in lora_train_text_data:
                 lora_train_text_data[lora_name] = []
