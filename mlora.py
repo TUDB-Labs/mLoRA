@@ -89,10 +89,9 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.Llam
     )
 
     if args.tokenizer:
-        tokenizer = aspen.Tokenizer(args.tokenizer)
+        tokenizer = aspen.Tokenizer(args.tokenizer, from_file=True)
     else:
-        tokenizer = aspen.Tokenizer(
-            args.base_model + os.sep + 'tokenizer.model')
+        tokenizer = aspen.Tokenizer(args.base_model)
 
     if config["pad_token_id"] == -1:
         if config["expand_right"]:
