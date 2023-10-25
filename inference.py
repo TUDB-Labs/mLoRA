@@ -86,7 +86,7 @@ class Prompter(object):
         if not template_name:
             # Enforce the default here, so the constructor can be called with '' and will not break.
             template_name = "alpaca"
-        file_name = osp.join("templates", f"{template_name}.json")
+        file_name = osp.join("template", f"{template_name}.json")
         if not osp.exists(file_name):
             raise ValueError(f"Can't read {file_name}")
         with open(file_name) as fp:
@@ -105,12 +105,12 @@ class Prompter(object):
         # returns the full prompt from instruction and optional input
         # if a label (=response, =output) is provided, it's also appended.
         if input:
-            res = self.template["prompt_input"].format(
-                instruction=instruction, input=input
+            res = self.template["prompt"].format(
+                instruction=instruction, input=input, output=""
             )
         else:
             res = self.template["prompt_no_input"].format(
-                instruction=instruction
+                instruction=instruction, output=""
             )
         if label:
             res = f"{res}{label}"
@@ -119,16 +119,17 @@ class Prompter(object):
         return res
 
     def get_response(self, output: str) -> str:
-        return output.split(self.template["response_split"])[1].strip()
+        if self.template["response_split"] in output:
+            return output.split(self.template["response_split"])[1].strip()
+        else:
+            return ""
 
 
 def main(
     load_8bit: bool = False,
     base_model: str = "",
     lora_weights: str = "",
-    # The prompt template to use, will default to alpaca.
     prompt_template: str = "alpaca",
-    # Allows to listen on all interfaces by providing '0.
     server_name: str = "0.0.0.0",
     share_gradio: bool = False,
 ):
@@ -156,8 +157,8 @@ def main(
 
     # unwind broken decapoda-research config
     model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
-    model.config.bos_token_id = 1
-    model.config.eos_token_id = 2
+    model.config.bos_token_id = tokenizer.bos_token_id
+    model.config.eos_token_id = tokenizer.eos_token_id
 
     if not load_8bit:
         model.half()  # seems to fix bugs for some users.
@@ -179,7 +180,7 @@ def main(
     ):
         prompt = prompter.generate_prompt(instruction, input)
         inputs = tokenizer(prompt, return_tensors="pt")
-        input_ids = inputs["input_ids"].to("cuda:1")
+        input_ids = inputs["input_ids"].to("cuda:0")
         generation_config = GenerationConfig(
             temperature=temperature,
             top_p=top_p,
