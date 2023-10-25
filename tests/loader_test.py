@@ -21,7 +21,8 @@ class TestDataSet(unittest.TestCase):
     def test_load_dataset(self):
         dataset = DataSet(config, MockTokenizer())
         input_data = dataset.get_batch_data()
-        self.assertEqual(len(input_data.prompts_), 6)
+        print(input_data.prompts_)
+        self.assertEqual(len(input_data.prompts_), 12)
         for p in input_data.prompts_:
             if "Input" in p:
                 self.assertEqual(
