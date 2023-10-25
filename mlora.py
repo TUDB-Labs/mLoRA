@@ -155,17 +155,6 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 # to get test result and want early stop it
 
 
-def test_data_need_early_stop(llama_model: aspen.LlamaModel,
-                              data_set: aspen.DataSet) -> bool:
-    with torch.no_grad():
-        while not data_set.check_test_done():
-            input_data: aspen.MultiLoraBatchData = data_set.get_test_barch_data()
-            output = llama_model.forward(input_data)
-            output = output.tolist()
-            # to check the output
-    return True
-
-
 def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: aspen.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
