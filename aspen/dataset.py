@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple
 
 def load_dataset(data_path: str):
     if data_path.endswith(".json") or data_path.endswith(".jsonl"):
-        return datasets.load_dataset("text", data_files={"train": data_path})
+        return datasets.load_dataset("json", data_files=data_path)
     else:
         return datasets.load_dataset(data_path)
 
@@ -47,7 +47,7 @@ class DataSet():
 
             no_input_flag = False
             for para in template_parameter_list:
-                if para not in raw_data:
+                if para not in raw_data or raw_data[para] is None:
                     no_input_flag = True
                     continue
                 raw_data_input[para] = raw_data[para]
