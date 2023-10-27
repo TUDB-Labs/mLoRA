@@ -283,11 +283,11 @@ class LlamaModel(LLMModel):
         model = LlamaModel(llama_args)
 
         model.token_embedding_ = llama_model.model.embed_tokens.weight.to(
-            device=device)
+            device=device).requires_grad_(False)
         model.output_ = llama_model.lm_head.weight.to(
-            dtype=torch.float32, device=device)
+            dtype=torch.float32, device=device).requires_grad_(False)
         model.norm_ = RMSNorm(llama_model.model.norm.weight.to(
-            device=device), model.norm_eps_)
+            device=device).requires_grad_(False), model.norm_eps_)
 
         for idx, layer in enumerate(llama_model.model.layers):
             model.layers_[idx].wq_ = Linear(
@@ -302,9 +302,9 @@ class LlamaModel(LLMModel):
             model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=device)
             model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=device)
             model.layers_[idx].attention_norm_ = RMSNorm(
-                layer.input_layernorm.weight.to(device=device), model.norm_eps_)
+                layer.input_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
             model.layers_[idx].ffn_norm_ = RMSNorm(
-                layer.post_attention_layernorm.weight.to(device=device), model.norm_eps_)
+                layer.post_attention_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
 
         return model
 
