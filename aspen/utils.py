@@ -1,5 +1,5 @@
 from typing import Dict
-from aspen.model import LlamaModel
+from aspen.model_llama import LlamaModel
 from transformers import LlamaForCausalLM
 import os
 import json

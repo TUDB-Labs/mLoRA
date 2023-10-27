@@ -28,6 +28,8 @@ from typing import Dict, Tuple, List
 parser = argparse.ArgumentParser(description='ASPEN main program')
 parser.add_argument('--base_model', type=str,
                     help='Path to or name of base model')
+parser.add_argument('--model_type', type=str, default="llama",
+                    help='the model type, support: llama, chatglm')
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
 parser.add_argument('--load_8bit', action="store_true",
@@ -79,13 +81,23 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LlamaModel]:
-    model = aspen.LlamaModel.from_pretrained(
-        path=args.base_model,
-        device=args.device,
-        bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-        log_fn=log
-    )
+def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMModel]:
+    if args.model_type == "llama":
+        model = aspen.LlamaModel.from_pretrained(
+            path=args.base_model,
+            device=args.device,
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+            log_fn=log
+        )
+    elif args.model_type == "chatglm":
+        model = aspen.ChatGLMModel.from_pretrained(
+            path=args.base_model,
+            device=args.device,
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+            log_fn=log
+        )
+    else:
+        raise f"unkown model type {args.model_type}"
 
     if args.tokenizer:
         tokenizer = aspen.Tokenizer(args.tokenizer, from_file=True)
@@ -107,7 +119,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.Llam
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any], llama_model: aspen.LlamaModel):
+def init_lora_model(config: Dict[str, any], llama_model: aspen.LLMModel):
     for lora_config in config["lora"]:
         llama_model.init_random_lora_weight(lora_config["name"],
                                             lora_config["r"],
@@ -153,10 +165,10 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 # to get test result and want early stop it
 
 
-def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: aspen.Dispatcher):
+def train(config: Dict[str, any], llm_model: aspen.LLMModel, dispatcher: aspen.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
-                            ] = llama_model.get_train_paramas(config)
+                            ] = llm_model.get_train_paramas(config)
     all_optimizer: Dict[str, torch.optim.Optimizer] = get_optimizer(
         config, all_train_paramas)
     accumulation_step: Dict[str, int] = get_accumulation_steps(config)
@@ -171,7 +183,7 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: asp
 
         step_cnt += 1
 
-        output = llama_model.forward(input)
+        output = llm_model.forward(input)
         labels = torch.tensor(input.batch_tokens_,
                               dtype=torch.long).to(args.device)
 
@@ -180,7 +192,7 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: asp
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
             loss_input = output[start_idx:end_idx][..., :-1,
-                                                   :].contiguous().view(-1, llama_model.vocab_size_)
+                                                   :].contiguous().view(-1, llm_model.vocab_size_)
             loss_target = labels[start_idx:end_idx][...,
                                                     1:].contiguous().view(-1)
             loss = loss_fn(loss_input, loss_target) / \
@@ -198,9 +210,9 @@ def train(config: Dict[str, any], llama_model: aspen.LlamaModel, dispatcher: asp
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            aspen.save_lora_model(llama_model, config, f"{step_cnt}")
+            aspen.save_lora_model(llm_model, config, f"{step_cnt}")
 
-    aspen.save_lora_model(llama_model, config)
+    aspen.save_lora_model(llm_model, config)
 
 
 # Main Function
