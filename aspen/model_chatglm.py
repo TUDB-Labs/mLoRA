@@ -96,11 +96,11 @@ class Transformer:
         h4 = swiglu(h4)
         mlp_output = self.dense_4h_to_h_.forward(h4, input_args)
 
-        mlp_output = F.dropout(
-            mlp_output, p=self.hidden_dropout_, training=not input_args.inference_model_)
-        mlp_output = mlp_output + layernorm_input
+        output = F.dropout(mlp_output, p=self.hidden_dropout_,
+                           training=not input_args.inference_model_)
+        output = output + layernorm_input
 
-        return mlp_output
+        return output
 
 
 class ChatGLMModel(LLMModel):

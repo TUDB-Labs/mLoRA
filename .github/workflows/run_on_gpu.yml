@@ -15,6 +15,7 @@ jobs:
         cd /workspace
         rm -rf ./multi-lora-fine-tune
         git clone https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+        git checkout ${GITHUB_REF##*/}
     - name: test llama-7b
       run: |
         cd /workspace/multi-lora-fine-tune
@@ -27,6 +28,7 @@ jobs:
         cd /workspace
         rm -rf ./multi-lora-fine-tune
         git clone https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+        git checkout ${GITHUB_REF##*/}
     - name: test vicuna-7b-v1.1
       run: |
         cd /workspace/multi-lora-fine-tune
