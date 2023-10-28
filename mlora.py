@@ -244,8 +244,8 @@ def inference(config: Dict[str, any],
     max_len = 128
 
     while True:
-        input_raw = input("input without prompt: ")
-        if input_raw == "quit":
+        input_raw = input("INPUT WITHOUT PROMPT: ")
+        if input_raw == "QUIT":
             return
 
         tokens = tokenizer.encode(input_raw, True, False)
@@ -261,21 +261,30 @@ def inference(config: Dict[str, any],
             batch_seq_len_=max_len,
             inference_model_=True)
 
+        eos_flag: List[bool] = [False] * lora_adapter_num
         for pos in range(token_len, max_len):
             with torch.no_grad():
                 # batch_size, seq_len, voc_logs
                 outputs = llm_model.forward(input_data)
                 next_token = outputs[:, pos - 1, :]
                 next_token = torch.argmax(next_token, dim=-1)
-                print(next_token)
                 for idx in range(len(input_data.batch_tokens_)):
                     input_data.batch_tokens_[idx][pos] = next_token[idx].item()
-                    if next_token[idx].item() == tokenizer.eos_id_ or next_token[idx].item() == tokenizer.pad_id_:
-                        print(f"END {next_token[idx].item()}")
+                    # end of the sentence
+                    if next_token[idx].item() == tokenizer.eos_id_:
+                        eos_flag[idx] = True
                     input_data.tokens_len_without_pad_[
                         idx] = input_data.tokens_len_without_pad_[idx] + 1
+            hava_not_done_sentenct = False
+            for flag in eos_flag:
+                if not flag:
+                    hava_not_done_sentenct = True
+                    break
+            if not hava_not_done_sentenct:
+                break
 
-        for output in input_data.batch_tokens_:
+        for idx, output in enumerate(input_data.batch_tokens_):
+            print(f"#LORA{idx} OUTPUT IS:")
             print(tokenizer.decode(output))
 
 

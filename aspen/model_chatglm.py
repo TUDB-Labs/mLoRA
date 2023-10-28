@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import AutoModel
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 
 def swiglu(x: torch.Tensor) -> torch.Tensor:
@@ -77,18 +77,13 @@ class Transformer:
         # expand kv head to q head
         # the qkv is batch_size, seq_len, num_head, head_dim
         key_layer = repeat_kv(key_layer, self.n_rep_)
-        value_layer = repeat_kv(key_layer, self.n_rep_)
+        value_layer = repeat_kv(value_layer, self.n_rep_)
 
-        if input_args.inference_model_:
-            attention_score = xformers.ops.memory_efficient_attention(
-                query_layer, key_layer, value_layer, attn_bias=xformers.ops.fmha.attn_bias.LowerTriangularMask()
-            )
-        else:
-            attention_score = xformers.ops.memory_efficient_attention(
-                query_layer, key_layer, value_layer, mask)
+        attention_score = xformers.ops.memory_efficient_attention(
+            query_layer, key_layer, value_layer, mask)
         attention_score = attention_score.view(batch_size, seq_len, -1)
 
-        attention_output = self.dense_.forward(attention_score)
+        attention_output = self.dense_.forward(attention_score, input_args)
 
         layernorm_input = F.dropout(
             attention_output, p=self.hidden_dropout_, training=not input_args.inference_model_)
@@ -97,9 +92,9 @@ class Transformer:
         # MLP
         layernorm_output = self.post_layer_norm_.forward(layernorm_input)
 
-        h4 = self.dense_h_to_4h_.forward(layernorm_output)
+        h4 = self.dense_h_to_4h_.forward(layernorm_output, input_args)
         h4 = swiglu(h4)
-        mlp_output = self.dense_4h_to_h_.forward(h4)
+        mlp_output = self.dense_4h_to_h_.forward(h4, input_args)
 
         mlp_output = F.dropout(
             mlp_output, p=self.hidden_dropout_, training=not input_args.inference_model_)
@@ -129,69 +124,11 @@ class ChatGLMModel(LLMModel):
         self.pad_token_id_ = args.pad_token_id_
         self.n_heads_ = args.n_heads_
 
-    def forward_inference(self, tokens: torch.Tensor, mask: torch.Tensor, input_mask: torch.Tensor):
-        start_idx = 0
-        need_inference_row = list(range(0, tokens.shape[0]))
-
-        for end_idx in range(input.min_token_size_, input.max_cutoff_len_):
-            if len(need_inference_row) <= 0:
-                break
-            # [start_idx, end_idx)
-            row_index = torch.as_tensor(
-                need_inference_row, dtype=torch.long, device=self.device_)
-            col_index = torch.arange(
-                start_idx, end_idx, dtype=torch.long, device=self.device_)
-
-            input_tokens = torch.index_select(tokens, 0, row_index)
-            input_tokens = torch.index_select(input_tokens, 1, col_index)
-
-            input_data = F.embedding(input_tokens, self.token_embedding_,
-                                     padding_idx=self.pad_token_id_)
-            for layer in self.layers_:
-                input_data = layer.forward(
-                    input_data, mask, self.rope_angle_, input)
-
-            input_data = self.norm_.forward(input_data)
-            # only get the last be the predict token
-            input_data = input_data[:, -1,
-                                    :] @ self.output_.transpose(0, 1)
-            # the predict output is input_data
-            next_token = torch.argmax(input_data, dim=-1)
-            next_token = torch.where(
-                input_mask[need_inference_row, end_idx],
-                tokens[need_inference_row, end_idx], next_token)
-            # attach to result
-            tokens[need_inference_row, end_idx] = next_token
-            # delete the end sentence
-            delete_inference_idx = []
-            for idx, item in enumerate(next_token):
-                if item.item() == self.eos_token_id_:
-                    delete_inference_idx.append(idx)
-            for idx in reversed(delete_inference_idx):
-                need_inference_row.pop(idx)
-                # delete the cache-kv
-                for layer_id, _ in enumerate(self.layers_):
-                    input.cache_key_[layer_id] = torch.cat(
-                        (input.cache_key_[layer_id][:idx, ...], input.cache_key_[layer_id][idx + 1:, ...]))
-                    input.cache_value_[layer_id] = torch.cat(
-                        (input.cache_value_[layer_id][:idx, ...], input.cache_value_[layer_id][idx + 1:, ...]))
-            # need early stop when the next_token is end
-            start_idx = end_idx
-        return tokens
-
     def forward(self, input: MultiLoraBatchData):
         tokens = torch.tensor(input.batch_tokens_,
-                              dtype=torch.int64).to(self.dev)
+                              dtype=torch.int64).to(self.device_)
 
-        if input.inference_model_:
-            mask = None
-            input_mask = tokens != self.pad_token_id_
-        else:
-            mask = precompute_mask(input, self.n_heads_, self.device_)
-
-        # only for inference
-        if input.inference_model_:
-            return self.forward_inference(tokens, mask, input_mask)
+        mask = precompute_mask(input, self.n_heads_, self.device_)
 
         # only for train
         def create_forward_for_checkpoint(module: Transformer):
@@ -204,8 +141,11 @@ class ChatGLMModel(LLMModel):
                            padding_idx=self.pad_token_id_).requires_grad_(True)
 
         for layer in self.layers_:
-            data = CheckpointRecomputeFunction.apply(
-                create_forward_for_checkpoint(layer), data, mask, self.rope_angle_, input)
+            if input.inference_model_:
+                data = layer.forward(data, mask, self.rope_angle_, input)
+            else:
+                data = CheckpointRecomputeFunction.apply(
+                    create_forward_for_checkpoint(layer), data, mask, self.rope_angle_, input)
 
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
@@ -227,6 +167,7 @@ class ChatGLMModel(LLMModel):
             quantization_bit=bits,
             trust_remote_code=True)
 
+        # get config from chatglm config
         chatglm_args = LLMModelArgs()
         chatglm_args.device = device
         chatglm_args.norm_eps_ = chatglm_model.config.layernorm_epsilon
@@ -237,8 +178,6 @@ class ChatGLMModel(LLMModel):
         chatglm_args.hidden_dropout_ = chatglm_model.config.hidden_dropout
 
         model = ChatGLMModel(chatglm_args)
-
-        # get config from chatglm config
 
         # get the weight from transformer
         model.token_embedding_ = chatglm_model.transformer.embedding.word_embeddings.weight.to(
@@ -274,6 +213,14 @@ class ChatGLMModel(LLMModel):
                                 lora_alpha: int,
                                 lora_dropout: float,
                                 target: Dict[str, bool]):
+        pass
+
+    def init_lora_weight(self, adapter_name: str,
+                         r: int,
+                         lora_alpha: int,
+                         lora_dropout: float,
+                         target: Dict[str, bool],
+                         weight: Optional[Dict[str, torch.Tensor]]):
         pass
 
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
