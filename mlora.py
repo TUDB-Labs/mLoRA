@@ -29,7 +29,13 @@ parser = argparse.ArgumentParser(description='ASPEN main program')
 parser.add_argument('--base_model', type=str,
                     help='Path to or name of base model')
 parser.add_argument('--model_type', type=str, default="llama",
-                    help='the model type, support: llama, chatglm')
+                    help='The model type, support: llama, chatglm')
+parser.add_argument('--inference', action="store_true",
+                    help='The inference mode (just for test)')
+parser.add_argument('--load_lora', action="store_true",
+                    help="Load lora from file instead of init randomly")
+parser.add_argument('--disable_lora', action="store_true",
+                    help="Disable the lora modules")
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
 parser.add_argument('--load_8bit', action="store_true",
@@ -108,7 +114,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMM
         if config["expand_right"]:
             model.pad_token_id_ = tokenizer.eos_id_
         else:
-            model.pad_token_id_ = tokenizer.bos_id_
+            model.pad_token_id_ = tokenizer.pad_id_
     else:
         model.pad_token_id_ = config["pad_token_id"]
 
@@ -120,12 +126,22 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMM
 
 
 def init_lora_model(config: Dict[str, any], llama_model: aspen.LLMModel):
+    if args.disable_lora:
+        return
+
     for lora_config in config["lora"]:
-        llama_model.init_random_lora_weight(lora_config["name"],
-                                            lora_config["r"],
-                                            lora_config["alpha"],
-                                            lora_config["dropout"],
-                                            lora_config["target_modules"])
+        lora_weight = None
+        if args.load_lora:
+            adapter_file_path = lora_config["output"] + "/adapter_model.bin"
+            print(f"load {adapter_file_path}")
+            lora_weight = torch.load(adapter_file_path)
+
+        llama_model.init_lora_weight(lora_config["name"],
+                                     lora_config["r"],
+                                     lora_config["alpha"],
+                                     lora_config["dropout"],
+                                     lora_config["target_modules"],
+                                     lora_weight)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
@@ -162,9 +178,8 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
                               ] = batch_size / micro_batch_size
     return ret_accumulation_step
 
+
 # to get test result and want early stop it
-
-
 def train(config: Dict[str, any], llm_model: aspen.LLMModel, dispatcher: aspen.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
@@ -215,6 +230,55 @@ def train(config: Dict[str, any], llm_model: aspen.LLMModel, dispatcher: aspen.D
     aspen.save_lora_model(llm_model, config)
 
 
+def inference(config: Dict[str, any],
+              llm_model: aspen.LLMModel,
+              tokenizer: aspen.Tokenizer):
+    lora_adapter_num = len(config["lora"])
+    batch_data_config: List[aspen.LoraBatchDataConfig] = []
+
+    for idx, lora_config in enumerate(config["lora"]):
+        adapter_name = lora_config["name"]
+        batch_data_config.append(aspen.LoraBatchDataConfig(
+            adapter_name, idx, idx + 1))
+
+    max_len = 128
+
+    while True:
+        input_raw = input("input without prompt: ")
+        if input_raw == "quit":
+            return
+
+        tokens = tokenizer.encode(input_raw, True, False)
+        token_len = len(tokens)
+        while len(tokens) < max_len:
+            tokens.append(tokenizer.pad_id_)
+
+        input_data = aspen.MultiLoraBatchData(
+            prompts_=[input_raw] * lora_adapter_num,
+            lora_batch_data_config_=batch_data_config,
+            batch_tokens_=[tokens] * lora_adapter_num,
+            tokens_len_without_pad_=[token_len] * lora_adapter_num,
+            batch_seq_len_=max_len,
+            inference_model_=True)
+
+        for pos in range(token_len, max_len):
+            with torch.no_grad():
+                # batch_size, seq_len, voc_logs
+                outputs = llm_model.forward(input_data)
+                next_token = outputs[:, pos - 1, :]
+                next_token = torch.argmax(next_token, dim=-1)
+                print(next_token)
+                for idx in range(len(input_data.batch_tokens_)):
+                    input_data.batch_tokens_[idx][pos] = next_token[idx].item()
+                    if next_token[idx].item() == tokenizer.eos_id_ or next_token[idx].item() == tokenizer.pad_id_:
+                        print(f"END {next_token[idx].item()}")
+                    input_data.tokens_len_without_pad_[
+                        idx] = input_data.tokens_len_without_pad_[idx] + 1
+
+        for output in input_data.batch_tokens_:
+            print(tokenizer.decode(output))
+
+
 # Main Function
 if __name__ == "__main__":
     setup_seed(args.seed)
@@ -227,6 +291,8 @@ if __name__ == "__main__":
 
     torch.cuda.empty_cache()
 
-    dispatcher = aspen.Dispatcher(config, tokenizer)
-
-    train(config, model, dispatcher)
+    if args.inference:
+        inference(config, model, tokenizer)
+    else:
+        dispatcher = aspen.Dispatcher(config, tokenizer)
+        train(config, model, dispatcher)

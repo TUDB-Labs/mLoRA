@@ -1,4 +1,3 @@
-import torch
 from dataclasses import dataclass
 from typing import List
 
@@ -21,6 +20,7 @@ class LLMModelArgs:
     n_kv_heads_: int = 32
     n_layers_: int = 32
     norm_eps_: float = 1e-06
+    hidden_dropout_: float = 0.0
     vocab_size_: int = -1
     pad_token_id_: int = -1
     max_seq_len_: int = 2048
@@ -48,10 +48,4 @@ class MultiLoraBatchData:
     batch_tokens_: List[Tokens] = None
     tokens_len_without_pad_: Tokens = None
 
-    # just for inference
     inference_model_: bool = False
-    cache_key_: List[torch.Tensor] = None
-    cache_value_: List[torch.Tensor] = None
-    min_token_size_: int = -1
-    max_token_size_: int = -1
-    max_cutoff_len_: int = 4096
