@@ -159,16 +159,22 @@ class TrainTask():
         data = load_dataset(self.data_path_)
         if self.test_data_path_ is None:
             if self.val_set_size is None or self.val_set_size <= 0:
-                self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(data["train"]), True)
+                self.train_token_data_ = self.__encode_prompt(
+                    self.__parse_data_with_template(data["train"]), True)
                 self.test_token_data_ = []
             else:
-                train_val = data["train"].train_test_split(test_size=self.val_set_size)
-                self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["train"]), True)
-                self.test_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_val["test"]), True)
+                train_val = data["train"].train_test_split(
+                    test_size=self.val_set_size)
+                self.train_token_data_ = self.__encode_prompt(
+                    self.__parse_data_with_template(train_val["train"]), True)
+                self.test_token_data_ = self.__encode_prompt(
+                    self.__parse_data_with_template(train_val["test"]), True)
         else:
             train_data = load_dataset(self.test_data_path_)
-            self.train_token_data_ = self.__encode_prompt(self.__parse_data_with_template(data["train"]), True)
-            self.test_token_data_ = self.__encode_prompt(self.__parse_data_with_template(train_data["train"]), True)
+            self.train_token_data_ = self.__encode_prompt(
+                self.__parse_data_with_template(data["train"]), True)
+            self.test_token_data_ = self.__encode_prompt(
+                self.__parse_data_with_template(train_data["train"]), True)
 
     def is_train_done(self):
         if self.epoch_cnt_ <= self.total_epoch_num_:
@@ -393,5 +399,4 @@ class Dispatcher():
                                   batch_seq_len_=batch_seq_len,
                                   expand_right_=self.expand_right_,
                                   batch_tokens_=batch_tokens,
-                                  tokens_len_without_pad_=tokens_len_without_pad,
-                                  inference_model_=False)
+                                  tokens_len_without_pad_=tokens_len_without_pad)

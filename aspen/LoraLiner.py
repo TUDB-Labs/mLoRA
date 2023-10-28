@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 import bitsandbytes
 
-from typing import Dict
+from typing import Dict, Optional
 
 
 class Lora():
@@ -48,10 +48,13 @@ class Linear():
                                                                           bitsandbytes.nn.Linear4bit), "error type."
 
         self.weight_ = weight
+        self.weight_.to(device)
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
-    def init_lora_weight(self, adapter_name: str, r: int, alpha: int, dropout: float):
+    def init_lora_weight(self, adapter_name: str, r: int, alpha: int, dropout: float,
+                         lora_a: Optional[torch.Tensor] = None,
+                         lora_b: Optional[torch.Tensor] = None):
         if adapter_name not in self.loras_:
             self.loras_[adapter_name] = Lora(adapter_name)
 
@@ -62,13 +65,23 @@ class Linear():
             out_dim, in_dim = self.weight_.weight.shape
 
         self.loras_[adapter_name].set_parameter(r, alpha, dropout)
-        self.loras_[adapter_name].lora_a_ = torch.zeros(
-            size=(r, in_dim), device=self.device_, requires_grad=True, dtype=torch.float32)
-        self.loras_[adapter_name].lora_b_ = torch.zeros(
-            size=(out_dim, r), device=self.device_, requires_grad=True, dtype=torch.float32)
 
-        torch.nn.init.kaiming_normal_(
-            self.loras_[adapter_name].lora_a_, a=math.sqrt(5))
+        if lora_a is not None:
+            self.loras_[adapter_name].lora_a_ = lora_a.to(
+                device=self.device_).to(torch.float32).requires_grad_(True)
+        else:
+            self.loras_[adapter_name].lora_a_ = torch.zeros(
+                size=(r, in_dim), device=self.device_, requires_grad=True, dtype=torch.float32)
+            torch.nn.init.kaiming_normal_(
+                self.loras_[adapter_name].lora_a_, a=math.sqrt(5))
+
+        if lora_b is not None:
+            self.loras_[adapter_name].lora_b_ = lora_b.to(
+                device=self.device_).to(torch.float32).requires_grad_(True)
+        else:
+            self.loras_[adapter_name].lora_b_ = torch.zeros(
+                size=(out_dim, r), device=self.device_, requires_grad=True, dtype=torch.float32)
+
         self.enable_lora_ = True
 
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:

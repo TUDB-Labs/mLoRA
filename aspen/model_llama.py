@@ -10,7 +10,7 @@ import torch.utils.checkpoint
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 
 class Transformer():
@@ -32,7 +32,7 @@ class Transformer():
         self.norm_eps_ = args.norm_eps_
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
-        self.n_rep = self.n_heads_ // self.n_kv_heads_
+        self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
 
     def init_lora_layer_weight(self,
@@ -40,7 +40,8 @@ class Transformer():
                                r: int,
                                lora_alpha: int,
                                lora_dropout: float,
-                               target: Dict[str, bool]):
+                               target: Dict[str, bool],
+                               weight: Optional[Dict[str, torch.Tensor]]):
         linear_layer_list = [self.wk_, self.wq_, self.wv_,
                              self.wo_, self.w1_, self.w2_, self.w3_]
         linear_layer_name_list = [
@@ -48,8 +49,20 @@ class Transformer():
 
         for idx, layer_name in enumerate(linear_layer_name_list):
             if layer_name in target and target[layer_name]:
+                lora_a = None
+                lora_b = None
+                if weight is not None:
+                    lora_a_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
+                    lora_b_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
+                    if lora_a_name not in weight:
+                        raise f"can not found the layer {lora_a_name} in model"
+                    if lora_b_name not in weight:
+                        raise f"can not found the layer {lora_b_name} in model"
+                    lora_a = weight[lora_a_name]
+                    lora_b = weight[lora_b_name]
+
                 linear_layer_list[idx].init_lora_weight(
-                    adapter_name, r, lora_alpha, lora_dropout)
+                    adapter_name, r, lora_alpha, lora_dropout, lora_a, lora_b)
 
     # @torch.compile
     def forward(self,
@@ -73,32 +86,14 @@ class Transformer():
         # apply rotary embedding
         xq, xk = apply_rotary_emb(xq, xk, rope_angle)
 
-        # inference model use cache-kv
-        if input_args.inference_model_:
-            if len(input_args.cache_key_) <= self.layer_id_:
-                input_args.cache_key_.append(xk)
-                input_args.cache_value_.append(xv)
-            else:
-                xk = torch.cat(
-                    (input_args.cache_key_[self.layer_id_], xk), dim=1)
-                xv = torch.cat(
-                    (input_args.cache_value_[self.layer_id_], xv), dim=1)
-                input_args.cache_key_[self.layer_id_] = xk
-                input_args.cache_value_[self.layer_id_] = xv
-
         # for llama2 need to repeat the heads
         # before dim: batch_size, seq_len, n_kv_head, head_dim
         # after dim: batch_size, seq_len, n_head, head_dim
-        xq = repeat_kv(xq, self.n_rep)
-        xv = repeat_kv(xq, self.n_rep)
+        xk = repeat_kv(xk, self.n_rep_)
+        xv = repeat_kv(xv, self.n_rep_)
 
-        if input_args.inference_model_:
-            attention_score = xformers.ops.memory_efficient_attention(
-                xq, xk, xv, attn_bias=xformers.ops.fmha.attn_bias.LowerTriangularMask()
-            )
-        else:
-            attention_score = xformers.ops.memory_efficient_attention(
-                xq, xk, xv, mask)
+        attention_score = xformers.ops.memory_efficient_attention(
+            xq, xk, xv, mask)
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
         # get output attention score
@@ -141,70 +136,13 @@ class LlamaModel(LLMModel):
         # need to set
         self.eos_token_id_ = -1
 
-    # train model: output is probs
-    # inference model: output is tokens
+    # train model or inference model: output is probs
     def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int64).to(self.device_)
-        if input.inference_model_:
-            mask = None
-            input_mask = tokens != self.pad_token_id_
-        else:
-            mask = precompute_mask(input, self.n_heads_, self.device_)
-
-        # only for inference
-        if input.inference_model_:
-            start_idx = 0
-            need_inference_row = list(range(0, tokens.shape[0]))
-
-            for end_idx in range(input.min_token_size_, input.max_cutoff_len_):
-                if len(need_inference_row) <= 0:
-                    break
-                # [start_idx, end_idx)
-                row_index = torch.as_tensor(
-                    need_inference_row, dtype=torch.long, device=self.device_)
-                col_index = torch.arange(
-                    start_idx, end_idx, dtype=torch.long, device=self.device_)
-
-                input_tokens = torch.index_select(tokens, 0, row_index)
-                input_tokens = torch.index_select(input_tokens, 1, col_index)
-
-                input_data = F.embedding(input_tokens, self.token_embedding_,
-                                         padding_idx=self.pad_token_id_)
-                for layer in self.layers_:
-                    input_data = layer.forward(
-                        input_data, mask, self.rope_angle_, input)
-
-                input_data = self.norm_.forward(input_data)
-                # only get the last be the predict token
-                input_data = input_data[:, -1,
-                                        :] @ self.output_.transpose(0, 1)
-                # the predict output is input_data
-                next_token = torch.argmax(input_data, dim=-1)
-                next_token = torch.where(
-                    input_mask[need_inference_row, end_idx],
-                    tokens[need_inference_row, end_idx], next_token)
-                # attach to result
-                tokens[need_inference_row, end_idx] = next_token
-                # delete the end sentence
-                delete_inference_idx = []
-                for idx, item in enumerate(next_token):
-                    if item.item() == self.eos_token_id_:
-                        delete_inference_idx.append(idx)
-                for idx in reversed(delete_inference_idx):
-                    need_inference_row.pop(idx)
-                    # delete the cache-kv
-                    for layer_id, _ in enumerate(self.layers_):
-                        input.cache_key_[layer_id] = torch.cat(
-                            (input.cache_key_[layer_id][:idx, ...], input.cache_key_[layer_id][idx + 1:, ...]))
-                        input.cache_value_[layer_id] = torch.cat(
-                            (input.cache_value_[layer_id][:idx, ...], input.cache_value_[layer_id][idx + 1:, ...]))
-                # need early stop when the next_token is end
-                start_idx = end_idx
-            return tokens
 
         # only for train
-
+        mask = precompute_mask(input, self.n_heads_, self.device_)
         data = F.embedding(tokens, self.token_embedding_,
                            padding_idx=self.pad_token_id_).requires_grad_(True)
 
@@ -215,22 +153,26 @@ class LlamaModel(LLMModel):
 
         for layer in self.layers_:
             # use CheckpointOffloadFunction to use offload mode
-            data = CheckpointRecomputeFunction.apply(create_forward_for_checkpoint(
-                layer), data, mask, self.rope_angle_, input)
+            if input.inference_model_:
+                data = layer.forward(data, mask, self.rope_angle_, input)
+            else:
+                data = CheckpointRecomputeFunction.apply(create_forward_for_checkpoint(
+                    layer), data, mask, self.rope_angle_, input)
 
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
 
         return data
 
-    def init_random_lora_weight(self, adapter_name: str,
-                                r: int,
-                                lora_alpha: int,
-                                lora_dropout: float,
-                                target: Dict[str, bool]):
+    def init_lora_weight(self, adapter_name: str,
+                         r: int,
+                         lora_alpha: int,
+                         lora_dropout: float,
+                         target: Dict[str, bool],
+                         weight: Optional[Dict[str, torch.Tensor]]):
         for transformer_layer in self.layers_:
             transformer_layer.init_lora_layer_weight(
-                adapter_name, r, lora_alpha, lora_dropout, target)
+                adapter_name, r, lora_alpha, lora_dropout, target, weight)
 
     def from_pretrained(path: str,
                         device: str,

@@ -4,7 +4,7 @@ import torch
 import einops
 
 from abc import ABCMeta, abstractclassmethod
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Optional
 
 
 def precompute_mask(input: MultiLoraBatchData, n_head: int, device: str) -> torch.Tensor:
@@ -64,8 +64,19 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
     return (xq, xk)
 
 
+def apply_rotary_emb_to_one(data: torch.Tensor, angle: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    # data shape is: batch_size * seq_len * n_head * n_dim
+    _, max_seq_len, _, dim_head = data.shape
+
+    cos = angle[0][:max_seq_len].view(max_seq_len, 1, dim_head)
+    sin = angle[1][:max_seq_len].view(max_seq_len, 1, dim_head)
+
+    data = (data * cos) + (rotate_half(data) * sin)
+    return data
+
+
 class RMSNorm():
-    def __init__(self, weight: torch.Tensor, eps: float = 1e-5):
+    def __init__(self, weight: torch.Tensor, eps: float = 1e-6):
         self.norm_eps_ = eps
         self.weight_ = weight.to(torch.float32)
 
@@ -83,4 +94,13 @@ class LLMModel(metaclass=ABCMeta):
 
     @abstractclassmethod
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+        pass
+
+    @abstractclassmethod
+    def init_lora_weight(self, adapter_name: str,
+                         r: int,
+                         lora_alpha: int,
+                         lora_dropout: float,
+                         target: Dict[str, bool],
+                         weight: Optional[Dict[str, torch.Tensor]]):
         pass
