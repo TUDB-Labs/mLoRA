@@ -284,7 +284,7 @@ def inference(config: Dict[str, any],
                 break
 
         for idx, output in enumerate(input_data.batch_tokens_):
-            print(f"#LORA{idx} OUTPUT IS:")
+            print(f"# LORA{idx} OUTPUT IS:")
             print(tokenizer.decode(output))
 
 
