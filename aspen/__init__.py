@@ -3,7 +3,7 @@ from aspen.tokenizer import Tokenizer
 from aspen.model import LLMModel
 from aspen.model_llama import LlamaModel
 from aspen.model_chatglm import ChatGLMModel
-from aspen.modelargs import TokenizerArgs, LLMModelArgs, MultiLoraBatchData, LoraBatchDataConfig
+from aspen.modelargs import LLMModelArgs, MultiLoraBatchData, LoraBatchDataConfig
 from aspen.dispatcher import TrainTask, Dispatcher
 
 __all__ = [
@@ -11,7 +11,6 @@ __all__ = [
     "LLMModel",
     "LlamaModel",
     "ChatGLMModel",
-    "TokenizerArgs",
     "LLMModelArgs",
     "MultiLoraBatchData",
     "LoraBatchDataConfig",
