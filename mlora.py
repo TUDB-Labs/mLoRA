@@ -105,22 +105,14 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMM
     else:
         raise f"unkown model type {args.model_type}"
 
-    if args.tokenizer:
-        tokenizer = aspen.Tokenizer(args.tokenizer, from_file=True)
-    else:
-        tokenizer = aspen.Tokenizer(args.base_model)
+    tokenizer = aspen.Tokenizer(args.base_model)
 
     if config["pad_token_id"] == -1:
-        if config["expand_right"]:
-            model.pad_token_id_ = tokenizer.eos_id_
-        else:
-            model.pad_token_id_ = tokenizer.pad_id_
+        model.pad_token_id_ = tokenizer.pad_id_
     else:
         model.pad_token_id_ = config["pad_token_id"]
 
     model.eos_token_id_ = tokenizer.eos_id_
-
-    tokenizer.pad_id_ = model.pad_token_id_
 
     return tokenizer, model
 
@@ -241,7 +233,7 @@ def inference(config: Dict[str, any],
         batch_data_config.append(aspen.LoraBatchDataConfig(
             adapter_name, idx, idx + 1))
 
-    max_len = 128
+    inference_max_len = 128
 
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
@@ -250,7 +242,7 @@ def inference(config: Dict[str, any],
 
         tokens = tokenizer.encode(input_raw, True, False)
         token_len = len(tokens)
-        while len(tokens) < max_len:
+        while len(tokens) < inference_max_len:
             tokens.append(tokenizer.pad_id_)
 
         input_data = aspen.MultiLoraBatchData(
@@ -258,11 +250,11 @@ def inference(config: Dict[str, any],
             lora_batch_data_config_=batch_data_config,
             batch_tokens_=[tokens] * lora_adapter_num,
             tokens_len_without_pad_=[token_len] * lora_adapter_num,
-            batch_seq_len_=max_len,
+            batch_seq_len_=inference_max_len,
             inference_model_=True)
 
         eos_flag: List[bool] = [False] * lora_adapter_num
-        for pos in range(token_len, max_len):
+        for pos in range(token_len, inference_max_len):
             with torch.no_grad():
                 # batch_size, seq_len, voc_logs
                 outputs = llm_model.forward(input_data)
@@ -275,12 +267,9 @@ def inference(config: Dict[str, any],
                         eos_flag[idx] = True
                     input_data.tokens_len_without_pad_[
                         idx] = input_data.tokens_len_without_pad_[idx] + 1
-            hava_not_done_sentenct = False
-            for flag in eos_flag:
-                if not flag:
-                    hava_not_done_sentenct = True
-                    break
-            if not hava_not_done_sentenct:
+            # check if the all sentence end
+            have_all_done = all(flag for flag in eos_flag)
+            if have_all_done:
                 break
 
         for idx, output in enumerate(input_data.batch_tokens_):

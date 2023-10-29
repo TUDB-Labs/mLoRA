@@ -1,7 +1,7 @@
 from aspen.modelargs import LLMModelArgs, MultiLoraBatchData
 from aspen.checkpoint import CheckpointRecomputeFunction
-from aspen.model import LLMModel, RMSNorm
-from aspen.model import precompute_rope_angle, apply_rotary_emb_to_one, repeat_kv, precompute_mask
+from aspen.model import LLMModel, RMSNorm, RotaryEmbedding
+from aspen.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask
 from aspen.LoraLiner import Linear
 
 import torch
@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import AutoModel
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Optional
 
 
 def swiglu(x: torch.Tensor) -> torch.Tensor:
@@ -41,7 +41,7 @@ class Transformer:
     def forward(self,
                 data: torch.Tensor,
                 mask: torch.Tensor,
-                rope_angle: Tuple[torch.Tensor, torch.Tensor],
+                rope_angle: torch.Tensor,
                 input_args: MultiLoraBatchData):
         batch_size, seq_len, _ = data.shape
 
@@ -115,20 +115,19 @@ class ChatGLMModel(LLMModel):
         self.norm_: RMSNorm = None
         self.output_: torch.Tensor = None  # vocab size * dim
 
-        self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
-            args.dim_ // args.n_heads_, args.max_seq_len_, args.device)
+        self.rope_angle_ = RotaryEmbedding(
+            args.dim_ // args.n_heads_ // 2, device=args.device, dtype=torch.float16)
 
         self.norm_eps_ = args.norm_eps_
 
         self.device_ = args.device
         self.pad_token_id_ = args.pad_token_id_
         self.n_heads_ = args.n_heads_
+        self.dim_ = args.dim_
 
     def forward(self, input: MultiLoraBatchData):
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int64).to(self.device_)
-
-        mask = precompute_mask(input, self.n_heads_, self.device_)
 
         # only for train
         def create_forward_for_checkpoint(module: Transformer):
@@ -139,13 +138,15 @@ class ChatGLMModel(LLMModel):
         # batch_size, seq_len, dim
         data = F.embedding(tokens, self.token_embedding_,
                            padding_idx=self.pad_token_id_).requires_grad_(True)
+        mask = precompute_mask(input, self.n_heads_, self.device_, data.dtype)
 
+        rope_angle = self.rope_angle_.forward(tokens.shape[1])
         for layer in self.layers_:
             if input.inference_model_:
-                data = layer.forward(data, mask, self.rope_angle_, input)
+                data = layer.forward(data, mask, rope_angle, input)
             else:
                 data = CheckpointRecomputeFunction.apply(
-                    create_forward_for_checkpoint(layer), data, mask, self.rope_angle_, input)
+                    create_forward_for_checkpoint(layer), data, mask, rope_angle, input)
 
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
@@ -163,7 +164,7 @@ class ChatGLMModel(LLMModel):
         chatglm_model = AutoModel.from_pretrained(
             path,
             device_map=device,
-            torch_dtype=torch.float32,
+            torch_dtype=torch.float16,
             quantization_bit=bits,
             trust_remote_code=True)
 
@@ -175,6 +176,7 @@ class ChatGLMModel(LLMModel):
         chatglm_args.pad_token_id_ = chatglm_model.config.pad_token_id
         chatglm_args.n_heads_ = chatglm_model.config.num_attention_heads
         chatglm_args.n_kv_heads_ = chatglm_model.config.multi_query_group_num
+        chatglm_args.dim_ = chatglm_model.config.hidden_size
         chatglm_args.hidden_dropout_ = chatglm_model.config.hidden_dropout
 
         model = ChatGLMModel(chatglm_args)
@@ -183,7 +185,7 @@ class ChatGLMModel(LLMModel):
         model.token_embedding_ = chatglm_model.transformer.embedding.word_embeddings.weight.to(
             device).requires_grad_(False)
         model.output_ = chatglm_model.transformer.output_layer.weight.to(
-            dtype=torch.float32, device=device).requires_grad_(False)
+            device=device).requires_grad_(False)
         model.norm_ = RMSNorm(chatglm_model.transformer.encoder.final_layernorm.weight.to(
             device=device).requires_grad_(False), model.norm_eps_)
 

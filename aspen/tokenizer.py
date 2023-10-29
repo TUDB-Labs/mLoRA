@@ -6,7 +6,8 @@ Tokens = List[int]
 
 class Tokenizer:
     def __init__(self, model_path: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path, trust_remote_code=True)
         self.n_words_ = self.tokenizer.vocab_size
         self.bos_id_ = self.tokenizer.bos_token_id
         self.eos_id_ = self.tokenizer.eos_token_id
