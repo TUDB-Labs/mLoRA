@@ -1,8 +1,5 @@
 {
     "cutoff_len": 256,
-    "group_by_length": false,
-    "expand_right": true,
-    "pad_token_id": -1,
     "save_step": 2000,
     "early_stop_test_step": 2000,
     "train_lora_candidate_num": 4,
@@ -33,7 +30,9 @@
             },
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
-            "prompt": "template/template_demo.json"
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "left"
         },
         {
             "name": "lora_1",
@@ -58,7 +57,9 @@
             },
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
-            "prompt": "template/template_demo.json"
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "left"
         },
         {
             "name": "lora_2",
@@ -83,7 +84,9 @@
             },
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
-            "prompt": "template/template_demo.json"
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
         }
     ]
 }

@@ -107,12 +107,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMM
 
     tokenizer = aspen.Tokenizer(args.base_model)
 
-    if config["pad_token_id"] == -1:
-        model.pad_token_id_ = tokenizer.pad_id_
-    else:
-        model.pad_token_id_ = config["pad_token_id"]
-
-    model.eos_token_id_ = tokenizer.eos_id_
+    model.pad_token_id_ = tokenizer.pad_id_
 
     return tokenizer, model
 
