@@ -78,7 +78,7 @@ class TrainTask():
                  max_test_batch_size: int,
                  train_cutoff_len: int = 256,
                  group_by_length: bool = True,
-                 expand_side: str = "left",
+                 expand_side: str = "right",
                  expand_token_id: int = 0):
         self.tokenizer_ = tokenzer
         self.adapter_name_ = adapter_name
@@ -267,7 +267,7 @@ class Dispatcher():
                           max_train_micro_batch_size=lora["micro_batch_size"],
                           max_test_batch_size=lora["test_batch_size"],
                           train_cutoff_len=config["cutoff_len"],
-                          group_by_length=lora["group_by_length"]),
+                          group_by_length=lora.get("group_by_length", True),
             )
 
     def optim_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
@@ -390,7 +390,7 @@ class Dispatcher():
                 for ilora_conf in self.config_["lora"]:
                     if ilora_conf["name"] == adapter:
                         lora_config = ilora_conf
-                pad_side = lora_config["expand_side"]
+                pad_side = lora_config.get("expand_side", "right")
                 assert pad_side == "right" or pad_side == "left"
                 # pad the tokens to align
                 while len(tokens) < batch_seq_len:

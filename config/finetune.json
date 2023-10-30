@@ -32,7 +32,7 @@
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
-            "expand_side": "left"
+            "expand_side": "right"
         },
         {
             "name": "lora_1",
@@ -59,7 +59,7 @@
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
-            "expand_side": "left"
+            "expand_side": "right"
         },
         {
             "name": "lora_2",
