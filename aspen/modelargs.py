@@ -43,7 +43,7 @@ class MultiLoraBatchData:
     # the expand right and tokens without pad len
     # be need by the mask matrix
     batch_seq_len_: int = None
-    expand_right_: int = True
+    expand_side_: List[str] = None
 
     batch_tokens_: List[Tokens] = None
     tokens_len_without_pad_: Tokens = None

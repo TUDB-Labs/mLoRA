@@ -33,7 +33,7 @@ class TestDataSet(unittest.TestCase):
                              lora["micro_batch_size"],
                              lora["test_batch_size"],
                              config["cutoff_len"],
-                             config["group_by_length"])
+                             config.get("group_by_length", False))
             task.load_data()
             tasks.append(task)
             self.assertEqual(len(task.train_token_data_), 2)

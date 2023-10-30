@@ -57,6 +57,8 @@ class TrainTask():
 
     train_cutoff_len_: int = -1
     group_by_length_: bool = False
+    expand_side_: str = "left"
+    expand_token_id_: int = -1
 
     # count the stat of train and test data
     epoch_cnt_: int = 1
@@ -75,7 +77,9 @@ class TrainTask():
                  max_train_micro_batch_size: int,
                  max_test_batch_size: int,
                  train_cutoff_len: int = 256,
-                 group_by_length: bool = True):
+                 group_by_length: bool = True,
+                 expand_side: str = "right",
+                 expand_token_id: int = 0):
         self.tokenizer_ = tokenzer
         self.adapter_name_ = adapter_name
         self.data_path_ = data_path
@@ -88,6 +92,8 @@ class TrainTask():
         self.max_test_batch_size_ = max_test_batch_size
         self.train_cutoff_len_ = train_cutoff_len
         self.group_by_length_ = group_by_length
+        self.expand_side_ = expand_side
+        self.expand_token_id_ = expand_token_id
 
     def __load_template_data(self):
         assert self.template_data_ is None
@@ -233,8 +239,6 @@ class Dispatcher():
 
     strategy_: str = ""
 
-    expand_right_: bool = True
-
     def __init__(self,
                  config: Dict[str, any],
                  tokenizer: Tokenizer) -> None:
@@ -247,7 +251,6 @@ class Dispatcher():
 
         self.train_lora_candidate_num_ = config["train_lora_candidate_num"]
         self.train_lora_simultaneously_num_ = config["train_lora_simultaneously_num"]
-        self.expand_right_ = config["expand_right"]
         self.strategy_ = config["train_strategy"]
 
         # create ready task
@@ -264,8 +267,7 @@ class Dispatcher():
                           max_train_micro_batch_size=lora["micro_batch_size"],
                           max_test_batch_size=lora["test_batch_size"],
                           train_cutoff_len=config["cutoff_len"],
-                          group_by_length=config["group_by_length"])
-            )
+                          group_by_length=lora.get("group_by_length", True)))
 
     def optim_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
         task_len = {}
@@ -368,6 +370,7 @@ class Dispatcher():
         # all prompts and tokens / config
         batch_seq_len = math.ceil(batch_seq_len / 8) * 8
         prompts: List[str] = []
+        expand_side: List[str] = []
         batch_tokens: List[Tokens] = []
         tokens_len_without_pad: List[int] = []
         lora_batch_data_config: List[LoraBatchDataConfig] = []
@@ -379,14 +382,24 @@ class Dispatcher():
                 len(all_train_data[adapter])
             for data in all_train_data[adapter]:
                 prompts.append(data.prompt_)
-                tokens: Tokens = data.tokens_
+                tokens: Tokens = data.tokens_.copy()
                 tokens_len_without_pad.append(len(tokens))
-                while len(data.tokens_) < batch_seq_len:
-                    if self.expand_right_:
+                # get the pad token from lora config
+                lora_config = None
+                for ilora_conf in self.config_["lora"]:
+                    if ilora_conf["name"] == adapter:
+                        lora_config = ilora_conf
+                pad_side = lora_config.get("expand_side", "right")
+                assert pad_side == "right" or pad_side == "left"
+                # pad the tokens to align
+                while len(tokens) < batch_seq_len:
+                    if pad_side == "right":
                         tokens.append(self.tokenizer_.pad_id_)
                     else:
                         tokens.insert(0, self.tokenizer_.pad_id_)
+                expand_side.append(pad_side)
                 batch_tokens.append(tokens)
+
             lora_batch_data_config.append(LoraBatchDataConfig(adapter_name_=adapter,
                                                               batch_start_idx_=adapter_start_idx,
                                                               batch_end_idx_=adapter_end_idx))
@@ -397,6 +410,6 @@ class Dispatcher():
         return MultiLoraBatchData(prompts_=prompts,
                                   lora_batch_data_config_=lora_batch_data_config,
                                   batch_seq_len_=batch_seq_len,
-                                  expand_right_=self.expand_right_,
+                                  expand_side_=expand_side,
                                   batch_tokens_=batch_tokens,
                                   tokens_len_without_pad_=tokens_len_without_pad)
