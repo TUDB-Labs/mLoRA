@@ -267,8 +267,7 @@ class Dispatcher():
                           max_train_micro_batch_size=lora["micro_batch_size"],
                           max_test_batch_size=lora["test_batch_size"],
                           train_cutoff_len=config["cutoff_len"],
-                          group_by_length=lora.get("group_by_length", True),
-            )
+                          group_by_length=lora.get("group_by_length", True)))
 
     def optim_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
         task_len = {}
