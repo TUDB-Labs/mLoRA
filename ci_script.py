@@ -33,6 +33,7 @@ def inference_with_finetuned_lora(base_model_name_or_path, lora_weights_path, pr
         answer = full_text.replace(prompt, '').strip()
         print(answer)
 
+
 if __name__ == '__main__':
     args = sys.argv
     method = args[1]
