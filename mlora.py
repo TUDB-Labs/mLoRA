@@ -112,7 +112,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMM
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any], llama_model: aspen.LLMModel):
+def init_lora_model(config: Dict[str, any], llm_model: aspen.LLMModel):
     if args.disable_lora:
         return
 
@@ -123,12 +123,12 @@ def init_lora_model(config: Dict[str, any], llama_model: aspen.LLMModel):
             print(f"load {adapter_file_path}")
             lora_weight = torch.load(adapter_file_path)
 
-        llama_model.init_lora_weight(lora_config["name"],
-                                     lora_config["r"],
-                                     lora_config["alpha"],
-                                     lora_config["dropout"],
-                                     lora_config["target_modules"],
-                                     lora_weight)
+        llm_model.init_lora_weight(lora_config["name"],
+                                   lora_config["r"],
+                                   lora_config["alpha"],
+                                   lora_config["dropout"],
+                                   lora_config["target_modules"],
+                                   lora_weight)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:

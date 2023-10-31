@@ -38,6 +38,26 @@ class Transformer:
         self.head_dim_ = args.dim_ // args.n_heads_
         self.hidden_dropout_ = args.hidden_dropout_
 
+    def init_lora_layer_weight(self,
+                               adapter_name: str,
+                               r: int,
+                               lora_alpha: int,
+                               lora_dropout: float,
+                               target: Dict[str, bool],
+                               weight: Optional[Dict[str, torch.Tensor]]):
+        linear_layer_list = [self.query_key_value_,
+                             self.dense_, self.dense_h_to_4h_, self.dense_4h_to_h_]
+        linear_layer_name_list = [
+            "qkv", "dense", "mlp_in", "mlp_out"]
+
+        for idx, layer_name in enumerate(linear_layer_name_list):
+            if layer_name in target and target[layer_name]:
+                lora_a = None
+                lora_b = None
+
+                linear_layer_list[idx].init_lora_weight(
+                    adapter_name, r, lora_alpha, lora_dropout, lora_a, lora_b)
+
     def forward(self,
                 data: torch.Tensor,
                 mask: torch.Tensor,
@@ -116,13 +136,14 @@ class ChatGLMModel(LLMModel):
         self.output_: torch.Tensor = None  # vocab size * dim
 
         self.rope_angle_ = RotaryEmbedding(
-            args.dim_ // args.n_heads_ // 2, device=args.device, dtype=torch.float16)
+            args.dim_ // args.n_heads_ // 2, device=args.device, dtype=torch.float32)
 
         self.norm_eps_ = args.norm_eps_
 
         self.device_ = args.device
         self.pad_token_id_ = args.pad_token_id_
         self.n_heads_ = args.n_heads_
+        self.vocab_size_ = args.vocab_size_
         self.dim_ = args.dim_
 
     def forward(self, input: MultiLoraBatchData):
@@ -164,7 +185,7 @@ class ChatGLMModel(LLMModel):
         chatglm_model = AutoModel.from_pretrained(
             path,
             device_map=device,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,
             quantization_bit=bits,
             trust_remote_code=True)
 
@@ -176,6 +197,7 @@ class ChatGLMModel(LLMModel):
         chatglm_args.pad_token_id_ = chatglm_model.config.pad_token_id
         chatglm_args.n_heads_ = chatglm_model.config.num_attention_heads
         chatglm_args.n_kv_heads_ = chatglm_model.config.multi_query_group_num
+        chatglm_args.vocab_size_ = chatglm_model.config.vocab_size
         chatglm_args.dim_ = chatglm_model.config.hidden_size
         chatglm_args.hidden_dropout_ = chatglm_model.config.hidden_dropout
 
@@ -210,20 +232,35 @@ class ChatGLMModel(LLMModel):
 
         return model
 
-    def init_random_lora_weight(self, adapter_name: str,
-                                r: int,
-                                lora_alpha: int,
-                                lora_dropout: float,
-                                target: Dict[str, bool]):
-        pass
-
     def init_lora_weight(self, adapter_name: str,
                          r: int,
                          lora_alpha: int,
                          lora_dropout: float,
                          target: Dict[str, bool],
                          weight: Optional[Dict[str, torch.Tensor]]):
-        pass
+        for transformer_layer in self.layers_:
+            transformer_layer.init_lora_layer_weight(
+                adapter_name, r, lora_alpha, lora_dropout, target, weight)
 
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
-        pass
+        train_paramas = {}
+
+        for transformer_layer in self.layers_:
+            for lora_config in config["lora"]:
+                adapter_name = lora_config["name"]
+                if adapter_name not in train_paramas:
+                    train_paramas[adapter_name] = []
+
+                lora_layer_list = [transformer_layer.query_key_value_.loras_,
+                                   transformer_layer.dense_.loras_,
+                                   transformer_layer.dense_h_to_4h_.loras_,
+                                   transformer_layer.dense_4h_to_h_.loras_]
+
+                for lora_layer in lora_layer_list:
+                    if adapter_name in lora_layer:
+                        train_paramas[adapter_name].append(
+                            lora_layer[adapter_name].lora_a_)
+                        train_paramas[adapter_name].append(
+                            lora_layer[adapter_name].lora_b_)
+
+        return train_paramas
