@@ -5,12 +5,13 @@ import sys
 
 
 def inference_with_finetuned_lora(base_model_name_or_path, lora_weights_path, prompt):
+    device = "cuda:0"
     tokenizer = LlamaTokenizer.from_pretrained(base_model_name_or_path)
     model = LlamaForCausalLM.from_pretrained(
         base_model_name_or_path,
         load_in_8bit=True,
         torch_dtype=torch.float16,
-        device_map="cuda:0",
+        device_map=device,
     )
     model = PeftModel.from_pretrained(
         model,
@@ -20,7 +21,6 @@ def inference_with_finetuned_lora(base_model_name_or_path, lora_weights_path, pr
 
     generation_config = model.generation_config
 
-    device = "cuda:0"
     encoding = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.inference_mode():
         outputs = model.generate(
