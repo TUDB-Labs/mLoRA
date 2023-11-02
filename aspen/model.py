@@ -171,3 +171,7 @@ class LLMModel(metaclass=ABCMeta):
                          target: Dict[str, bool],
                          weight: Optional[Dict[str, torch.Tensor]]):
         pass
+
+    @abstractclassmethod
+    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+        pass

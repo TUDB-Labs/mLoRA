@@ -272,3 +272,26 @@ class LlamaModel(LLMModel):
                             lora_layer[adapter_name].lora_b_)
 
         return train_paramas
+
+    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+        # return the lora weight and target_module's name
+        lora_weight_dict = {}
+        target_modules = []
+        for idx, transformer_layer in enumerate(self.layers_):
+            layer_prefix_name = "base_model.model.model.layers." + \
+                str(idx) + "." + "self_attn."
+            lora_layer_list = [transformer_layer.wq_, transformer_layer.wk_,
+                               transformer_layer.wv_, transformer_layer.wo_,
+                               transformer_layer.w1_, transformer_layer.w2_,
+                               transformer_layer.w3_]
+            lora_layer_name_list = [
+                "q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
+            for idx, lora_layer in enumerate(lora_layer_list):
+                if lora_name in lora_layer.loras_:
+                    if lora_layer_name_list[idx] not in target_modules:
+                        target_modules.append(lora_layer_name_list[idx])
+                    lora_weight_dict[layer_prefix_name +
+                                     f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
+                    lora_weight_dict[layer_prefix_name +
+                                     f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
+        return lora_weight_dict, target_modules
