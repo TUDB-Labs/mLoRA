@@ -182,12 +182,33 @@ class ChatGLMModel(LLMModel):
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
                         log_fn=None):
-        chatglm_model = AutoModel.from_pretrained(
-            path,
-            device_map=device,
-            torch_dtype=torch.float32,
-            quantization_bit=bits,
-            trust_remote_code=True)
+        # now only support the qlora - 4bit
+        if bits in [4, 8]:
+            if log_fn is not None:
+                log_fn('Loading model with quantization, bits = %i' % bits)
+            from transformers import BitsAndBytesConfig
+            compute_dtype = (torch.float16 if fp16 else (
+                torch.bfloat16 if bf16 else torch.float32))
+            chatglm_model = AutoModel.from_pretrained(
+                path,
+                trust_remote_code=True,
+                load_in_4bit=bits == 4,
+                load_in_8bit=bits == 8,
+                device_map=device,
+                quantization_config=BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=compute_dtype,
+                    bnb_4bit_use_double_quant=double_quant,
+                    bnb_4bit_quant_type=quant_type,
+                ),
+                torch_dtype=(torch.float32 if fp16 else (torch.bfloat16 if bf16 else torch.float32)))
+        else:
+            chatglm_model = AutoModel.from_pretrained(
+                path,
+                device_map=device,
+                torch_dtype=torch.float32,
+                quantization_bit=bits,
+                trust_remote_code=True)
 
         # get config from chatglm config
         chatglm_args = LLMModelArgs()
