@@ -1,7 +1,7 @@
 from aspen.modelargs import LLMModelArgs, MultiLoraBatchData
 from aspen.checkpoint import CheckpointRecomputeFunction
-from aspen.model import LLMModel, RMSNorm, RotaryEmbedding
-from aspen.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask
+from aspen.model import LLMModel, RMSNorm
+from aspen.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
 from aspen.LoraLiner import Linear
 
 import torch
@@ -135,8 +135,8 @@ class ChatGLMModel(LLMModel):
         self.norm_: RMSNorm = None
         self.output_: torch.Tensor = None  # vocab size * dim
 
-        self.rope_angle_ = RotaryEmbedding(
-            args.dim_ // args.n_heads_ // 2, device=args.device, dtype=torch.float32)
+        self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
+            args.dim_ // args.n_heads_, args.max_seq_len_, args.device)
 
         self.norm_eps_ = args.norm_eps_
 
@@ -161,13 +161,12 @@ class ChatGLMModel(LLMModel):
                            padding_idx=self.pad_token_id_).requires_grad_(True)
         mask = precompute_mask(input, self.n_heads_, self.device_, data.dtype)
 
-        rope_angle = self.rope_angle_.forward(tokens.shape[1])
         for layer in self.layers_:
             if input.inference_model_:
-                data = layer.forward(data, mask, rope_angle, input)
+                data = layer.forward(data, mask, self.rope_angle_, input)
             else:
                 data = CheckpointRecomputeFunction.apply(
-                    create_forward_for_checkpoint(layer), data, mask, rope_angle, input)
+                    create_forward_for_checkpoint(layer), data, mask, self.rope_angle_, input)
 
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
@@ -182,12 +181,36 @@ class ChatGLMModel(LLMModel):
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
                         log_fn=None):
-        chatglm_model = AutoModel.from_pretrained(
-            path,
-            device_map=device,
-            torch_dtype=torch.float32,
-            quantization_bit=bits,
-            trust_remote_code=True)
+        # now only support the qlora - 4bit
+        if bits in [4, 8]:
+            if log_fn is not None:
+                log_fn('Loading model with quantization, bits = %i' % bits)
+            from transformers import BitsAndBytesConfig
+            compute_dtype = (torch.float16 if fp16 else (
+                torch.bfloat16 if bf16 else torch.float32))
+            chatglm_model = AutoModel.from_pretrained(
+                path,
+                trust_remote_code=True,
+                load_in_4bit=bits == 4,
+                load_in_8bit=bits == 8,
+                device_map=device,
+                quantization_config=BitsAndBytesConfig(
+                    load_in_4bit=bits == 4,
+                    load_in_8bit=bits == 8,
+                    llm_int8_threshold=6.0,
+                    llm_int8_has_fp16_weight=False,
+                    bnb_4bit_compute_dtype=compute_dtype,
+                    bnb_4bit_use_double_quant=double_quant,
+                    bnb_4bit_quant_type=quant_type,
+                ),
+                torch_dtype=(torch.float32 if fp16 else (torch.bfloat16 if bf16 else torch.float32)))
+        else:
+            chatglm_model = AutoModel.from_pretrained(
+                path,
+                device_map=device,
+                torch_dtype=torch.float32,
+                quantization_bit=bits,
+                trust_remote_code=True)
 
         # get config from chatglm config
         chatglm_args = LLMModelArgs()
@@ -200,6 +223,8 @@ class ChatGLMModel(LLMModel):
         chatglm_args.vocab_size_ = chatglm_model.config.vocab_size
         chatglm_args.dim_ = chatglm_model.config.hidden_size
         chatglm_args.hidden_dropout_ = chatglm_model.config.hidden_dropout
+        chatglm_args.max_seq_len_ = 4096 if not hasattr(
+            chatglm_model.config, "max_sequence_length") else chatglm_model.config.max_sequence_length
 
         model = ChatGLMModel(chatglm_args)
 
