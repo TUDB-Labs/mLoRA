@@ -46,6 +46,8 @@ class Linear():
             assert isinstance(weight,
                               bitsandbytes.nn.Linear8bitLt) or isinstance(weight,
                                                                           bitsandbytes.nn.Linear4bit), "error type."
+        else:
+            weight.requires_grad_(False)
 
         self.weight_ = weight
         self.weight_.to(device)
