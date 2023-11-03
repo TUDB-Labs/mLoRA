@@ -9,7 +9,7 @@ ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) u
 
 - Efficient LoRA/QLoRA: ASPEN optimizes the fine-tuning process, significantly reducing GPU memory usage by leveraging a shared frozen-based model.
 
-- Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/qLoRA adapters.
+- Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/QLoRA adapters.
 
 ## Contents
 
@@ -21,11 +21,12 @@ ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) u
 - [Copyright](#Copyright)
 
 ## Updates
-- Beta version: Support multiple LLaMA fine-tuning via LORA in one GPU 
+- [Beta]: Support multiple LLaMA fine-tuning
+- [Beta]: Support multiple ChatGLM fine-tuning
 
 ## Overview
 
-**ASPEN** is written in Python3 and compatible with HuggingFace-Transformers LLaMA Models.
+**ASPEN** is a high-throughput LLM fine-tuning framework based on LoRA and QLoRA, compatible with HuggingFace-Transformers LLaMA Models and ChatGLM Models.
 
 This picture shows the basic principle of Multi-LoRA.
 
@@ -33,17 +34,12 @@ This picture shows the basic principle of Multi-LoRA.
 
 ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://developer.nvidia.com/cuda-toolkit) compatible GPUs.
 
-### Disadvantages of LoRA-based Approaches:
-- Memory Consumption: Some Lora techniques might be efficient, but the introduction of low-rank approximations can sometimes heighten memory usage, particularly if one has to store both original and approximated parameters.
+### Main Contribution
 
-- Potential for Reduced Model Accuracy: Lora-based fine-tuning is designed to either maintain or boost model accuracy. However, there can be instances where the approximations cause a dip in performance, especially if the low-rank approximations aren't chosen carefully.
-
-- Dependence on Hyperparameters: Much like other ML techniques, Lora-based strategies involve hyperparameters that need precise fine-tuning. Mistakes in this area can lead to subpar performance.
-
-### Improvements in LoRA-based Approaches:
-- GPU Memory Conservation: Leveraging the base model more can help in significant GPU memory conservation, an essential aspect for efficient operations.
-- Automatic Parameter Learning: Introducing automation in the learning process for hyperparameters during model fine-tuning can speed up the process and guarantee optimal model results.
-- Early Stopping Mechanism: Implementing this approach ensures no overfitting occurs, and resources are utilized effectively. It stops training once the model's improvement becomes negligible.
+- Introduces the Multi-LoRA method, capable of enabling the sharing of pre-trained model weights during the fine-tuning process of large language models;
+- Proposes a task scheduling algorithm to enhance the overall throughput of the task training process and reduce total training latency;
+- Builds upon the above by implementing ASPEN, a high-throughput large language model fine-tuning framework based on LoRA and QLoRA;
+- Evaluates ASPEN in experiments against existing systems, confirming that ASPEN effectively utilizes system computing resources, thereby improving training throughput and reducing training latency compared to current systems.
 
 ### Experiment Results
 
@@ -53,9 +49,13 @@ Baseline: We utilized the widely adopted [Alpaca-LoRA](https://github.com/tloen/
 
 #### Training Latency
 
-<div align="center"><img src="./assets/Exp-JCT.png" width="50%"></div>
+Method|Latency|Throughput
+:---:|:---:|:---:
+Baseline@SEQ|10.51h|608.41 token/s
+Baseline@SYNC|9.85h|649.30 token/s
+ASPEN|9.46h|674.58 token/s
 
-We conducted four identical fine-tuning jobs with same dataset and same hyper-parameters, incorporating two baselines and ASPEN. During the experimental process, we collected the completion times for each task in the baseline methods and calculated the time taken by the slowest task as the *Training Latency*. As shown in Figure, ASPEN exhibits lower *Training Latency* compared to both baseline methods. Specifically, ASPEN is 9.99% faster than *Baseline@SEQ* and 3.92% faster than *Baseline@SYNC*.
+We conducted four identical fine-tuning jobs with same dataset and same hyper-parameters, incorporating two baselines and ASPEN. During the experimental process, we collected the completion times for each task in the baseline methods and calculated the time taken by the slowest task as the *Training Latency*. As shown in Table, ASPEN exhibits lower *Training Latency* compared to both baseline methods. Specifically, ASPEN is 9.99% faster than *Baseline@SEQ* and 3.92% faster than *Baseline@SYNC*.
 
 #### Video Memory Usage
 
@@ -67,7 +67,12 @@ We conducted several fine-tuning jobs with same dataset and `batch_size = {4, 6,
 
 #### Batching Strategies
 
-<div align="center"><img src="./assets/Exp-Batch.png" width="100%"></div>
+Method|Training Latency|Peak Memory Usage|Average GPU Utilization|Training Throughput
+:---:|:---:|:---:|:---:|:---:
+Baseline@SEQ|27.73h|10.68GB|79.39%|653.35 token/s
+ASPEN@M1|36.82h|23.82GB|96.52%|672.54 token/s
+ASPEN@M2|39.14h|23.86GB|96.41%|671.28 token/s
+ASPEN@M3|22.97h|23.85GB|95.22%|674.41 token/s
 
 We conducted four fine-tuning jobs with different dataset but same hyper-parameters, incorporating  *Baseline@SEQ* and ASPEN. 
 
