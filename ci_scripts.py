@@ -55,4 +55,3 @@ if __name__ == '__main__':
         inference_llama(base_model_or_path, lora_weight_path, prompt)
     elif method == 'chatglm':
         inference_chatglm2(base_model_or_path, lora_weight_path, prompt)
-

@@ -10,50 +10,50 @@ jobs:
   test-llama-7b:
     runs-on: self-hosted
     steps:
-    - name: clone repository
-      run: |
-        cd /workspace
-        rm -rf ./multi-lora-fine-tune
-        git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
-    - name: test llama-7b
-      run: |
-        cd /workspace/multi-lora-fine-tune
-        python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit
-    - name: test inference
-      run: |
-        cd /workspace/multi-lora-fine-tune
-        python ci_scripts.py "llama" "/data/llama-7b-hf" "./lora_0" "tell me a joke"
+      - name: clone repository
+        run: |
+          cd /workspace
+          rm -rf ./multi-lora-fine-tune
+          git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+      - name: test llama-7b
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit
+      - name: test inference
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python ci_scripts.py "llama" "/data/llama-7b-hf" "./lora_0" "tell me a joke"
 
   test-vicuna-7b:
     runs-on: self-hosted
     steps:
-    - name: clone repository
-      run: |
-        cd /workspace
-        rm -rf ./multi-lora-fine-tune
-        git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
-    - name: test vicuna-7b-v1.1
-      run: |
-        cd /workspace/multi-lora-fine-tune
-        python mlora.py --base_model /data/vicuna-7b-v1.1 --config ./config/finetune.json --load_8bit
-    - name: test inference
-      run: |
-        cd /workspace/multi-lora-fine-tune
-        python ci_scripts.py "llama" "/data/vicuna-7b-v1.1" "./lora_0" "tell me a joke"
+      - name: clone repository
+        run: |
+          cd /workspace
+          rm -rf ./multi-lora-fine-tune
+          git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+      - name: test vicuna-7b-v1.1
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python mlora.py --base_model /data/vicuna-7b-v1.1 --config ./config/finetune.json --load_8bit
+      - name: test inference
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python ci_scripts.py "llama" "/data/vicuna-7b-v1.1" "./lora_0" "tell me a joke"
 
   test-chatglm2-6b:
     runs-on: self-hosted
     steps:
-    - name: clone repository
-      run: |
-        cd /workspace
-        rm -rf ./multi-lora-fine-tune
-        git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
-    - name: test chatglm2-6b
-      run: |
-        cd /workspace/multi-lora-fine-tune
-        python mlora.py --base_model /data/THUDM/chatglm2-6b --config ./config/finetune_chatglm.json --load_8bit
-    - name: test inference
-      run: |
-        cd /workspace/multi-lora-fine-tune
-        python ci_scripts.py "chatglm" "/data/THUDM/chatglm2-6b" "./lora_0" "tell me a joke"
+      - name: clone repository
+        run: |
+          cd /workspace
+          rm -rf ./multi-lora-fine-tune
+          git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+      - name: test chatglm2-6b
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python mlora.py --base_model /data/THUDM/chatglm2-6b --config ./config/finetune_chatglm.json --load_8bit
+      - name: test inference
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python ci_scripts.py "chatglm" "/data/THUDM/chatglm2-6b" "./lora_0" "tell me a joke"
