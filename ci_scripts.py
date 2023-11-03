@@ -18,7 +18,7 @@ def inference_llama(base_model_name_or_path, lora_weights_path, prompt):
         lora_weights_path,
         torch_dtype=torch.float16,
     )
-    inference(tokenizer, model, device)
+    inference(tokenizer, model, device, prompt)
 
 
 def inference_chatglm2(base_model_name_or_path, lora_weights_path, prompt):
@@ -26,10 +26,10 @@ def inference_chatglm2(base_model_name_or_path, lora_weights_path, prompt):
     tokenizer = AutoTokenizer.from_pretrained(base_model_name_or_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(base_model_name_or_path, trust_remote_code=True).to(device)
     model = PeftModel.from_pretrained(model, lora_weights_path)
-    inference(tokenizer, model, device)
+    inference(tokenizer, model, device, prompt)
 
 
-def inference(tokenizer, model, device):
+def inference(tokenizer, model, device, prompt):
     encoding = tokenizer(prompt, return_tensors="pt").to(device)
     generation_config = model.generation_config
     with torch.inference_mode():
@@ -40,8 +40,9 @@ def inference(tokenizer, model, device):
         )
 
         full_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        answer = full_text.replace(prompt, '').strip()
-        print(answer)
+        # answer = full_text.replace(prompt, '').strip()
+        print("===============INFERENCE RESULT================")
+        print(full_text)
 
 
 if __name__ == '__main__':
