@@ -190,6 +190,7 @@ class LlamaModel(LLMModel):
                 torch.bfloat16 if bf16 else torch.float32))
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
+                trust_remote_code=True,
                 load_in_4bit=bits == 4,
                 load_in_8bit=bits == 8,
                 device_map=device,

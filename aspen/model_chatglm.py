@@ -196,7 +196,10 @@ class ChatGLMModel(LLMModel):
                 load_in_8bit=bits == 8,
                 device_map=device,
                 quantization_config=BitsAndBytesConfig(
-                    load_in_4bit=True,
+                    load_in_4bit=bits == 4,
+                    load_in_8bit=bits == 8,
+                    llm_int8_threshold=6.0,
+                    llm_int8_has_fp16_weight=False,
                     bnb_4bit_compute_dtype=compute_dtype,
                     bnb_4bit_use_double_quant=double_quant,
                     bnb_4bit_quant_type=quant_type,
