@@ -1,8 +1,8 @@
-name: Test 7B Llama Models
+name: Test LLM Models
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "*_dev" ]
   pull_request:
     branches: [ "main" ]
 
@@ -19,6 +19,11 @@ jobs:
       run: |
         cd /workspace/multi-lora-fine-tune
         python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit
+    - name: test inference
+      run: |
+        cd /workspace/multi-lora-fine-tune
+        python ci_scripts.py "inference" "./lora_0" "tell me a joke"
+
   test-vicuna-7b:
     runs-on: self-hosted
     steps:
@@ -31,3 +36,24 @@ jobs:
       run: |
         cd /workspace/multi-lora-fine-tune
         python mlora.py --base_model /data/vicuna-7b-v1.1 --config ./config/finetune.json --load_8bit
+    - name: test inference
+      run: |
+        cd /workspace/multi-lora-fine-tune
+        python ci_scripts.py "inference" "./lora_0" "tell me a joke"
+
+  test-chatglm2-6b:
+    runs-on: self-hosted
+    steps:
+    - name: clone repository
+      run: |
+        cd /workspace
+        rm -rf ./multi-lora-fine-tune
+        git clone https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+    - name: test chatglm2-6b
+      run: |
+        cd /workspace/multi-lora-fine-tune
+        python mlora.py --base_model /data/THUDM/chatglm2-6b --config ./config/finetune.json --load_8bit
+    - name: test inference
+      run: |
+        cd /workspace/multi-lora-fine-tune
+        python ci_scripts.py "inference" "./lora_0" "tell me a joke"
