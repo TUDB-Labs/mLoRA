@@ -14,7 +14,7 @@ jobs:
       run: |
         cd /workspace
         rm -rf ./multi-lora-fine-tune
-        git clone https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+        git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
     - name: test llama-7b
       run: |
         cd /workspace/multi-lora-fine-tune
@@ -31,7 +31,7 @@ jobs:
       run: |
         cd /workspace
         rm -rf ./multi-lora-fine-tune
-        git clone https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+        git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
     - name: test vicuna-7b-v1.1
       run: |
         cd /workspace/multi-lora-fine-tune
@@ -48,11 +48,11 @@ jobs:
       run: |
         cd /workspace
         rm -rf ./multi-lora-fine-tune
-        git clone https://github.com/TUDB-Labs/multi-lora-fine-tune.git
+        git clone -b glx_dev https://github.com/TUDB-Labs/multi-lora-fine-tune.git
     - name: test chatglm2-6b
       run: |
         cd /workspace/multi-lora-fine-tune
-        python mlora.py --base_model /data/THUDM/chatglm2-6b --config ./config/finetune.json --load_8bit
+        python mlora.py --base_model /data/THUDM/chatglm2-6b --config ./config/finetune_chatglm.json --load_8bit
     - name: test inference
       run: |
         cd /workspace/multi-lora-fine-tune
