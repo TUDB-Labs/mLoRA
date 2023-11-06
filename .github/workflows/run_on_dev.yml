@@ -29,7 +29,7 @@ jobs:
       - name: test inference
         run: |
           cd /workspace/multi-lora-fine-tune
-          python ci_scripts.py "llama" "/data/llama-7b-hf" "./lora_0"
+          python ci_script.py "llama" "/data/llama-7b-hf" "./lora_0"
 
   test-vicuna-7b:
     runs-on: self-hosted
@@ -53,7 +53,7 @@ jobs:
       - name: test inference
         run: |
           cd /workspace/multi-lora-fine-tune
-          python ci_scripts.py "llama" "/data/vicuna-7b-v1.1" "./lora_0"
+          python ci_script.py "llama" "/data/vicuna-7b-v1.1" "./lora_0"
 
   test-chatglm2:
     runs-on: self-hosted
@@ -77,4 +77,4 @@ jobs:
       - name: test inference
         run: |
           cd /workspace/multi-lora-fine-tune
-          python ci_scripts.py "chatglm" "/data/THUDM/chatglm2-6b" "./lora_0"
+          python ci_script.py "chatglm" "/data/THUDM/chatglm2-6b" "./lora_0"
