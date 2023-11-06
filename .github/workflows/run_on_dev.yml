@@ -3,7 +3,8 @@ name: Test LLM Models on Dev
 on:
   push:
     branches: [ "!main" ]
-
+  pull_request:
+    branches: [ "!main" ]
 jobs:
   test-llama-7b:
     runs-on: self-hosted
