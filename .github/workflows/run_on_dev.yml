@@ -54,28 +54,27 @@ jobs:
         run: |
           cd /workspace/multi-lora-fine-tune
           python ci_scripts.py "llama" "/data/vicuna-7b-v1.1" "./lora_0"
-      
 
-    test-chatglm2:
-      runs-on: self-hosted
-      steps:
-        - name: Get Branch Name
-          id: branch_name
-          run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+  test-chatglm2:
+    runs-on: self-hosted
+    steps:
+      - name: Get Branch Name
+        id: branch_name
+        run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
 
-        - name: clone repository
-          run: |
-            current_branch="${{ steps.branch_name.outputs.branch }}"
-            cd /workspace
-            rm -rf ./multi-lora-fine-tune
-            git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+      - name: clone repository
+        run: |
+          current_branch="${{ steps.branch_name.outputs.branch }}"
+          cd /workspace
+          rm -rf ./multi-lora-fine-tune
+          git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
 
-        - name: test chatglm2-6b
-          run: |
-            cd /workspace/multi-lora-fine-tune
-            python mlora.py --base_model /data/THUDM/chatglm2-6b --config ./config/finetune_chatglm.json --model_type chatglm --load_8bit
+      - name: test chatglm2-6b
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python mlora.py --base_model /data/THUDM/chatglm2-6b --config ./config/finetune_chatglm.json --model_type chatglm --load_8bit
 
-        - name: test inference
-          run: |
-            cd /workspace/multi-lora-fine-tune
-            python ci_scripts.py "chatglm" "/data/THUDM/chatglm2-6b" "./lora_0"
+      - name: test inference
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python ci_scripts.py "chatglm" "/data/THUDM/chatglm2-6b" "./lora_0"
