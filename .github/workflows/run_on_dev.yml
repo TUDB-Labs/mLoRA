@@ -2,9 +2,10 @@ name: Test LLM Models on Dev
 
 on:
   push:
-    branches:
-      except:
+    except:
+      branches:
         - 'main'
+
 jobs:
   test-llama-7b:
     runs-on: self-hosted
