@@ -4,8 +4,7 @@ from peft import PeftModel
 import sys
 
 
-def inference_llama(base_model_name_or_path, lora_weights_path, prompt):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+def inference_llama(base_model_name_or_path, lora_weights_path, prompt, device):
     tokenizer = LlamaTokenizer.from_pretrained(base_model_name_or_path)
     model = LlamaForCausalLM.from_pretrained(
         base_model_name_or_path,
@@ -13,23 +12,18 @@ def inference_llama(base_model_name_or_path, lora_weights_path, prompt):
         torch_dtype=torch.float16,
         device_map=device,
     )
-    model = PeftModel.from_pretrained(
-        model,
-        lora_weights_path,
-        torch_dtype=torch.float16,
-    )
-    inference(tokenizer, model, device, prompt)
+
+    inference(tokenizer, model, device, prompt, lora_weights_path)
 
 
-def inference_chatglm(base_model_name_or_path, lora_weights_path, prompt):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+def inference_chatglm(base_model_name_or_path, lora_weights_path, prompt, device):
     tokenizer = AutoTokenizer.from_pretrained(base_model_name_or_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(base_model_name_or_path, trust_remote_code=True).to(device)
-    model = PeftModel.from_pretrained(model, lora_weights_path)
-    inference(tokenizer, model, device, prompt)
+    inference(tokenizer, model, device, prompt, lora_weights_path)
 
 
-def inference(tokenizer, model, device, prompt):
+def inference(tokenizer, model, device, prompt, lora_weights_path):
+    model = PeftModel.from_pretrained(model, lora_weights_path, torch_dtype=torch.float16)
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
     with torch.inference_mode():
         outputs = model.generate(
@@ -49,9 +43,11 @@ if __name__ == '__main__':
     lora_weight_path = args[3]
     prompt = args[4]
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     if model_type == 'llama':
-        inference_llama(base_model_or_path, lora_weight_path, prompt)
+        inference_llama(base_model_or_path, lora_weight_path, prompt, device)
     elif model_type == 'chatglm':
-        inference_chatglm(base_model_or_path, lora_weight_path, prompt)
+        inference_chatglm(base_model_or_path, lora_weight_path, prompt, device)
     else:
         print(f"no such model type: {model_type}.")
