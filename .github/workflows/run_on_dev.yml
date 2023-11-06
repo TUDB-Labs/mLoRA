@@ -11,9 +11,6 @@ jobs:
   test-llama-7b:
     runs-on: self-hosted
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
       - name: Get Branch Name
         id: branch_name
         run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
