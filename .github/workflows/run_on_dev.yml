@@ -11,10 +11,6 @@ jobs:
   test-llama-7b:
     runs-on: self-hosted
     steps:
-      - name: Get Branch Name
-        id: branch_name
-        run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
-
       - name: clone repository
         run: |
           current_branch="${{ steps.branch_name.outputs.branch }}"
