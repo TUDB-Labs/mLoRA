@@ -49,10 +49,10 @@ test-chatglm2:
   steps:
     - name: clone repository
       run: |
-        current_branch="${{ steps.branch_name.outputs.branch }}"
+        
         cd /workspace
         rm -rf ./multi-lora-fine-tune
-        git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+        git clone git@github.com:TUDB-Labs/multi-lora-fine-tune.git
 
     - name: finetune chatglm2-6b
       run: |
