@@ -1,4 +1,4 @@
-name: Test 7B Llama Models
+name: Test LLM Models on Main
 
 on:
   push:
