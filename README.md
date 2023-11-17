@@ -1,13 +1,13 @@
-# ASPEN: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization
+# ASPEN: Efficient LLM Model Fine-Tune via Multi-LoRA Optimization
 [![](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml/badge.svg)](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml)
 [![](https://img.shields.io/github/stars/TUDB-Labs/multi-lora-fine-tune?logo=GitHub)](https://github.com/TUDB-Labs/multi-lora-fine-tune/stargazers)
 [![](https://img.shields.io/github/license/TUDB-Labs/multi-lora-fine-tune)](http://www.apache.org/licenses/LICENSE-2.0)
 [![](https://img.shields.io/github/v/release/TUDB-Labs/multi-lora-fine-tune)](https://github.com/TUDB-Labs/multi-lora-fine-tune/releases/latest)
 [![](https://img.shields.io/github/languages/top/TUDB-Labs/multi-lora-fine-tune)](https://www.python.org/)  
 
-ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient multiple LoRA/QLoRA methods. Key features of ASPEN include:
+ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient multiple LoRA/QLoRA methods. Key features of ASPEN include:
 
-- Efficient LoRA/QLoRA: ASPEN optimizes the fine-tuning process, significantly reducing GPU memory usage by leveraging a shared frozen-based model.
+- Efficient LoRA/QLoRA: Optimizes the fine-tuning process, significantly reducing GPU memory usage by leveraging a shared frozen-based model.
 
 - Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/QLoRA adapters.
 
@@ -21,8 +21,10 @@ ASPEN is an open-source framework for fine-tuning Large Language Models (LLMs) u
 - [Copyright](#Copyright)
 
 ## Updates
-- [Beta]: Support multiple LLaMA fine-tuning
-- [Beta]: Support multiple ChatGLM fine-tuning
+- Support multiple LLaMA2 fine-tuning
+- Support multiple ChatGLM fine-tuning
+- Support multiple LLaMA fine-tuning
+- On the way, Baichuan
 
 ## Overview
 
