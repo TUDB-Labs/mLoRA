@@ -34,7 +34,7 @@ This picture shows the basic principle of Multi-LoRA.
 
 <div align="center"><img src="./assets/ASPEN-LoRA.png" width="50%"></div>
 The system overview of ASPEN is as follows.
-<div align="center"><img src="./assets/.png" width="50%"></div>
+<div align="center"><img src="./assets/overview.pdf" width="50%"></div>
 ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://developer.nvidia.com/cuda-toolkit) compatible GPUs.
 
 ### Main Contribution
