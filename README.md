@@ -33,7 +33,8 @@ ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning L
 This picture shows the basic principle of Multi-LoRA.
 
 <div align="center"><img src="./assets/ASPEN-LoRA.png" width="50%"></div>
-
+The system overview of ASPEN is as follows.
+<div align="center"><img src="./assets/.png" width="50%"></div>
 ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://developer.nvidia.com/cuda-toolkit) compatible GPUs.
 
 ### Main Contribution
