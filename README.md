@@ -50,7 +50,7 @@ Environment: NVIDIA RTX A6000 with Intel Xeon Silver 4314 on Ubuntu 22.04.3
 
 Baseline: We utilized the widely adopted [Alpaca-LoRA](https://github.com/tloen/alpaca-lora) as a foundation. On a single GPU, we independently ran multiple Alpaca-LoRA processes in parallel (marked as *Baseline@SYNC*) and sequentially (marked as *Baseline@SEQ*), forming two baseline methods for the experiments.
 
-#### Training Latency
+#### Training Latency and Throughput
 
 Method|Latency|Throughput
 :---:|:---:|:---:
@@ -59,12 +59,12 @@ Baseline@SYNC|9.85h|649.30 token/s
 ASPEN|9.46h|674.58 token/s
 
 We conducted four identical fine-tuning jobs with same dataset and same hyper-parameters, incorporating two baselines and ASPEN. During the experimental process, we collected the completion times for each task in the baseline methods and calculated the time taken by the slowest task as the *Training Latency*. As shown in Table, ASPEN exhibits lower *Training Latency* compared to both baseline methods. Specifically, ASPEN is 9.99% faster than *Baseline@SEQ* and 3.92% faster than *Baseline@SYNC*.
-
+<div align="center"><img src="./assets/throughput_compare.png" width="100%"></div>
 #### Video Memory Usage
 
-<div align="center"><img src="./assets/Exp-Mem.png" width="75%"></div>
+<div align="center"><img src="./assets/GPU_memory_usage.png" width="100%"></div>
 
-We conducted several fine-tuning jobs with same dataset and `batch_size = {4, 6, 8}`, incorporating  *Baseline@SYNC* and ASPEN. 
+We conducted several fine-tuning jobs with same dataset and `batch_size = {2,4, 6, 8}`, incorporating  *Baseline@SYNC* and ASPEN. 
 
 *Baseline@SYNC* triggered OOM error after 3 parallel tasks when batch size = 8, while ASPEN can handle twice that amount.
 
@@ -88,7 +88,7 @@ During the experimental process, we collected following metrics:
 All metrics are computed for each job. `M1, M2, M3` represent three batch strategies of ASPEN: *Optimal-Fit, Trivial, and Fast-Fit*. `BASELINE` denotes *Baseline@SEQ*.
 
 The *Optimal-Fit* strategy performs the best across all four metrics, while the other two strategies also outperform the baseline method other than training latency.
-
+<div align="center"><img src="./assets/strategy_compare.png" width="75%"></div>
 ### Use Cases:
 - Domain-Specific Fine-Tuning: This involves adapting a single model with various parameters particularly for one domain.
 - Cross-Domain Fine-Tuning: This method leverages the base model to fine-tune multiple models, each intended for a different domain.
