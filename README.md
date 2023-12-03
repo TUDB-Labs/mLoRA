@@ -30,11 +30,11 @@ ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning L
 
 **ASPEN** is a high-throughput LLM fine-tuning framework based on LoRA and QLoRA, compatible with HuggingFace-Transformers LLaMA Models and ChatGLM Models.
 
-This picture shows the basic principle of Multi-LoRA.
+This picture shows the basic principle of LoRA and Multi-LoRA.
 
-<div align="center"><img src="./assets/ASPEN-LoRA.png" width="50%"></div>
+<div align="center"><img src="./assets/LoRA_and_MultiLoRA.png" width="90%"></div>
 The system overview of ASPEN is as follows.
-<div align="center"><img src="./assets/system_overview.png" width="50%"></div>
+<div align="center"><img src="./assets/system_overview.png" width="100%"></div>
 ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://developer.nvidia.com/cuda-toolkit) compatible GPUs.
 
 ### Main Contribution
