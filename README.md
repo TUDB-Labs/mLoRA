@@ -60,8 +60,9 @@ ASPEN|9.46h|674.58 token/s
 
 We conducted four identical fine-tuning jobs with same dataset and same hyper-parameters, incorporating two baselines and ASPEN. During the experimental process, we collected the completion times for each task in the baseline methods and calculated the time taken by the slowest task as the *Training Latency*. As shown in Table, ASPEN exhibits lower *Training Latency* compared to both baseline methods. Specifically, ASPEN is 9.99% faster than *Baseline@SEQ* and 3.92% faster than *Baseline@SYNC*.
 <div align="center"><img src="./assets/throughput_compare.png" width="100%"></div>
-#### Video Memory Usage
 
+
+#### Video Memory Usage
 <div align="center"><img src="./assets/GPU_memory_usage.png" width="100%"></div>
 
 We conducted several fine-tuning jobs with same dataset and `batch_size = {2,4, 6, 8}`, incorporating  *Baseline@SYNC* and ASPEN. 
