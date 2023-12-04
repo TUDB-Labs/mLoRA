@@ -32,7 +32,7 @@ ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning L
 
 This picture shows the basic principle of LoRA and Multi-LoRA.
 
-<div align="center"><img src="./assets/LoRA_and_MultiLoRA.png" width="90%"></div>
+<div align="center"><img src="./assets/ASPEN-LoRA.png" width=70%"></div>
 The system overview of ASPEN is as follows.
 <div align="center"><img src="./assets/system_overview.png" width="100%"></div>
 ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://developer.nvidia.com/cuda-toolkit) compatible GPUs.
@@ -88,7 +88,6 @@ During the experimental process, we collected following metrics:
 All metrics are computed for each job. `M1, M2, M3` represent three batch strategies of ASPEN: *Optimal-Fit, Trivial, and Fast-Fit*. `BASELINE` denotes *Baseline@SEQ*.
 
 The *Optimal-Fit* strategy performs the best across all four metrics, while the other two strategies also outperform the baseline method other than training latency.
-<div align="center"><img src="./assets/strategy_compare.png" width="75%"></div>
 ### Use Cases:
 - Domain-Specific Fine-Tuning: This involves adapting a single model with various parameters particularly for one domain.
 - Cross-Domain Fine-Tuning: This method leverages the base model to fine-tune multiple models, each intended for a different domain.
