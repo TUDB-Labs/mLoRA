@@ -78,6 +78,7 @@ We conducted four identical fine-tuning jobs with same dataset and same hyper-pa
 <div align="center"><img src="./assets/throughput_compare.png" width="100%"></div>
 
 
+
 #### Video Memory Usage
 <div align="center"><img src="./assets/GPU_memory_usage.png" width="100%"></div>
 
@@ -124,7 +125,7 @@ The `mlora.py` code is a starting point for finetuning on various datasets.
 Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
 python mlora.py \
-  --base_model decapoda-research/llama-7b-hf \
+  --base_model yahma/llama-7b-hf \
   --config ./config/alpaca.json \
   --load_8bit
 ```
