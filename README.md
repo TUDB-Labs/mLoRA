@@ -14,6 +14,7 @@ ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning L
 ## Contents
 
 - [Updates](#updates)
+- [Supported Models](#Supported Models)
 - [Overview](#overview)
 - [Getting Started](#Quickstart)
 - [Installation](#Installation)
@@ -25,6 +26,21 @@ ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning L
 - Support multiple ChatGLM fine-tuning
 - Support multiple LLaMA fine-tuning
 - On the way, Baichuan
+
+## Supported Models
+
+|                                 | Model                                                      | Model size      |
+|---------------------------------|------------------------------------------------------------|-----------------|
+| <input type="checkbox" checked> | [ChatGLM](https://github.com/THUDM/ChatGLM-6B)             | 6B              |
+| <input type="checkbox" checked> | [ChatGLM2](https://github.com/THUDM/ChatGLM2-6B)           | 6B/12B          |
+| <input type="checkbox">         | [ChatGLM3](https://github.com/THUDM/ChatGLM3)              | 6B                 |                 |
+| <input type="checkbox" checked> | [LLaMA](https://github.com/facebookresearch/llama)         | 7B//13B/33B/65B |
+| <input type="checkbox" checked> | [LLaMA-2](https://huggingface.co/meta-llama)               | 7B/13B/70B      |
+| <input type="checkbox">         | [Baichuan](https://github.com/baichuan-inc/Baichuan-13B)   | 7B/13B          |
+| <input type="checkbox">         | [Baichuan2](https://github.com/baichuan-inc/Baichuan2)     | 7B/13B                  |
+
+> **Example:** Use our system  to improve the LLaMa-2 fine-tuning with less resources
+>https://www.kaggle.com/code/rraydata/multi-lora-example/notebook
 
 ## Overview
 
@@ -145,7 +161,7 @@ Submit a pull request with a detailed explanation of your changes.
 Please cite the repo if you use the code in this repo.
 ```bibtex
 @misc{Multi-LoRA,
-  author = {Zhengmao, Ye\textsuperscript{*} and Dengchun, Li\textsuperscript{*} and Tingfeng, Lan and Yanbo, Liang and Yexi, Jiang and Jie, Zuo and Hui, Lu and Lei, Duan and Mingjie, Tang},
+  author = {Zhengmao, Ye\textsuperscript{*} and Dengchun, Li\textsuperscript{*} and Jingqi, Tian and Tingfeng, Lan and Yanbo, Liang and Yexi, Jiang and Jie, Zuo and Hui, Lu and Lei, Duan and Mingjie, Tang},
   title = {ASPEN: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization},
   year = {2023},
   publisher = {GitHub},
