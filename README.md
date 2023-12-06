@@ -14,6 +14,7 @@ ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning L
 ## Contents
 
 - [Updates](#updates)
+- [Supported Models](#Models)
 - [Overview](#overview)
 - [Getting Started](#Quickstart)
 - [Installation](#Installation)
@@ -25,6 +26,21 @@ ASPEN (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning L
 - Support multiple ChatGLM fine-tuning
 - Support multiple LLaMA fine-tuning
 - On the way, Baichuan
+
+## Models
+
+|                                 | Model                                          | Model size      |
+|---------------------------------|------------------------------------------------|-----------------|
+| <input type="checkbox" checked> | [ChatGLM](https://github.com/THUDM/ChatGLM-6B) | 6B              |
+| <input type="checkbox" checked> | [ChatGLM2](https://github.com/THUDM/ChatGLM2-6B) | 6B/12B          |
+| <input type="checkbox">         | [ChatGLM3](https://github.com/THUDM/ChatGLM3)  | 6B                 |                 |
+| <input type="checkbox" checked> | [LLaMA](https://github.com/facebookresearch/llama) | 7B//13B/33B/65B |
+| <input type="checkbox" checked> | [LLaMA-2](https://huggingface.co/meta-llama)   | 7B/13B/70B      |
+| <input type="checkbox">         | [Baichuan](https://github.com/baichuan-inc/Baichuan-13B) | 7B/13B          |
+| <input type="checkbox">         | [Baichuan2](https://github.com/baichuan-inc/Baichuan2) | 7B/13B                  |
+
+> **Example:** Use our system  to improve the LLaMa-2 fine-tuning with less resources
+>https://www.kaggle.com/code/rraydata/multi-lora-example/notebook
 
 ## Overview
 
@@ -48,37 +64,38 @@ ASPEN requires [PyTorch](https://pytorch.org/) and [NVIDIA CUDA](https://develop
 
 Environment: NVIDIA RTX A6000 with Intel Xeon Silver 4314 on Ubuntu 22.04.3
 
-Baseline: We utilized the widely adopted [Alpaca-LoRA](https://github.com/tloen/alpaca-lora) as a foundation. On a single GPU, we independently ran multiple Alpaca-LoRA processes in parallel (marked as *Baseline@SYNC*) and sequentially (marked as *Baseline@SEQ*), forming two baseline methods for the experiments.
+Baseline: We utilized the widely adopted [Alpaca-LoRA](https://github.com/tloen/alpaca-lora) as a foundation. On a single GPU, we independently ran multiple Alpaca-LoRA processes in parallel (marked as *Baseline@Alpaca-Parallel*) and sequentially (marked as *Baseline@Alpaca-Seq*), forming two baseline methods for the experiments. We test this on A100, and rest of results are based on the same GPU configure.
 
 #### Training Latency and Throughput
 
 Method|Latency|Throughput
 :---:|:---:|:---:
-Baseline@SEQ|10.51h|608.41 token/s
-Baseline@SYNC|9.85h|649.30 token/s
+Baseline@Alpaca-Seq|10.51h|608.41 token/s
+Baseline@Alpaca-Parallel|9.85h|649.30 token/s
 ASPEN|9.46h|674.58 token/s
 
-We conducted four identical fine-tuning jobs with same dataset and same hyper-parameters, incorporating two baselines and ASPEN. During the experimental process, we collected the completion times for each task in the baseline methods and calculated the time taken by the slowest task as the *Training Latency*. As shown in Table, ASPEN exhibits lower *Training Latency* compared to both baseline methods. Specifically, ASPEN is 9.99% faster than *Baseline@SEQ* and 3.92% faster than *Baseline@SYNC*.
+We conducted four identical fine-tuning jobs with same dataset and same hyper-parameters, incorporating two baselines and ASPEN. During the experimental process, we collected the completion times for each task in the baseline methods and calculated the time taken by the slowest task as the *Training Latency*. As shown in Table, ASPEN exhibits lower *Training Latency* compared to both baseline methods. Specifically, ASPEN is 9.99% faster than *Baseline@Alpaca-Seq* and 3.92% faster than *Baseline@Alpaca-Parallel*.
 <div align="center"><img src="./assets/throughput_compare.png" width="100%"></div>
 
-#### Video Memory Usage
 
+
+#### Video Memory Usage
 <div align="center"><img src="./assets/GPU_memory_usage.png" width="100%"></div>
 
-We conducted several fine-tuning jobs with same dataset and `batch_size = {2,4, 6, 8}`, incorporating  *Baseline@SYNC* and ASPEN. 
+We conducted several fine-tuning jobs with same dataset and `batch_size = {2,4, 6, 8}`, incorporating  *Baseline@Alpaca-Parallel* and ASPEN. 
 
-*Baseline@SYNC* triggered OOM error after 3 parallel tasks when batch size = 8, while ASPEN can handle twice that amount.
+*Baseline@Alpaca-Parallel* triggered OOM error after 3 parallel tasks when batch size = 8, while ASPEN can handle twice that amount.
 
 #### Batching Strategies
 
 Method|Training Latency|Peak Memory Usage|Average GPU Utilization|Training Throughput
 :---:|:---:|:---:|:---:|:---:
-Baseline@SEQ|27.73h|10.68GB|79.39%|653.35 token/s
+Baseline@Alpaca-Seq|27.73h|10.68GB|79.39%|653.35 token/s
 ASPEN@M1|36.82h|23.82GB|96.52%|672.54 token/s
 ASPEN@M2|39.14h|23.86GB|96.41%|671.28 token/s
 ASPEN@M3|22.97h|23.85GB|95.22%|674.41 token/s
 
-We conducted four fine-tuning jobs with different dataset but same hyper-parameters, incorporating  *Baseline@SEQ* and ASPEN. 
+We conducted four fine-tuning jobs with different dataset but same hyper-parameters, incorporating  *Baseline@Alpaca-Seq* and ASPEN. 
 
 During the experimental process, we collected following metrics:
  + *Training Latency* = Job completion time
@@ -86,7 +103,7 @@ During the experimental process, we collected following metrics:
  + *Memory Usage* = Peak video memory usage
  + *GPU Utilization* = Average GPU utilization
 
-All metrics are computed for each job. `M1, M2, M3` represent three batch strategies of ASPEN: *Optimal-Fit, Trivial, and Fast-Fit*. `BASELINE` denotes *Baseline@SEQ*.
+All metrics are computed for each job. `M1, M2, M3` represent three batch strategies of ASPEN: *Optimal-Fit, Trivial, and Fast-Fit*. `BASELINE` denotes *Baseline@Alpaca-Seq*.
 
 The *Optimal-Fit* strategy performs the best across all four metrics, while the other two strategies also outperform the baseline method other than training latency.
 ### Use Cases:
@@ -145,7 +162,7 @@ Submit a pull request with a detailed explanation of your changes.
 Please cite the repo if you use the code in this repo.
 ```bibtex
 @misc{Multi-LoRA,
-  author = {Zhengmao, Ye\textsuperscript{*} and Dengchun, Li\textsuperscript{*} and Tingfeng, Lan and Yanbo, Liang and Yexi, Jiang and Jie, Zuo and Hui, Lu and Lei, Duan and Mingjie, Tang},
+  author = {Zhengmao, Ye\textsuperscript{*} and Dengchun, Li\textsuperscript{*} and Jingqi, Tian and Tingfeng, Lan and Yanbo, Liang and Yexi, Jiang and Jie, Zuo and Hui, Lu and Lei, Duan and Mingjie, Tang},
   title = {ASPEN: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization},
   year = {2023},
   publisher = {GitHub},
