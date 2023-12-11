@@ -1,4 +1,4 @@
-from aspen.dispatcher import TrainTask
+from mlora.dispatcher import TrainTask
 
 import json
 import unittest

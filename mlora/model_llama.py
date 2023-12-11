@@ -1,8 +1,8 @@
-from aspen.modelargs import LLMModelArgs, MultiLoraBatchData
-from aspen.checkpoint import CheckpointRecomputeFunction
-from aspen.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
-from aspen.model import LLMModel, RMSNorm
-from aspen.LoraLiner import Linear
+from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.checkpoint import CheckpointRecomputeFunction
+from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
+from mlora.model import LLMModel, RMSNorm
+from mlora.LoraLiner import Linear
 
 import torch
 import torch.nn.functional as F

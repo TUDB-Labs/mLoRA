@@ -18,7 +18,7 @@
 
 import json
 import torch
-import aspen
+import mlora
 import random
 import datetime
 import argparse
@@ -87,16 +87,16 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMModel]:
+def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     if args.model_type == "llama":
-        model = aspen.LlamaModel.from_pretrained(
+        model = mlora.LlamaModel.from_pretrained(
             path=args.base_model,
             device=args.device,
             bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
             log_fn=log
         )
     elif args.model_type == "chatglm":
-        model = aspen.ChatGLMModel.from_pretrained(
+        model = mlora.ChatGLMModel.from_pretrained(
             path=args.base_model,
             device=args.device,
             bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
@@ -105,14 +105,14 @@ def load_base_model(config: Dict[str, any]) -> Tuple[aspen.Tokenizer, aspen.LLMM
     else:
         raise f"unkown model type {args.model_type}"
 
-    tokenizer = aspen.Tokenizer(args.base_model)
+    tokenizer = mlora.Tokenizer(args.base_model)
 
     model.pad_token_id_ = tokenizer.pad_id_
 
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any], llm_model: aspen.LLMModel):
+def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel):
     if args.disable_lora:
         return
 
@@ -167,7 +167,7 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 
 
 # to get test result and want early stop it
-def train(config: Dict[str, any], llm_model: aspen.LLMModel, dispatcher: aspen.Dispatcher):
+def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
                             ] = llm_model.get_train_paramas(config)
@@ -179,7 +179,7 @@ def train(config: Dict[str, any], llm_model: aspen.LLMModel, dispatcher: aspen.D
 
     step_cnt = 0
     while not dispatcher.check_task_done():
-        input: aspen.MultiLoraBatchData = dispatcher.get_train_data()
+        input: mlora.MultiLoraBatchData = dispatcher.get_train_data()
         for lora in input.lora_batch_data_config_:
             all_optimizer[lora.adapter_name_].zero_grad()
 
@@ -212,20 +212,20 @@ def train(config: Dict[str, any], llm_model: aspen.LLMModel, dispatcher: aspen.D
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            aspen.save_lora_model(llm_model, config, f"{step_cnt}")
+            mlora.save_lora_model(llm_model, config, f"{step_cnt}")
 
-    aspen.save_lora_model(llm_model, config)
+    mlora.save_lora_model(llm_model, config)
 
 
 def inference(config: Dict[str, any],
-              llm_model: aspen.LLMModel,
-              tokenizer: aspen.Tokenizer):
+              llm_model: mlora.LLMModel,
+              tokenizer: mlora.Tokenizer):
     lora_adapter_num = len(config["lora"])
-    batch_data_config: List[aspen.LoraBatchDataConfig] = []
+    batch_data_config: List[mlora.LoraBatchDataConfig] = []
 
     for idx, lora_config in enumerate(config["lora"]):
         adapter_name = lora_config["name"]
-        batch_data_config.append(aspen.LoraBatchDataConfig(
+        batch_data_config.append(mlora.LoraBatchDataConfig(
             adapter_name, idx, idx + 1))
 
     inference_max_len = 128
@@ -240,7 +240,7 @@ def inference(config: Dict[str, any],
         while len(tokens) < inference_max_len:
             tokens.append(tokenizer.pad_id_)
 
-        input_data = aspen.MultiLoraBatchData(
+        input_data = mlora.MultiLoraBatchData(
             prompts_=[input_raw] * lora_adapter_num,
             lora_batch_data_config_=batch_data_config,
             batch_tokens_=[tokens] * lora_adapter_num,
@@ -287,5 +287,5 @@ if __name__ == "__main__":
     if args.inference:
         inference(config, model, tokenizer)
     else:
-        dispatcher = aspen.Dispatcher(config, tokenizer)
+        dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)

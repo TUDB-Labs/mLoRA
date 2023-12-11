@@ -2,7 +2,7 @@ import json
 import torch
 import argparse
 from peft import PeftModel
-from aspen.evaluator import Evaluator
+from mlora.evaluator import Evaluator
 from transformers import LlamaTokenizer, LlamaForCausalLM, BitsAndBytesConfig
 
 parser = argparse.ArgumentParser()
