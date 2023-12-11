@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aspen"
+name = "mlora"
 version = "0.1"
 description = "A tool for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently."
 readme = "README.md"
@@ -27,4 +27,4 @@ dependencies = [
 "Bug Tracker" = "https://github.com/TUDB-Labs/multi-lora-fine-tune/issues"
 
 [tool.setuptools.packages.find]
-include = ["aspen"]
+include = ["mlora"]

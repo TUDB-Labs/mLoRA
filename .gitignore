@@ -162,7 +162,7 @@ cython_debug/
 # IDEs
 .vscode/
 
-# ASPEN
+# m-LoRA
 __pycache__/
 *.egg-info/
 *.egg

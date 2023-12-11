@@ -274,7 +274,7 @@ def main(
                 label="Output",
             )
         ],
-        title="ASPEN LLM Evaluator",
+        title="m-LoRA LLM Evaluator",
         description="Evaluate basic LLaMA model and LoRA weights",  # noqa: E501
     ).queue().launch(server_name="0.0.0.0", share=share_gradio)
 

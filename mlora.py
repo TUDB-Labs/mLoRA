@@ -1,4 +1,4 @@
-# ASPEN: Efficient Multi-LoRA Fine Tuning with Shared-Based Model
+# m-LoRA: Efficient Multi-LoRA Fine Tuning with Shared-Based Model
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import argparse
 from typing import Dict, Tuple, List
 
 # Command Line Arguments
-parser = argparse.ArgumentParser(description='ASPEN main program')
+parser = argparse.ArgumentParser(description='m-LoRA main program')
 parser.add_argument('--base_model', type=str,
                     help='Path to or name of base model')
 parser.add_argument('--model_type', type=str, default="llama",
@@ -56,7 +56,7 @@ args = parser.parse_args()
 
 def log(msg: str):
     if args.log:
-        print('[%s] ASPEN: %s' %
+        print('[%s] m-LoRA: %s' %
               (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg))
 
 
@@ -64,7 +64,7 @@ if torch.cuda.is_available():
     log('NVIDIA CUDA initialized successfully.')
     log('Total %i GPU(s) detected.' % torch.cuda.device_count())
 else:
-    print('ASPEN requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
+    print('m-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
     exit(-1)
 
 
