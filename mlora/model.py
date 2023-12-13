@@ -83,8 +83,9 @@ def apply_rotary_emb_to_one(x: torch.Tensor, angle: Tuple[torch.Tensor, torch.Te
     return x
 
 
-class RMSNorm():
+class RMSNorm(torch.nn.Module):
     def __init__(self, weight: torch.Tensor, eps: float = 1e-6):
+        super().__init__()
         self.norm_eps_ = eps
         self.weight_ = weight
 
@@ -119,4 +120,8 @@ class LLMModel(metaclass=ABCMeta):
 
     @abstractclassmethod
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+        pass
+
+    @abstractclassmethod
+    def sequential_module(self) -> torch.nn.Sequential:
         pass
