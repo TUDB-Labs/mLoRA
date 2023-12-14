@@ -311,3 +311,6 @@ class ChatGLMModel(LLMModel):
                     lora_weight_dict[layer_prefix_name +
                                      f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
         return lora_weight_dict, target_modules
+
+    def sequential_module(self) -> torch.nn.Sequential:
+        pass
