@@ -146,7 +146,7 @@ You can also install m-LoRA into your environment:
 conda create -n mlora_env python=3.8
 conda activate mlora_env
 # Install requirements
-pip install -r requirements.txt
+pip install mlora
 ```
 After installation, you can use m-LoRA directly in your code:
 ```python
