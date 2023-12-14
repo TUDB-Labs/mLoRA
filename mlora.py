@@ -51,6 +51,7 @@ parser.add_argument('--seed', type=int, default=42,
 parser.add_argument('--log', type=bool, default=True,
                     help='Turn on or off log, default is true')
 
+# Parse command line arguments and store them in 'args'
 args = parser.parse_args()
 
 
