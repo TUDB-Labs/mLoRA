@@ -1,11 +1,10 @@
 import json
-import os
-import random
+import shlex
+import subprocess
 import threading
 import uuid
 
-from flask import Flask, render_template, request, stream_with_context, Response, jsonify
-import subprocess, time, shlex
+from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
@@ -84,12 +83,8 @@ def stop_finetune():
     process_info = processes.pop(process_id, None)
     if process_info:
         process_info['process'].terminate()  # 优雅地终止进程
-        file_name = process_id + '.json'
-        #os.remove(file_name)
         return jsonify({"message": "Process terminated"}), 200
     else:
-        file_name = process_id + '.json'
-        #os.remove(file_name)
         return jsonify({"error": "Process not found"}), 404
 
 
