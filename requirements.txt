@@ -11,3 +11,4 @@ nltk
 jieba
 rouge
 rouge_chinese
+flask
