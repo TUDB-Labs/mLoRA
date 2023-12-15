@@ -1,8 +1,8 @@
-from aspen.modelargs import LLMModelArgs, MultiLoraBatchData
-from aspen.checkpoint import CheckpointRecomputeFunction
-from aspen.model import LLMModel, RMSNorm
-from aspen.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
-from aspen.LoraLiner import Linear
+from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.checkpoint import CheckpointRecomputeFunction
+from mlora.model import LLMModel, RMSNorm
+from mlora.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
+from mlora.LoraLiner import Linear
 
 import torch
 import torch.nn.functional as F
@@ -311,3 +311,6 @@ class ChatGLMModel(LLMModel):
                     lora_weight_dict[layer_prefix_name +
                                      f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
         return lora_weight_dict, target_modules
+
+    def sequential_module(self) -> torch.nn.Sequential:
+        pass

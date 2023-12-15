@@ -1,8 +1,8 @@
-from aspen.modelargs import LLMModelArgs, MultiLoraBatchData
-from aspen.checkpoint import CheckpointRecomputeFunction
-from aspen.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
-from aspen.model import LLMModel, RMSNorm
-from aspen.LoraLiner import Linear
+from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.checkpoint import CheckpointRecomputeFunction
+from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
+from mlora.model import LLMModel, RMSNorm
+from mlora.LoraLiner import Linear
 
 import torch
 import torch.nn.functional as F
@@ -11,10 +11,34 @@ import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
 from typing import List, Dict, Tuple, Optional
+from collections import OrderedDict
 
 
-class Transformer():
+class Embedding(torch.nn.Module):
+    def __init__(self, embedding: torch.Tensor, pad_token: int):
+        super().__init__()
+        self.token_embedding_: torch.Tensor = embedding
+        self.padding_idx_: int = pad_token
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        data = F.embedding(tokens, self.token_embedding_,
+                           padding_idx=self.padding_idx_)
+        data.requires_grad_(True)
+        return data
+
+
+class OutputLayer(torch.nn.Module):
+    def __init__(self, weight: torch.Tensor):
+        super().__init__()
+        self.weight_: torch.Tensor = weight
+
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
+        return data @ self.weight_.transpose(0, 1)
+
+
+class Transformer(torch.nn.Module):
     def __init__(self, layer_id: int, args: LLMModelArgs):
+        super().__init__()
         # attention
         self.wq_: Linear = None  # dim * dim
         self.wk_: Linear = None  # dim * dim
@@ -112,14 +136,14 @@ class Transformer():
 class LlamaModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
         # weight
-        self.token_embedding_: torch.Tensor = None
+        self.token_embedding_: Embedding = None
 
         self.layers_: List[Transformer] = []
         for layer_id in range(args.n_layers_):
             self.layers_.append(Transformer(layer_id, args))
 
         self.norm_: RMSNorm = None          # dim
-        self.output_: torch.Tensor = None   # vocab size * dim
+        self.output_: OutputLayer = None   # vocab size * dim
 
         # cos and sin
         self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
@@ -143,8 +167,8 @@ class LlamaModel(LLMModel):
 
         # only for train
         mask = precompute_mask(input, self.n_heads_, self.device_)
-        data = F.embedding(tokens, self.token_embedding_,
-                           padding_idx=self.pad_token_id_).requires_grad_(True)
+
+        data = self.token_embedding_.forward(tokens)
 
         def create_forward_for_checkpoint(module: Transformer):
             def forward_for_checkpoint(*inputs):
@@ -160,7 +184,7 @@ class LlamaModel(LLMModel):
                     layer), data, mask, self.rope_angle_, input)
 
         data = self.norm_.forward(data)
-        data @= self.output_.transpose(0, 1)
+        data = self.output_.forward(data)
 
         return data
 
@@ -224,10 +248,15 @@ class LlamaModel(LLMModel):
 
         model = LlamaModel(llama_args)
 
-        model.token_embedding_ = llama_model.model.embed_tokens.weight.to(
+        embedding_weight = llama_model.model.embed_tokens.weight.to(
             device=device).requires_grad_(False)
-        model.output_ = llama_model.lm_head.weight.to(
+        model.token_embedding_ = Embedding(
+            embedding_weight, llama_args.pad_token_id_)
+
+        output_weight = llama_model.lm_head.weight.to(
             dtype=torch.float32, device=device).requires_grad_(False)
+        model.output_ = OutputLayer(output_weight)
+
         model.norm_ = RMSNorm(llama_model.model.norm.weight.to(
             device=device).requires_grad_(False), model.norm_eps_)
 
@@ -295,3 +324,21 @@ class LlamaModel(LLMModel):
                     lora_weight_dict[layer_prefix_name +
                                      f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
         return lora_weight_dict, target_modules
+
+    def sequential_module(self) -> torch.nn.Sequential:
+        seq_module = OrderedDict()
+        seq_module.update({"embedding": self.token_embedding_})
+        seq_module.move_to_end("embedding")
+
+        for index, layer in enumerate(self.layers_):
+            layer_name = f"layer{index}"
+            seq_module.update({layer_name: layer})
+            seq_module.move_to_end(layer_name)
+
+        seq_module.update({"norm": self.norm_})
+        seq_module.move_to_end("norm")
+
+        seq_module.update({"output": self.output_})
+        seq_module.move_to_end("output")
+
+        return torch.nn.Sequential(seq_module)

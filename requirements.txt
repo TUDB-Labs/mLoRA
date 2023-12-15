@@ -12,3 +12,5 @@ jieba
 rouge
 rouge_chinese
 flask
+peft
+protobuf==3.20.1
