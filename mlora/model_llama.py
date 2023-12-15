@@ -36,6 +36,23 @@ class OutputLayer(torch.nn.Module):
         return data @ self.weight_.transpose(0, 1)
 
 
+class RMSNormLayer(torch.nn.Module):
+    def __init__(self, weight: torch.Tensor, eps: float = 1e-6):
+        super().__init__()
+        self.norm_eps_ = eps
+        self.weight_ = weight
+
+    def _norm(self, data: torch.Tensor) -> torch.Tensor:
+        return data * torch.rsqrt(+ self.norm_eps_)
+
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
+        input_dtype = data.dtype
+        v = data.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        data = data * torch.rsqrt(v + self.norm_eps_)
+
+        return (self.weight_ * data).to(input_dtype)
+
+
 class Transformer(torch.nn.Module):
     def __init__(self, layer_id: int, args: LLMModelArgs):
         super().__init__()
@@ -133,6 +150,28 @@ class Transformer(torch.nn.Module):
         return data
 
 
+class LlamaSequentialWrapper(torch.nn.Module):
+    def __init__(self, module: torch.nn.Module):
+        super().__init__()
+        self.wrapper_module_ = module
+
+    def name(self) -> str:
+        return type(self.wrapper_module_).__name__
+
+    def forward(self, input: Tuple) -> Tuple:
+        module_name = self.name()
+
+        if module_name == "Embedding" or module_name == "RMSNormLayer" or module_name == "OutputLayer":
+            output = self.wrapper_module_.forward(input[0])
+            return (output, ) + input[1:]
+        elif module_name == "Transformer":
+            output = CheckpointRecomputeFunction.apply(
+                self.wrapper_module_.forward, *input)
+            return (output, ) + input[1:]
+        else:
+            raise f"module invalid: {module_name}"
+
+
 class LlamaModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
         # weight
@@ -142,7 +181,7 @@ class LlamaModel(LLMModel):
         for layer_id in range(args.n_layers_):
             self.layers_.append(Transformer(layer_id, args))
 
-        self.norm_: RMSNorm = None          # dim
+        self.norm_: RMSNormLayer = None    # dim
         self.output_: OutputLayer = None   # vocab size * dim
 
         # cos and sin
@@ -168,25 +207,14 @@ class LlamaModel(LLMModel):
         # only for train
         mask = precompute_mask(input, self.n_heads_, self.device_)
 
-        data = self.token_embedding_.forward(tokens)
+        seq_module = self.sequential_module()
 
-        def create_forward_for_checkpoint(module: Transformer):
-            def forward_for_checkpoint(*inputs):
-                return module.forward(*inputs)
-            return forward_for_checkpoint
+        data = (tokens, mask, self.rope_angle_, input)
 
-        for layer in self.layers_:
-            # use CheckpointOffloadFunction to use offload mode
-            if input.inference_model_:
-                data = layer.forward(data, mask, self.rope_angle_, input)
-            else:
-                data = CheckpointRecomputeFunction.apply(create_forward_for_checkpoint(
-                    layer), data, mask, self.rope_angle_, input)
+        for seq_layer in seq_module:
+            data = seq_layer.forward(data)
 
-        data = self.norm_.forward(data)
-        data = self.output_.forward(data)
-
-        return data
+        return data[0]
 
     def init_lora_weight(self, adapter_name: str,
                          r: int,
@@ -257,8 +285,9 @@ class LlamaModel(LLMModel):
             dtype=torch.float32, device=device).requires_grad_(False)
         model.output_ = OutputLayer(output_weight)
 
-        model.norm_ = RMSNorm(llama_model.model.norm.weight.to(
-            device=device).requires_grad_(False), model.norm_eps_)
+        norm_weight = llama_model.model.norm.weight.to(
+            device=device).requires_grad_(False)
+        model.norm_ = RMSNormLayer(norm_weight, model.norm_eps_)
 
         for idx, layer in enumerate(llama_model.model.layers):
             model.layers_[idx].wq_ = Linear(
@@ -327,18 +356,20 @@ class LlamaModel(LLMModel):
 
     def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()
-        seq_module.update({"embedding": self.token_embedding_})
+
+        seq_module.update(
+            {"embedding": LlamaSequentialWrapper(self.token_embedding_)})
         seq_module.move_to_end("embedding")
 
         for index, layer in enumerate(self.layers_):
             layer_name = f"layer{index}"
-            seq_module.update({layer_name: layer})
+            seq_module.update({layer_name: LlamaSequentialWrapper(layer)})
             seq_module.move_to_end(layer_name)
 
-        seq_module.update({"norm": self.norm_})
+        seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
         seq_module.move_to_end("norm")
 
-        seq_module.update({"output": self.output_})
+        seq_module.update({"output": LlamaSequentialWrapper(self.output_)})
         seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)
