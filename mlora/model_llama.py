@@ -165,8 +165,11 @@ class LlamaSequentialWrapper(torch.nn.Module):
             output = self.wrapper_module_.forward(input[0])
             return (output, ) + input[1:]
         elif module_name == "Transformer":
-            output = CheckpointRecomputeFunction.apply(
-                self.wrapper_module_.forward, *input)
+            if input[-1]:
+                output = CheckpointRecomputeFunction.apply(
+                    self.wrapper_module_.forward, *input[:-1])
+            else:
+                output = self.wrapper_module_.forward(*input[:-1])
             return (output, ) + input[1:]
         else:
             raise f"module invalid: {module_name}"
@@ -209,7 +212,7 @@ class LlamaModel(LLMModel):
 
         seq_module = self.sequential_module()
 
-        data = (tokens, mask, self.rope_angle_, input)
+        data = (tokens, mask, self.rope_angle_, input, True)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
