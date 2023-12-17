@@ -32,6 +32,7 @@
         .form-group {
             margin-bottom: 15px;
         }
+
         .form-row {
             display: flex;
             justify-content: space-between;
@@ -43,6 +44,7 @@
             padding: 0 10px;
             box-sizing: border-box;
         }
+
         .form-group label {
             display: block;
             margin-bottom: 5px;
@@ -58,6 +60,7 @@
             border-radius: 4px;
             box-sizing: border-box;
         }
+
         .form-group label {
             display: block;
             margin-bottom: 5px;
@@ -65,6 +68,7 @@
             font-size: 16px; /* 更大的字体大小 */
             font-weight: 500; /* 字体加粗 */
         }
+
         input[type="submit"],
         button {
             background-color: #007bff;
@@ -81,6 +85,7 @@
             width: auto; /* 自动宽度，根据内容调整 */
             box-sizing: border-box; /* 盒模型 */
         }
+
         #stopButton {
             background-color: #007bff;
             color: white;
@@ -162,12 +167,15 @@
         }
     </style>
 </head>
-    <script>
-        function addLora() {
-            const loraContainer = document.getElementById('loraContainer');
-            const loraIndex = loraContainer.children.length;
-            const loraDiv = document.createElement('div');
-            loraDiv.classList.add('lora-item');
+<script>
+    function addLora() {
+        const loraContainer = document.getElementById('loraContainer');
+        const loraIndex = loraContainer.children.length;
+        const loraDiv = document.createElement('div');
+        loraDiv.classList.add('lora-item');
+        //获取model_type的值
+        const model_type = document.getElementById('model_type').value;
+        if (model_type === 'llama'){
             loraDiv.innerHTML = `
                 <h3>LoRA ${loraIndex}</h3>
                 <label for="name_${loraIndex}">Name:</label>
@@ -246,203 +254,357 @@
                 <button type="button" onclick="addMultipleLoras(${loraIndex})">Add Multiple LoRAs</button>
                 <br><br>
             `;
-            loraContainer.appendChild(loraDiv);
-            let lang = document.getElementById('languageSelect').value;
-            changeLanguageLora(lang, loraIndex);
-        }
+        }else if (model_type === 'chatglm'){
+            loraDiv.innerHTML = `
+                <h3>LoRA ${loraIndex}</h3>
+                <label for="name_${loraIndex}">Name:</label>
+                <input type="text" id="name_${loraIndex}" name="lora[${loraIndex}][name]" required value="lora_${loraIndex}"><br><br>
 
-        function removeLora(button) {
-            button.closest('.lora-item').remove();
-        }
-        function addMultipleLoras(index) {
-            const numLorasToAdd = document.getElementById('numLorasToAdd').value;
-            const loraContainer = document.getElementById('loraContainer');
-            const loraCount = loraContainer.children.length;
+                <label for="output_${loraIndex}">Output:</label>
+                <input type="text" id="output_${loraIndex}" name="lora[${loraIndex}][output]" required value="lora_${loraIndex}"><br><br>
 
-            // 确保至少有一个LoRA配置存在
-            if (loraCount === 0) {
-                // 如果没有任何LoRA配置，只需添加指定数量的新LoRA配置
-                for (let i = 0; i < numLorasToAdd; i++) {
-                    addLora();
+                <label for="optim_${loraIndex}">Optim:</label>
+                <input type="text" id="optim_${loraIndex}" name="lora[${loraIndex}][optim]" required value="sgd"><br><br>
+
+                <label for="lr_${loraIndex}">Learning Rate:</label>
+                <input type="number" step="any" id="lr_${loraIndex}" name="lora[${loraIndex}][lr]" required value=0.01><br><br>
+
+                <label for="momentum_${loraIndex}">Momentum:</label>
+                <input type="number" step="any" id="momentum_${loraIndex}" name="lora[${loraIndex}][momentum]" required  value=0.9><br><br>
+
+                <label for="batch_size_${loraIndex}">Batch Size:</label>
+                <input type="number" id="batch_size_${loraIndex}" name="lora[${loraIndex}][batch_size]" required value=16><br><br>
+
+                <label for="micro_batch_size_${loraIndex}">Micro Batch Size:</label>
+                <input type="number" id="micro_batch_size_${loraIndex}" name="lora[${loraIndex}][micro_batch_size]" required value=4><br><br>
+
+                <label for="test_batch_size_${loraIndex}">Test Batch Size:</label>
+                <input type="number" id="test_batch_size_${loraIndex}" name="lora[${loraIndex}][test_batch_size]" required value=64><br><br>
+
+                <label for="num_epochs_${loraIndex}">Number of Epochs:</label>
+                <input type="number" id="num_epochs_${loraIndex}" name="lora[${loraIndex}][num_epochs]" required value=3><br><br>
+
+                <label for="r_${loraIndex}">R:</label>
+                <input type="number" id="r_${loraIndex}" name="lora[${loraIndex}][r]" required value=8><br><br>
+
+                <label for="alpha_${loraIndex}">Alpha:</label>
+                <input type="number" id="alpha_${loraIndex}" name="lora[${loraIndex}][alpha]" required value=16><br><br>
+
+                <label for="dropout_${loraIndex}">Dropout:</label>
+                <input type="number" step="any" id="dropout_${loraIndex}" name="lora[${loraIndex}][dropout]" required value=0.05><br><br>
+
+                <div id="target_modules_container_${loraIndex}" class="target-modules-container">
+                    <h4>Target Modules ${loraIndex}</h4>
+
+                    <label for="qkv_${loraIndex}">q_proj:</label>
+                    <input type="checkbox" id="qkv_${loraIndex}" name="lora[${loraIndex}][target_modules][qkv]" checked><br><br>
+                    <label for="dense_${loraIndex}">dense:</label>
+                    <input type="checkbox" id="dense_${loraIndex}" name="lora[${loraIndex}][target_modules][dense]" checked><br><br>
+                    <label for="mlp_in_${loraIndex}">mlp_in:</label>
+                    <input type="checkbox" id="mlp_in_${loraIndex}" name="lora[${loraIndex}][target_modules][mlp_in]" checked><br><br>
+                    <label for="mlp_out_${loraIndex}">mlp_out:</label>
+                    <input type="checkbox" id="mlp_out_${loraIndex}" name="lora[${loraIndex}][target_modules][mlp_out]" checked><br><br>
+                </div>
+                <label for="data_${loraIndex}">Data:</label>
+                <input type="text" id="data_${loraIndex}" name="lora[${loraIndex}][data]" ><br><br>
+
+                <label for="test_data_${loraIndex}">Test Data:</label>
+                <input type="text" id="test_data_${loraIndex}" name="lora[${loraIndex}][test_data]" ><br><br>
+
+                <label for="prompt_${loraIndex}">Prompt:</label>
+                <input type="text" id="prompt_${loraIndex}" name="lora[${loraIndex}][prompt]" ><br><br>
+
+                <label for="group_by_length_${loraIndex}">Group by Length:</label>
+                <input type="checkbox" id="group_by_length_${loraIndex}" name="lora[${loraIndex}][group_by_length]"><br><br>
+
+                <label for="expand_side_${loraIndex}">Expand Side:</label>
+                <select id="expand_side_${loraIndex}" name="lora[${loraIndex}][expand_side]">
+                    <option value="right">Right</option>
+                    <option value="left">Left</option>
+                </select><br><br>
+
+                <button type="button" onclick="removeLora(this)">Remove LoRA</button><br><br>
+                <label for="numLorasToAdd">Number of LoRAs to add:</label>
+                <input type="number" id="numLorasToAdd" name="numLorasToAdd" value="1" min="1"><br><br>
+                <button type="button" onclick="addMultipleLoras(${loraIndex})">Add Multiple LoRAs</button>
+                <br><br>
+            `;
+        }else {
+            loraDiv.innerHTML = `
+                <h3>LoRA ${loraIndex}</h3>
+                <label for="name_${loraIndex}">Name:</label>
+                <input type="text" id="name_${loraIndex}" name="lora[${loraIndex}][name]" required value="lora_${loraIndex}"><br><br>
+
+                <label for="output_${loraIndex}">Output:</label>
+                <input type="text" id="output_${loraIndex}" name="lora[${loraIndex}][output]" required value="lora_${loraIndex}"><br><br>
+
+                <label for="optim_${loraIndex}">Optim:</label>
+                <input type="text" id="optim_${loraIndex}" name="lora[${loraIndex}][optim]" required value="sgd"><br><br>
+
+                <label for="lr_${loraIndex}">Learning Rate:</label>
+                <input type="number" step="any" id="lr_${loraIndex}" name="lora[${loraIndex}][lr]" required value=0.01><br><br>
+
+                <label for="momentum_${loraIndex}">Momentum:</label>
+                <input type="number" step="any" id="momentum_${loraIndex}" name="lora[${loraIndex}][momentum]" required  value=0.9><br><br>
+
+                <label for="batch_size_${loraIndex}">Batch Size:</label>
+                <input type="number" id="batch_size_${loraIndex}" name="lora[${loraIndex}][batch_size]" required value=16><br><br>
+
+                <label for="micro_batch_size_${loraIndex}">Micro Batch Size:</label>
+                <input type="number" id="micro_batch_size_${loraIndex}" name="lora[${loraIndex}][micro_batch_size]" required value=4><br><br>
+
+                <label for="test_batch_size_${loraIndex}">Test Batch Size:</label>
+                <input type="number" id="test_batch_size_${loraIndex}" name="lora[${loraIndex}][test_batch_size]" required value=64><br><br>
+
+                <label for="num_epochs_${loraIndex}">Number of Epochs:</label>
+                <input type="number" id="num_epochs_${loraIndex}" name="lora[${loraIndex}][num_epochs]" required value=3><br><br>
+
+                <label for="r_${loraIndex}">R:</label>
+                <input type="number" id="r_${loraIndex}" name="lora[${loraIndex}][r]" required value=8><br><br>
+
+                <label for="alpha_${loraIndex}">Alpha:</label>
+                <input type="number" id="alpha_${loraIndex}" name="lora[${loraIndex}][alpha]" required value=16><br><br>
+
+                <label for="dropout_${loraIndex}">Dropout:</label>
+                <input type="number" step="any" id="dropout_${loraIndex}" name="lora[${loraIndex}][dropout]" required value=0.05><br><br>
+
+                <div id="target_modules_container_${loraIndex}" class="target-modules-container">
+                    <h4>Target Modules ${loraIndex}</h4>
+
+                    <label for="q_proj_${loraIndex}">q_proj:</label>
+                    <input type="checkbox" id="q_proj_${loraIndex}" name="lora[${loraIndex}][target_modules][q_proj]" checked><br><br>
+                    <label for="v_proj_${loraIndex}">v_proj:</label>
+                    <input type="checkbox" id="v_proj_${loraIndex}" name="lora[${loraIndex}][target_modules][v_proj]" checked><br><br>
+                    <label for="o_proj_${loraIndex}">o_proj:</label>
+                    <input type="checkbox" id="o_proj_${loraIndex}" name="lora[${loraIndex}][target_modules][o_proj]" checked><br><br>
+                    <label for="w1_proj_${loraIndex}">w1_proj:</label>
+                    <input type="checkbox" id="w1_proj_${loraIndex}" name="lora[${loraIndex}][target_modules][w1_proj]" ><br><br>
+                    <label for="w2_proj_${loraIndex}">w2_proj:</label>
+                    <input type="checkbox" id="w2_proj_${loraIndex}" name="lora[${loraIndex}][target_modules][w2_proj]" ><br><br>
+                    <label for="w3_proj_${loraIndex}">w3_proj:</label>
+                    <input type="checkbox" id="w3_proj_${loraIndex}" name="lora[${loraIndex}][target_modules][w3_proj]" ><br><br>
+                </div>
+                <label for="data_${loraIndex}">Data:</label>
+                <input type="text" id="data_${loraIndex}" name="lora[${loraIndex}][data]" ><br><br>
+
+                <label for="test_data_${loraIndex}">Test Data:</label>
+                <input type="text" id="test_data_${loraIndex}" name="lora[${loraIndex}][test_data]" ><br><br>
+
+                <label for="prompt_${loraIndex}">Prompt:</label>
+                <input type="text" id="prompt_${loraIndex}" name="lora[${loraIndex}][prompt]" ><br><br>
+
+                <label for="group_by_length_${loraIndex}">Group by Length:</label>
+                <input type="checkbox" id="group_by_length_${loraIndex}" name="lora[${loraIndex}][group_by_length]"><br><br>
+
+                <label for="expand_side_${loraIndex}">Expand Side:</label>
+                <select id="expand_side_${loraIndex}" name="lora[${loraIndex}][expand_side]">
+                    <option value="right">Right</option>
+                    <option value="left">Left</option>
+                </select><br><br>
+
+                <button type="button" onclick="removeLora(this)">Remove LoRA</button><br><br>
+                <label for="numLorasToAdd">Number of LoRAs to add:</label>
+                <input type="number" id="numLorasToAdd" name="numLorasToAdd" value="1" min="1"><br><br>
+                <button type="button" onclick="addMultipleLoras(${loraIndex})">Add Multiple LoRAs</button>
+                <br><br>
+            `;
+        }
+        loraContainer.appendChild(loraDiv);
+    }
+
+    function removeLora(button) {
+        button.closest('.lora-item').remove();
+    }
+
+    function addMultipleLoras(index) {
+        const numLorasToAdd = document.getElementById('numLorasToAdd').value;
+        const loraContainer = document.getElementById('loraContainer');
+        const loraCount = loraContainer.children.length;
+
+        // 确保至少有一个LoRA配置存在
+        if (loraCount === 0) {
+            // 如果没有任何LoRA配置，只需添加指定数量的新LoRA配置
+            for (let i = 0; i < numLorasToAdd; i++) {
+                addLora();
+            }
+        } else {
+            // 获取最后一个LoRA配置的参数
+            const lastLoraDiv = loraContainer.children[index];
+            const lastLoraInputs = lastLoraDiv.querySelectorAll('input[type="text"], input[type="number"], select, input[type="checkbox"]');
+
+            const lastLoraParams = {};
+            lastLoraInputs.forEach(input => {
+                if (input.type === 'checkbox') {
+                    lastLoraParams[input.id] = input.checked;
+                } else {
+                    lastLoraParams[input.id] = input.value;
                 }
-            } else {
-                // 获取最后一个LoRA配置的参数
-                const lastLoraDiv = loraContainer.children[index];
-                const lastLoraInputs = lastLoraDiv.querySelectorAll('input[type="text"], input[type="number"], select, input[type="checkbox"]');
+            });
 
-                const lastLoraParams = {};
-                lastLoraInputs.forEach(input => {
+            for (let i = 0; i < numLorasToAdd; i++) {
+                addLora();
+
+                // 获取新添加的LoRA配置
+                const newLoraIndex = loraContainer.children.length - 1;
+                const newLoraDiv = loraContainer.children[newLoraIndex];
+                const newLoraInputs = newLoraDiv.querySelectorAll('input[type="text"], input[type="number"], select, input[type="checkbox"]');
+
+                // 设置新LoRA配置的参数
+                newLoraInputs.forEach(input => {
+                    const paramId = input.id.replace(new RegExp(`_${newLoraIndex}$`), `_${index}`);
                     if (input.type === 'checkbox') {
-                        lastLoraParams[input.id] = input.checked;
-                    } else {
-                        lastLoraParams[input.id] = input.value;
+                        input.checked = lastLoraParams[paramId];
+                    } else if (input.type === 'text' || input.type === 'number') {
+                        if (input.id.includes('name_') || input.id.includes('output_')) {
+                            input.value = `lora_${newLoraIndex}`; // 设置新的名称
+                        } else {
+                            input.value = lastLoraParams[paramId];
+                        }
                     }
                 });
+            }
+        }
+    }
 
-                for (let i = 0; i < numLorasToAdd; i++) {
-                    addLora();
+    function generateJSON() {
+        const logContent = document.getElementById('logContent');
+        logContent.textContent = '';
+        const form = document.getElementById('jsonForm');
+        const formData = new FormData(form);
+        console.log(formData)
+        const formProps = Object.fromEntries(formData.entries());
 
-                    // 获取新添加的LoRA配置
-                    const newLoraIndex = loraContainer.children.length - 1;
-                    const newLoraDiv = loraContainer.children[newLoraIndex];
-                    const newLoraInputs = newLoraDiv.querySelectorAll('input[type="text"], input[type="number"], select, input[type="checkbox"]');
+        // Create JSON object
+        let json = {
+            base_model: formProps.base_model,
+            model_type: formProps.model_type,
+            inference: formProps.inference,
+            load_lora: formProps.load_lora,
+            disable_lora: formProps.disable_lora,
+            tokenizer: formProps.tokenizer,
+            load_8bit: formProps.load_8bit,
+            load_4bit: formProps.load_4bit,
+            device: formProps.device,
+            seed: parseInt(formProps.seed),
+            log: formProps.log
+        };
 
-                    // 设置新LoRA配置的参数
-                    newLoraInputs.forEach(input => {
-                        const paramId = input.id.replace(new RegExp(`_${newLoraIndex}$`), `_${index}`);
-                        if (input.type === 'checkbox') {
-                            input.checked = lastLoraParams[paramId];
-                        } else if (input.type === 'text' || input.type === 'number') {
-                            if (input.id.includes('name_') || input.id.includes('output_')) {
-                                input.value = `lora_${newLoraIndex}`; // 设置新的名称
-                            } else {
-                                input.value = lastLoraParams[paramId];
-                            }
+        let config = {
+            cutoff_len: parseInt(formProps.cutoff_len),
+            save_step: parseInt(formProps.save_step),
+            early_stop_test_step: parseInt(formProps.early_stop_test_step),
+            train_lora_candidate_num: parseInt(formProps.train_lora_candidate_num),
+            train_lora_simultaneously_num: parseInt(formProps.train_lora_simultaneously_num),
+            train_strategy: formProps.train_strategy,
+            lora: []
+        }
+
+        // Add LoRA objects
+        const loraItems = document.querySelectorAll('.lora-item');
+        loraItems.forEach((loraDiv, index) => {
+            const targetModulesContainer = document.getElementById(`target_modules_container_${index}`);
+            const targetModulesInputs = targetModulesContainer.querySelectorAll('input');
+            const targetModules = {};
+
+            targetModulesInputs.forEach(input => {
+                const name = input.name.match(/\[target_modules\]\[(.*?)\]$/)[1];
+                targetModules[name] = input.value;
+            });
+            const loraData = {
+                name: formProps[`lora[${index}][name]`],
+                output: formProps[`lora[${index}][output]`],
+                optim: formProps[`lora[${index}][optim]`],
+                lr: parseFloat(formProps[`lora[${index}][lr]`]),
+                momentum: parseFloat(formProps[`lora[${index}][momentum]`]),
+                batch_size: parseInt(formProps[`lora[${index}][batch_size]`]),
+                micro_batch_size: parseInt(formProps[`lora[${index}][micro_batch_size]`]),
+                test_batch_size: parseInt(formProps[`lora[${index}][test_batch_size]`]),
+                num_epochs: parseInt(formProps[`lora[${index}][num_epochs]`]),
+                r: parseInt(formProps[`lora[${index}][r]`]),
+                alpha: parseInt(formProps[`lora[${index}][alpha]`]),
+                dropout: parseFloat(formProps[`lora[${index}][dropout]`]),
+                target_modules: targetModules,
+                data: formProps[`lora[${index}][data]`],
+                test_data: formProps[`lora[${index}][test_data]`],
+                prompt: formProps[`lora[${index}][prompt]`],
+                group_by_length: formProps[`lora[${index}][group_by_length]`] === 'on',
+                expand_side: formProps[`lora[${index}][expand_side]`]
+            };
+            config.lora.push(loraData);
+        });
+        json.config = config;
+        // Convert JSON object to string
+        const jsonString = JSON.stringify(json, null, 2);
+        console.log(jsonString)
+        // Send JSON string to server
+        // Here you would use something like fetch or XMLHttpRequest to send the data
+
+        const curl = "/run/finetune";
+        let requestInstance = new Request(curl, {
+            method: 'post',
+            headers: {
+                'Content-Type': 'application/json;charset=utf-8'
+            },
+            body: jsonString
+        })
+        fetch(requestInstance).then(res => res.json())
+            .then(data => {
+                const processId = data.process_id;
+                const logInterval = setInterval(() => {
+                    let request = new Request("/getlog?process_id=" + processId, {
+                        method: 'get',
+                        headers: {
+                            'Content-Type': 'application/json;charset=utf-8'
                         }
                     });
-                }
-            }
-        }
-        function generateJSON() {
-            const logContent = document.getElementById('logContent');
-            logContent.textContent = '';
-            const form = document.getElementById('jsonForm');
-            const formData = new FormData(form);
-            console.log(formData)
-            const formProps = Object.fromEntries(formData.entries());
-
-            // Create JSON object
-            let json = {
-                base_model: formProps.base_model,
-                model_type: formProps.model_type,
-                inference: formProps.inference,
-                load_lora: formProps.load_lora,
-                disable_lora: formProps.disable_lora,
-                tokenizer: formProps.tokenizer,
-                load_8bit: formProps.load_8bit,
-                load_4bit: formProps.load_4bit,
-                device: formProps.device,
-                seed: parseInt(formProps.seed),
-                log: formProps.log
-            };
-
-            let config = {
-                cutoff_len: parseInt(formProps.cutoff_len),
-                save_step: parseInt(formProps.save_step),
-                early_stop_test_step: parseInt(formProps.early_stop_test_step),
-                train_lora_candidate_num: parseInt(formProps.train_lora_candidate_num),
-                train_lora_simultaneously_num: parseInt(formProps.train_lora_simultaneously_num),
-                train_strategy: formProps.train_strategy,
-                lora: []
-            }
-
-            // Add LoRA objects
-            const loraItems = document.querySelectorAll('.lora-item');
-            loraItems.forEach((loraDiv, index) => {
-                const targetModulesContainer = document.getElementById(`target_modules_container_${index}`);
-                const targetModulesInputs = targetModulesContainer.querySelectorAll('input');
-                const targetModules = {};
-
-                targetModulesInputs.forEach(input => {
-                    const name = input.name.match(/\[target_modules\]\[(.*?)\]$/)[1];
-                    targetModules[name] = input.value;
-                });
-                const loraData = {
-                    name: formProps[`lora[${index}][name]`],
-                    output: formProps[`lora[${index}][output]`],
-                    optim: formProps[`lora[${index}][optim]`],
-                    lr: parseFloat(formProps[`lora[${index}][lr]`]),
-                    momentum: parseFloat(formProps[`lora[${index}][momentum]`]),
-                    batch_size: parseInt(formProps[`lora[${index}][batch_size]`]),
-                    micro_batch_size: parseInt(formProps[`lora[${index}][micro_batch_size]`]),
-                    test_batch_size: parseInt(formProps[`lora[${index}][test_batch_size]`]),
-                    num_epochs: parseInt(formProps[`lora[${index}][num_epochs]`]),
-                    r: parseInt(formProps[`lora[${index}][r]`]),
-                    alpha: parseInt(formProps[`lora[${index}][alpha]`]),
-                    dropout: parseFloat(formProps[`lora[${index}][dropout]`]),
-                    target_modules: targetModules,
-                    data: formProps[`lora[${index}][data]`],
-                    test_data: formProps[`lora[${index}][test_data]`],
-                    prompt: formProps[`lora[${index}][prompt]`],
-                    group_by_length: formProps[`lora[${index}][group_by_length]`] === 'on',
-                    expand_side: formProps[`lora[${index}][expand_side]`]
-                };
-                config.lora.push(loraData);
-            });
-            json.config = config;
-            // Convert JSON object to string
-            const jsonString = JSON.stringify(json, null, 2);
-
-            // Send JSON string to server
-            // Here you would use something like fetch or XMLHttpRequest to send the data
-
-            const curl = "/run/finetune";
-            let requestInstance = new Request(curl, {
-                method: 'post',
-                headers: {
-                    'Content-Type': 'application/json;charset=utf-8'
-                },
-                body: jsonString
-            })
-            fetch(requestInstance).then(res => res.json())
-                .then(data => {
-                    const processId = data.process_id;
-                    const logInterval = setInterval(() => {
-                        let request = new Request("/getlog?process_id=" + processId, {
-                            method: 'get',
-                            headers: {
-                                'Content-Type': 'application/json;charset=utf-8'
-                            }
+                    fetch(request).then(res => res.json()).then(data2 => {
+                        console.log(data2);
+                        const logContent = document.getElementById('logContent');
+                        logContent.innerText += data2.join('\n'); // 使用innerText
+                        // 自动滚动到底部
+                        const logContainer = document.getElementById('logContainer');
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    })
+                        .catch(error => {
+                            console.error("Error fetching log:", error);
+                            clearInterval(logInterval); // 如果发生错误，停止定时器
                         });
-                        fetch(request).then(res => res.json()).then(data2 => {
-                            console.log(data2);
-                            const logContent = document.getElementById('logContent');
-                            logContent.innerText += data2.join('\n'); // 使用innerText
-                            // 自动滚动到底部
-                            const logContainer = document.getElementById('logContainer');
-                            logContainer.scrollTop = logContainer.scrollHeight;
-                        })
-                            .catch(error => {
-                                console.error("Error fetching log:", error);
-                                clearInterval(logInterval); // 如果发生错误，停止定时器
-                            });
-                    }, 5000);
-                        // 设置为每5秒执行一次
+                }, 5000);
+                // 设置为每5秒执行一次
 
-                    document.getElementById('stopButton').setAttribute('data-process-id', processId);
-                    document.getElementById('stopButton').onclick = function () {
-                        clearInterval(logInterval); // 点击停止按钮时，清除定时器
-                        stopOperation();
-                    };
-                })
-                .catch(e => console.log('错误:', e));
-        }
+                document.getElementById('stopButton').setAttribute('data-process-id', processId);
+                document.getElementById('stopButton').onclick = function () {
+                    clearInterval(logInterval); // 点击停止按钮时，清除定时器
+                    stopOperation();
+                };
+            })
+            .catch(e => console.log('错误:', e));
+    }
 
-        document.addEventListener('DOMContentLoaded', (event) => {
-            document.getElementById('jsonForm').onsubmit = function (event) {
-                event.preventDefault();
-                document.getElementById('submitButton').disabled = true;
+    document.addEventListener('DOMContentLoaded', (event) => {
+        document.getElementById('jsonForm').onsubmit = function (event) {
+            event.preventDefault();
+            document.getElementById('submitButton').disabled = true;
 
-                // 启用停止按钮
-                document.getElementById('stopButton').disabled = false;
-                generateJSON();
-            };
-        });
-
-    </script>
+            // 启用停止按钮
+            document.getElementById('stopButton').disabled = false;
+            generateJSON();
+        };
+    });
+</script>
 </head>
 <body>
 
 <h1></h1>
-<select id="languageSelect" onchange="changeLanguage(this.value)">
-    <option value="zh">中文</option>
-    <option value="en">English</option>
-</select>
 <form id="jsonForm">
     <label for="base_model">base_model:</label>
     <input type="text" id="base_model" name="base_model"><br><br>
     <label for="model_type">model_type:</label>
-    <input type="text" id="model_type" name="model_type" required value="llama"><br><br>
+    <select id="model_type" name="model_type">
+        <option value="llama">llama</option>
+        <option value="chatglm">chatglm</option>
+        <!-- 添加其他model_type选项 -->
+    </select><br><br>
     <label for="inference">inference:</label>
     <input type="text" id="inference" name="inference"><br><br>
     <label for="load_lora">load_lora:</label>
@@ -461,7 +623,6 @@
     <input type="text" id="seed" name="seed" required value=42><br><br>
     <label for="log">log:</label>
     <input type="text" id="log" name="log" required value="true"><br><br>
-
 
     <label for="cutoff_len">Cutoff Length:</label>
     <input type="number" id="cutoff_len" name="cutoff_len" value="256" required><br><br>
@@ -496,176 +657,6 @@
     <pre id="logContent"></pre>
 </div>
 <script>
-    const languagePack = {
-        'en': {
-            'submit': 'Start',
-            'stop': 'Stop',
-            'remove_lora': 'Remove LoRA',
-            'title': 'Multi-LoRA',
-            'cutoff_len': 'Cutoff Length:',
-            'language': 'Language:',
-            'save_step': 'Save Step:',
-            'early_stop_test_step': 'Early Stop Test Step:',
-            'train_lora_candidate_num': 'Train LoRA Candidate Num:',
-            'train_lora_simultaneously_num': 'Train LoRA Simultaneously Num:',
-            'train_strategy': 'Train Strategy:',
-            'add_lora': 'Add LoRA',
-            'base_model': 'base_model',
-            'model_type': 'model_type',
-            'inference': 'inference',
-            'load_lora': 'load_lora',
-            'disable_lora': 'disable_lora',
-            'tokenizer': 'tokenizer',
-            'load_8bit': 'load_8bit',
-            'load_4bit': 'load_4bit',
-            'device': 'device',
-            'seed': 'seed',
-            'log': 'log',
-
-            'name': 'name:',
-            'output': 'output:',
-            'optim': 'optim:',
-            'lr': 'lr:',
-            'momentum': 'momentum:',
-            'batch_size': 'batch_size:',
-            'micro_batch_size': 'micro_batch_size:',
-            'test_batch_size': 'test_batch_size:',
-            'num_epochs': 'num_epochs:',
-            'r': 'r:',
-            'alpha': 'alpha:',
-            'dropout': 'dropout:',
-            'target_modules': 'target_modules:',
-            'q_proj': 'q_proj:',
-            'k_proj': 'k_proj:',
-            'v_proj': 'v_proj:',
-            'o_proj': 'o_proj:',
-            'w1_proj': 'w1_proj:',
-            'w2_proj': 'w2_proj:',
-            'w3_proj': 'w3_proj:',
-            'data': 'data:',
-            'test_data': 'test_data:',
-            'prompt': 'prompt:',
-            'group_by_length': 'group_by_length:',
-            'expand_side': 'expand_side:'
-        },
-        'zh': {
-            'submit': '开始',
-            'stop': '停止',
-            'remove_lora': '移除LoRA',
-            'title': 'Multi-LoRA',
-            'cutoff_len': '截断长度:',
-            'language': '语言:',
-            'save_step': '保存步骤:',
-            'early_stop_test_step': '提前停止测试步骤:',
-            'train_lora_candidate_num': '训练LoRA候选数量:',
-            'train_lora_simultaneously_num': '同时训练LoRA数量:',
-            'train_strategy': '训练策略:',
-            'add_lora': '添加LoRA',
-
-            'base_model': '基础模型:',
-            'model_type': '模型类型',
-            'inference': '推理',
-            'load_lora': '加载LoRA:',
-            'disable_lora': '禁用LoRA:',
-            'tokenizer': '分词器:',
-            'load_8bit': '加载8位:',
-            'load_4bit': '加载4位:',
-            'device': '设备:',
-            'seed': '随机种子:',
-            'log': '日志:',
-
-            'name': '名称:',
-            'output': '输出:',
-            'optim': '优化器:',
-            'lr': '学习率:',
-            'momentum': '动量:',
-            'batch_size': '批量大小:',
-            'micro_batch_size': '微批量大小:',
-            'test_batch_size': '测试批量大小:',
-            'num_epochs': '迭代次数:',
-            'r': 'R值:',
-            'alpha': 'Alpha值:',
-            'dropout': '丢弃率:',
-            'target_modules': '目标模块:',
-            'q_proj': 'q_proj:',
-            'k_proj': 'k_proj:',
-            'v_proj': 'v_proj:',
-            'o_proj': 'o_proj:',
-            'w1_proj': 'w1_proj:',
-            'w2_proj': 'w2_proj:',
-            'w3_proj': 'w3_proj:',
-            'data': '数据:',
-            'test_data': '测试数据:',
-            'prompt': '提示词:',
-            'group_by_length': '按长度分组:',
-            'expand_side': '扩展方向:'
-            // ... 其他所有文本字段的中文翻译
-        }
-    };
-
-    function changeLanguage(lang) {
-        console.log(lang)
-        document.getElementById('submitButton').value = languagePack[lang]['submit'];
-        document.getElementById('stopButton').value = languagePack[lang]['stop'];
-        document.querySelector('label[for="cutoff_len"]').textContent = languagePack[lang]['cutoff_len'];
-        document.querySelector('label[for="save_step"]').textContent = languagePack[lang]['save_step'];
-        document.querySelector('label[for="early_stop_test_step"]').textContent = languagePack[lang]['early_stop_test_step'];
-        document.querySelector('label[for="train_lora_candidate_num"]').textContent = languagePack[lang]['train_lora_candidate_num'];
-        document.querySelector('label[for="train_lora_simultaneously_num"]').textContent = languagePack[lang]['train_lora_simultaneously_num'];
-        document.querySelector('label[for="train_strategy"]').textContent = languagePack[lang]['train_strategy'];
-        document.querySelector('label[for="base_model"]').textContent = languagePack[lang]['base_model'];
-        document.querySelector('label[for="model_type"]').textContent = languagePack[lang]['model_type'];
-        document.querySelector('label[for="inference"]').textContent = languagePack[lang]['inference'];
-        document.querySelector('label[for="load_lora"]').textContent = languagePack[lang]['load_lora'];
-        document.querySelector('label[for="disable_lora"]').textContent = languagePack[lang]['disable_lora'];
-        document.querySelector('label[for="tokenizer"]').textContent = languagePack[lang]['tokenizer'];
-        document.querySelector('label[for="load_8bit"]').textContent = languagePack[lang]['load_8bit'];
-        document.querySelector('label[for="load_4bit"]').textContent = languagePack[lang]['load_4bit'];
-        document.querySelector('label[for="device"]').textContent = languagePack[lang]['device'];
-        document.querySelector('label[for="seed"]').textContent = languagePack[lang]['seed'];
-        document.querySelector('label[for="log"]').textContent = languagePack[lang]['log'];
-        // 切换所有LoRA部分的语言
-        const loraItems = document.querySelectorAll('.lora-item');
-        loraItems.forEach((loraDiv, index) => {
-            changeLanguageLora(lang, index);
-        });
-    }
-
-    function changeLanguageLora(lang, index) {
-        console.log(lang)
-        // 更新新增加的字段
-
-        document.querySelector('label[for="name_' + index + '"]').textContent = languagePack[lang]['name'];
-        document.querySelector('label[for="output_' + index + '"]').textContent = languagePack[lang]['output'];
-        document.querySelector('label[for="optim_' + index + '"]').textContent = languagePack[lang]['optim'];
-        document.querySelector('label[for="lr_' + index + '"]').textContent = languagePack[lang]['lr'];
-        document.querySelector('label[for="momentum_' + index + '"]').textContent = languagePack[lang]['momentum'];
-        document.querySelector('label[for="batch_size_' + index + '"]').textContent = languagePack[lang]['batch_size'];
-        document.querySelector('label[for="micro_batch_size_' + index + '"]').textContent = languagePack[lang]['micro_batch_size'];
-        document.querySelector('label[for="test_batch_size_' + index + '"]').textContent = languagePack[lang]['test_batch_size'];
-        document.querySelector('label[for="num_epochs_' + index + '"]').textContent = languagePack[lang]['num_epochs'];
-        document.querySelector('label[for="r_' + index + '"]').textContent = languagePack[lang]['r'];
-        document.querySelector('label[for="alpha_' + index + '"]').textContent = languagePack[lang]['alpha'];
-        document.querySelector('label[for="dropout_' + index + '"]').textContent = languagePack[lang]['dropout'];
-        document.querySelector('label[for="data_' + index + '"]').textContent = languagePack[lang]['data'];
-        document.querySelector('label[for="test_data_' + index + '"]').textContent = languagePack[lang]['test_data'];
-        document.querySelector('label[for="prompt_' + index + '"]').textContent = languagePack[lang]['prompt'];
-        document.querySelector('label[for="group_by_length_' + index + '"]').textContent = languagePack[lang]['group_by_length'];
-        document.querySelector('label[for="expand_side_' + index + '"]').previousSibling.textContent = languagePack[lang]['expand_side'];
-
-        // 更新目标模块的翻译
-        //const targetModulesContainer = loraDiv.querySelector('.target-modules-container');
-        document.querySelector('label[for="q_proj_' + index + '"]').textContent = languagePack[lang]['q_proj'];
-        document.querySelector('label[for="v_proj_' + index + '"]').textContent = languagePack[lang]['v_proj'];
-        document.querySelector('label[for="o_proj_' + index + '"]').textContent = languagePack[lang]['o_proj'];
-        document.querySelector('label[for="w1_proj_' + index + '"]').textContent = languagePack[lang]['w1_proj'];
-        document.querySelector('label[for="w2_proj_' + index + '"]').textContent = languagePack[lang]['w2_proj'];
-        document.querySelector('label[for="w3_proj_' + index + '"]').textContent = languagePack[lang]['w3_proj'];
-    }
-
-    // 初始化页面语言
-    changeLanguage('zh'); // 默认为中文
-
 
     function stopOperation() {
         console.log('Stop button clicked');
