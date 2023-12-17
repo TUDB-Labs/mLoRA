@@ -1,0 +1,11 @@
+services:
+  web:
+    build:
+      context: ./
+      dockerfile: dockerfile
+      image: multi-lora:latest
+      args:
+        -- gpus: all
+    command: python app.py
+    ports:
+      - "5000:5000"
