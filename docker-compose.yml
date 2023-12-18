@@ -6,6 +6,6 @@ services:
       image: multi-lora:latest
       args:
         -- gpus: all
-    command: python app.py
+    command: python app.py -h 0.0.0.0 -p 5000
     ports:
       - "5000:5000"
