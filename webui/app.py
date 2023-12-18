@@ -1,6 +1,7 @@
 import json
 import shlex
 import subprocess
+import sys
 import threading
 import uuid
 
@@ -24,7 +25,7 @@ def run():
 
     configFile.write(json.dumps(config, indent=4))
     print(params)
-    shell_str = 'python mlora.py '
+    shell_str = 'python ../mlora.py '
 
     shell_str += ' --base_model ' + params['base_model']
     shell_str += ' --model_type ' + params['model_type']
@@ -112,4 +113,11 @@ def execmdmanager(comand, shell=False):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    host = '0.0.0.0'
+    port = 5000
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '-h':
+            host = sys.argv[2]
+        elif sys.argv[1] == '-p':
+            port = int(sys.argv[2])
+    app.run(debug=True, host=host, port=port)
