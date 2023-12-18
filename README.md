@@ -139,6 +139,9 @@ python mlora.py --help
 ```
 ## Demo on Colab
 You can run finetune on Colab by following this example: [Google Colab Example](https://colab.research.google.com/drive/13ABrrcOv5iG1TCdKGZvxy9QN6YwPpOoI?usp=sharing). Make sure to switch the runtime environment to GPU before running it.
+## GUI for m-LoRA
+You can run finetune through gui by following the instructions in the ‘webui/m-LoRA gUI Instruct.md’,or just visit https://www.yuque.com/flagz/gywr3o/kdxbtln37vv8gr4f?singleDoc# 《m-LoRA GUI Instruction》.Make sure to switch the runtime environment to GPU before running it.
+
 ## Installation
 You can also install m-LoRA into your environment:
 ```bash
