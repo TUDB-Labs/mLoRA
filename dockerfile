@@ -4,4 +4,4 @@ RUN cd /workspace && git clone https://github.com/TUDB-Labs/multi-lora-fine-tune
 RUN cd /workspace/multi-lora-fine-tune
 EXPOSE 5000
 
-CMD ["python", "app.py" ,"-h 0.0.0.0", "-p 5000"]
+CMD ["python", "webui/app.py" ,"-h 0.0.0.0", "-p 5000"]
