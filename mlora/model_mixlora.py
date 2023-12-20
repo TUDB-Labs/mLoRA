@@ -12,6 +12,8 @@ import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
 from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
+import os
+import json
 
 
 class Embedding(torch.nn.Module):
@@ -116,6 +118,13 @@ class MixTransformer(torch.nn.Module):
                 linear_layer_list[idx].init_lora_weight(
                     adapter_name, r, lora_alpha, lora_dropout, lora_a, lora_b)
 
+    def init_router_layer_weight(self, weight: Optional[torch.Tensor]):
+        if weight is not None:
+            gate_name = f"base_model.model.model.layers.{self.layer_id_}.moe_gate.weight"
+            self.gate_ = weight[gate_name]
+        else:
+            self.gate_ = torch.nn.Linear(self.head_dim_, self.num_experts_, bias=False)
+
     # @torch.compile
     def forward(self,
                 data: torch.Tensor,
@@ -169,16 +178,16 @@ class MixTransformer(torch.nn.Module):
         final_hidden_states = None
         for expert_idx in range(self.num_experts_):
             if self.w1_.enable_lora_:
-                w1 = self.w1_.loras_["mixmoe_" + expert_idx].forward(common_w1)
+                w1 = self.w1_.loras_["mix_expert_" + expert_idx].forward(common_w1)
             else:
                 w1 = common_w1
             if self.w3_.enable_lora_:
-                w3 = self.w3_.loras_["mixmoe_" + expert_idx].forward(common_w3)
+                w3 = self.w3_.loras_["mix_expert_" + expert_idx].forward(common_w3)
             else:
                 w3 = common_w3
             hidden_state = self.w2_.weight_.forward(F.silu(w1) * w3)
             if self.w2_.enable_lora_:
-                hidden_state = self.w2_.loras_["mixmoe_" + expert_idx].forward(hidden_state)
+                hidden_state = self.w2_.loras_["mix_expert_" + expert_idx].forward(hidden_state)
             expert_mask = (selected_experts == expert_idx)
             expert_weights = (routing_weights * expert_mask).sum(dim=-1, keepdim=True)
             current_hidden_states = hidden_state.mul_(expert_weights)
@@ -188,3 +197,261 @@ class MixTransformer(torch.nn.Module):
                 final_hidden_states.add_(current_hidden_states)
 
         return data + final_hidden_states
+
+
+class MixSequentialWrapper(torch.nn.Module):
+    def __init__(self, module: torch.nn.Module):
+        super().__init__()
+        self.wrapper_module_ = module
+
+    def name(self) -> str:
+        return type(self.wrapper_module_).__name__
+
+    def forward(self, input: Tuple) -> Tuple:
+        module_name = self.name()
+
+        if module_name == "Embedding" or module_name == "RMSNormLayer" or module_name == "OutputLayer":
+            output = self.wrapper_module_.forward(input[0])
+            return (output, ) + input[1:]
+        elif module_name == "MixTransformer":
+            if input[-1]:
+                output = CheckpointRecomputeFunction.apply(
+                    self.wrapper_module_.forward, *input[:-1])
+            else:
+                output = self.wrapper_module_.forward(*input[:-1])
+            return (output, ) + input[1:]
+        else:
+            raise f"module invalid: {module_name}"
+
+
+class MixModel(LLMModel):
+    def __init__(self, args: LLMModelArgs):
+        # weight
+        self.token_embedding_: Embedding = None
+
+        self.layers_: List[MixTransformer] = []
+        for layer_id in range(args.n_layers_):
+            self.layers_.append(MixTransformer(layer_id, args))
+
+        self.norm_: RMSNormLayer = None    # dim
+        self.output_: OutputLayer = None   # vocab size * dim
+
+        # cos and sin
+        self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
+            args.dim_ // args.n_heads_, args.max_seq_len_, args.device)
+
+        self.norm_eps_ = args.norm_eps_
+
+        self.device_ = args.device
+        self.n_heads_ = args.n_heads_
+        self.vocab_size_ = args.vocab_size_
+        self.pad_token_id_ = args.pad_token_id_
+        self.dim_ = args.dim_
+
+        # need to set
+        self.eos_token_id_ = -1
+
+    # train model or inference model: output is probs
+    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
+        tokens = torch.tensor(input.batch_tokens_,
+                              dtype=torch.int64).to(self.device_)
+
+        # only for train
+        mask = precompute_mask(input, self.n_heads_, self.device_)
+
+        seq_module = self.sequential_module()
+
+        data = (tokens, mask, self.rope_angle_, input, True)
+
+        for seq_layer in seq_module:
+            data = seq_layer.forward(data)
+
+        return data[0]
+
+    def init_lora_weight(self, adapter_name: str,
+                         r: int,
+                         lora_alpha: int,
+                         lora_dropout: float,
+                         target: Dict[str, bool],
+                         weight: Optional[Dict[str, torch.Tensor]]):
+        for transformer_layer in self.layers_:
+            transformer_layer.init_lora_layer_weight(
+                adapter_name, r, lora_alpha, lora_dropout, target, weight)
+            
+    def init_router_weight(self, weight: Optional[Dict[str, torch.Tensor]]):
+        for transformer_layer in self.layers_:
+            transformer_layer.init_router_layer_weight(weight)
+
+    def from_pretrained(path: str,
+                        device: str,
+                        bits: int = None,
+                        fp16: bool = True,
+                        bf16: bool = True,
+                        double_quant: bool = True,
+                        quant_type: str = 'nf4',
+                        log_fn=None) -> LLMModel:
+        if bits in [4, 8]:
+            if log_fn is not None:
+                log_fn('Loading model with quantization, bits = %i' % bits)
+            from transformers import BitsAndBytesConfig
+            compute_dtype = (torch.float16 if fp16 else (
+                torch.bfloat16 if bf16 else torch.float32))
+            llama_model = LlamaForCausalLM.from_pretrained(
+                path,
+                load_in_4bit=bits == 4,
+                load_in_8bit=bits == 8,
+                device_map=device,
+                quantization_config=BitsAndBytesConfig(
+                    load_in_4bit=bits == 4,
+                    load_in_8bit=bits == 8,
+                    llm_int8_threshold=6.0,
+                    llm_int8_has_fp16_weight=False,
+                    bnb_4bit_compute_dtype=compute_dtype,
+                    bnb_4bit_use_double_quant=double_quant,
+                    bnb_4bit_quant_type=quant_type,
+                ),
+                torch_dtype=(torch.float32 if fp16 else (torch.bfloat16 if bf16 else torch.float32)))
+        else:
+            llama_model = LlamaForCausalLM.from_pretrained(
+                path,
+                device_map=device,
+                torch_dtype=torch.float32)
+
+        llama_args = LLMModelArgs()
+        llama_args.dim_ = llama_model.config.hidden_size
+        llama_args.n_heads_ = llama_model.config.num_attention_heads
+        llama_args.n_kv_heads_ = llama_args.n_heads_ if not hasattr(
+            llama_model.config, "num_key_value_heads") else llama_model.config.num_key_value_heads
+        llama_args.n_layers_ = llama_model.config.num_hidden_layers
+        llama_args.norm_eps_ = llama_model.config.rms_norm_eps
+        llama_args.vocab_size_ = llama_model.config.vocab_size
+        llama_args.max_seq_len_ = 4096 if not hasattr(
+            llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
+        llama_args.pad_token_id_ = -1
+        llama_args.device = device
+
+        model = MixModel(llama_args)
+
+        embedding_weight = llama_model.model.embed_tokens.weight.to(
+            device=device).requires_grad_(False)
+        model.token_embedding_ = Embedding(
+            embedding_weight, llama_args.pad_token_id_)
+
+        output_weight = llama_model.lm_head.weight.to(
+            dtype=torch.float32, device=device).requires_grad_(False)
+        model.output_ = OutputLayer(output_weight)
+
+        norm_weight = llama_model.model.norm.weight.to(
+            device=device).requires_grad_(False)
+        model.norm_ = RMSNormLayer(norm_weight, model.norm_eps_)
+
+        for idx, layer in enumerate(llama_model.model.layers):
+            model.layers_[idx].wq_ = Linear(
+                layer.self_attn.q_proj, device=device)
+            model.layers_[idx].wk_ = Linear(
+                layer.self_attn.k_proj, device=device)
+            model.layers_[idx].wv_ = Linear(
+                layer.self_attn.v_proj, device=device)
+            model.layers_[idx].wo_ = Linear(
+                layer.self_attn.o_proj, device=device)
+            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=device)
+            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=device)
+            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=device)
+            model.layers_[idx].attention_norm_ = RMSNorm(
+                layer.input_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
+            model.layers_[idx].ffn_norm_ = RMSNorm(
+                layer.post_attention_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
+
+        return model
+
+    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+        train_paramas = {}
+
+        for transformer_layer in self.layers_:
+            for lora_config in config["lora"]:
+                adapter_name = lora_config["name"]
+                if adapter_name not in train_paramas:
+                    train_paramas[adapter_name] = []
+
+                lora_layer_list = [transformer_layer.wq_.loras_, transformer_layer.wk_.loras_,
+                                   transformer_layer.wv_.loras_, transformer_layer.wo_.loras_,
+                                   transformer_layer.w1_.loras_, transformer_layer.w2_.loras_,
+                                   transformer_layer.w3_.loras_]
+
+                for lora_layer in lora_layer_list:
+                    if adapter_name in lora_layer:
+                        train_paramas[adapter_name].append(
+                            lora_layer[adapter_name].lora_a_)
+                        train_paramas[adapter_name].append(
+                            lora_layer[adapter_name].lora_b_)
+
+        return train_paramas
+
+    def get_mixlora_weight_dict(self) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+        mixlora_weight_dict = {}
+        target_modules = []
+        for idx, transformer_layer in enumerate(self.layers_):
+            layer_prefix_name = "mixlora.layers." + str(idx)
+            lora_layer_list = [transformer_layer.w1_, transformer_layer.w2_,
+                               transformer_layer.w3_]
+            lora_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
+            for expert_idx in range(self.num_experts_):
+                for idx, lora_layer in enumerate(lora_layer_list):
+                    if lora_layer_name_list[idx] not in target_modules:
+                        target_modules.append(lora_layer_name_list[idx])
+                    mixlora_weight_dict[layer_prefix_name + f"expert_{expert_idx}." +
+                                        f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_["mix_expert_" + expert_idx].lora_a_
+                    mixlora_weight_dict[layer_prefix_name + f"expert_{expert_idx}." +
+                                        f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_["mix_expert_" + expert_idx].lora_b_
+
+            mixlora_weight_dict[layer_prefix_name + f"gate.weight"] = transformer_layer.gate_
+
+        return mixlora_weight_dict, target_modules
+
+
+    def sequential_module(self) -> torch.nn.Sequential:
+        seq_module = OrderedDict()
+
+        seq_module.update(
+            {"embedding": MixSequentialWrapper(self.token_embedding_)})
+        seq_module.move_to_end("embedding")
+
+        for index, layer in enumerate(self.layers_):
+            layer_name = f"layer{index}"
+            seq_module.update({layer_name: MixSequentialWrapper(layer)})
+            seq_module.move_to_end(layer_name)
+
+        seq_module.update({"norm": MixSequentialWrapper(self.norm_)})
+        seq_module.move_to_end("norm")
+
+        seq_module.update({"output": MixSequentialWrapper(self.output_)})
+        seq_module.move_to_end("output")
+
+        return torch.nn.Sequential(seq_module)
+    
+def save_mixlora_model(model: MixModel, config: Dict[str, str], dir_suffix=""):
+    moe_config = config["moe"]
+    output_dir = moe_config["output"]
+    if dir_suffix != "":
+        output_dir += os.sep + \
+            moe_config["output"] + "_" + dir_suffix
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    weight_dict, target_modules = model.get_mixlora_weight_dict()
+    torch.save(weight_dict, output_dir + os.sep + "mixlora_model.bin")
+
+    mixlora_config = {}
+    mixlora_config["lora_alpha"] = moe_config["alpha"]
+    mixlora_config["lora_dropout"] = moe_config["dropout"]
+    mixlora_config["r"] = moe_config["r"]
+    mixlora_config["peft_type"] = "LORA"
+    mixlora_config["task_type"] = "CAUSAL_LM"
+    mixlora_config["bias"] = "none"
+    mixlora_config["target_modules"] = target_modules
+    mixlora_config["num_experts"] = moe_config["num_experts"]
+    mixlora_config["moe_topk"] = moe_config["moe_topk"]
+
+    with open(output_dir + os.sep + "mixlora_config.json", "w") as f:
+        json.dump(mixlora_config, f, indent=4)
