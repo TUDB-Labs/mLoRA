@@ -22,7 +22,7 @@
             "w2_proj": true,
             "w3_proj": true
         },
-        "num_experts": 8,
+        "experts": 8,
         "topk": 2,
         "data": "data/dummy_data.json",
         "test_data": "data/test_data_demo.json",

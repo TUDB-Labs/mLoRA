@@ -1,4 +1,4 @@
-# MixLoRA
+# MixLoRA: Parameter Efficient Mix-of-Experts Model
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ args = parser.parse_args()
 
 def log(msg: str):
     if args.log:
-        print('[%s] m-LoRA: %s' %
+        print('[%s] MixLoRA: %s' %
               (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg))
 
 
@@ -60,7 +60,7 @@ if torch.cuda.is_available():
     log('NVIDIA CUDA initialized successfully.')
     log('Total %i GPU(s) detected.' % torch.cuda.device_count())
 else:
-    print('m-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
+    print('MixLoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
     exit(-1)
 
 
@@ -100,30 +100,19 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.MixM
 
 def init_moe_model(config: Dict[str, any], llm_model: mlora.MixModel):
     moe_config = config["moe"]
-    llm_model.init_moe_config(moe_config["num_experts"], moe_config["topk"])
-    # Init router
-    router_weight = None
+    moe_weight = None
     if args.load_moe:
-        router_file_path = moe_config["output"] + "/moe_router_model_" + expert_idx + ".bin"
-        print(f"load {router_file_path}")
-        router_weight = torch.load(router_file_path)
+        moe_file_path = moe_config["output"] + "/mixlora_model.bin"
+        print(f"Loading {moe_file_path}")
+        moe_weight = torch.load(moe_file_path)
 
-    llm_model.init_router_weight(router_weight)
-
-    # Init experts
-    for expert_idx in range(moe_config["num_experts"]):
-        expert_weight = None
-        if args.load_moe:
-            ffn_adapter_file_path = moe_config["output"] + "/ffn_adapter_model_" + expert_idx + ".bin"
-            print(f"load {ffn_adapter_file_path}")
-            expert_weight = torch.load(ffn_adapter_file_path)
-        
-        llm_model.init_lora_weight("mix_expert_" + str(expert_idx),
-                                   moe_config["r"],
-                                   moe_config["alpha"],
-                                   moe_config["dropout"],
-                                   moe_config["target_modules"],
-                                   expert_weight)
+    llm_model.init_moe_weight(lora_r=moe_config["r"],
+                              lora_alpha=moe_config["alpha"],
+                              lora_dropout=moe_config["dropout"],
+                              moe_experts=moe_config["experts"],
+                              moe_topk=moe_config["topk"],
+                              target=moe_config["target_modules"],
+                              weight=moe_weight)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
