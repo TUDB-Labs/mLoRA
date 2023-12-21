@@ -1,4 +1,4 @@
-# MixLoRA: Parameter Efficient Mix-of-Experts Model
+# MixLoRA: Parameter Efficient Mix-of-Experts Model based on LoRA
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -268,11 +268,13 @@ if __name__ == "__main__":
 
     torch.cuda.empty_cache()
 
+    # Compatible with m-LoRA configs
+    lora_config = config["moe"]
+    lora_config["name"] = "MixLoRA"
+    config["lora"] = [lora_config]
+
     if args.inference:
         inference(config, model, tokenizer)
     else:
-        lora_config = config["moe"]
-        lora_config["name"] = "MixLoRA"
-        config["lora"] = [lora_config]
         dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)
