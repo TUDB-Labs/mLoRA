@@ -3,7 +3,7 @@ from mlora.tokenizer import Tokenizer
 from mlora.model import LLMModel
 from mlora.model_llama import LlamaModel
 from mlora.model_chatglm import ChatGLMModel
-from mlora.model_mixlora import MixModel, MixModelArgs, save_mixlora_model
+from mlora.model_mixlora import MixModel, save_mixlora_model
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData, LoraBatchDataConfig
 from mlora.dispatcher import TrainTask, Dispatcher
 
@@ -13,7 +13,6 @@ __all__ = [
     "LlamaModel",
     "ChatGLMModel",
     "MixModel",
-    "MixModelArgs",
     "save_mixlora_model",
     "LLMModelArgs",
     "MultiLoraBatchData",
