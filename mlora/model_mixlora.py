@@ -257,6 +257,12 @@ class MixModel():
         # need to set
         self.eos_token_id_ = -1
 
+        # MoE args
+        self.num_experts_ = 8
+        self.moe_topk_ = 2
+        # Enable when using multiple datasets
+        self.batched_input_: bool = False
+
     # train model or inference model: output is probs
     def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         tokens = torch.tensor(input.batch_tokens_,
@@ -289,9 +295,12 @@ class MixModel():
             transformer_layer.init_router_layer_weight(weight)
 
     def init_moe_config(self, num_experts: int, topk: int, batched_input: bool = False):
+        self.num_experts_ = num_experts
+        self.moe_topk_ = topk
+        self.batched_input_ = batched_input
         for transformer_layer in self.layers_:
             transformer_layer.num_experts_ = num_experts
-            transformer_layer.topk_ = topk
+            transformer_layer.moe_topk_ = topk
             transformer_layer.batched_input_ = batched_input
 
     def from_pretrained(path: str,
@@ -408,9 +417,9 @@ class MixModel():
                     if lora_layer_name_list[idx] not in target_modules:
                         target_modules.append(lora_layer_name_list[idx])
                     mixlora_weight_dict[layer_prefix_name + f"expert_{expert_idx}." +
-                                        f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_["mix_expert_" + expert_idx].lora_a_
+                                        f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_["mix_expert_" + str(expert_idx)].lora_a_
                     mixlora_weight_dict[layer_prefix_name + f"expert_{expert_idx}." +
-                                        f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_["mix_expert_" + expert_idx].lora_b_
+                                        f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_["mix_expert_" + str(expert_idx)].lora_b_
 
             mixlora_weight_dict[layer_prefix_name + f"gate.weight"] = transformer_layer.gate_
 
@@ -459,7 +468,7 @@ def save_mixlora_model(model: MixModel, config: Dict[str, str], dir_suffix=""):
     mixlora_config["bias"] = "none"
     mixlora_config["target_modules"] = target_modules
     mixlora_config["num_experts"] = moe_config["num_experts"]
-    mixlora_config["moe_topk"] = moe_config["moe_topk"]
+    mixlora_config["topk"] = moe_config["topk"]
 
     with open(output_dir + os.sep + "mixlora_config.json", "w") as f:
         json.dump(mixlora_config, f, indent=4)
