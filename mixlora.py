@@ -100,6 +100,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.MixM
 
 def init_moe_model(config: Dict[str, any], llm_model: mlora.MixModel):
     moe_config = config["moe"]
+    llm_model.init_moe_config(moe_config["num_experts"], moe_config["topk"])
     # Init router
     router_weight = None
     if args.load_moe:
@@ -117,7 +118,7 @@ def init_moe_model(config: Dict[str, any], llm_model: mlora.MixModel):
             print(f"load {ffn_adapter_file_path}")
             expert_weight = torch.load(ffn_adapter_file_path)
         
-        llm_model.init_lora_weight("mix_expert_" + expert_idx,
+        llm_model.init_lora_weight("mix_expert_" + str(expert_idx),
                                    moe_config["r"],
                                    moe_config["alpha"],
                                    moe_config["dropout"],
@@ -281,5 +282,8 @@ if __name__ == "__main__":
     if args.inference:
         inference(config, model, tokenizer)
     else:
+        lora_config = config["moe"]
+        lora_config["name"] = "MixLoRA"
+        config["lora"] = [lora_config]
         dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)
