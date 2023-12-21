@@ -84,10 +84,11 @@ class MixTransformer(torch.nn.Module):
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
         # MoE args
-        self.num_experts_ = args.num_experts_
-        self.moe_topk_ = args.moe_topk_
+        self.num_experts_ = 8
+        self.moe_topk_ = 2
         # Enable when using multiple datasets
         self.batched_input_: bool = False
+        self.device_ = args.device
 
     def init_lora_layer_weight(self,
                                adapter_name: str,
@@ -121,9 +122,9 @@ class MixTransformer(torch.nn.Module):
     def init_router_layer_weight(self, weight: Optional[torch.Tensor]):
         if weight is not None:
             gate_name = f"base_model.model.model.layers.{self.layer_id_}.moe_gate.weight"
-            self.gate_ = weight[gate_name]
+            self.gate_ = weight[gate_name].to(self.device_)
         else:
-            self.gate_ = torch.nn.Linear(self.head_dim_, self.num_experts_, bias=False)
+            self.gate_ = torch.nn.Linear(self.n_heads_*self.head_dim_, self.num_experts_, bias=False, device=self.device_)
 
     # @torch.compile
     def forward(self,
@@ -163,31 +164,36 @@ class MixTransformer(torch.nn.Module):
         score_norm_data = self.ffn_norm_.forward(data)
 
         # routing to experts
+        #print(score_norm_data.shape)
+        #print(self.gate_.weight.shape)
         router_logits = self.gate_.forward(score_norm_data)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.moe_topk_, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        #print(routing_weights)
 
         # feed forward fully connected
+        #print(self.w1_.weight_.weight.shape)
         common_w1 = self.w1_.weight_.forward(score_norm_data)
         common_w3 = self.w3_.weight_.forward(score_norm_data)
+        #print(common_w1.shape)
+        #print(common_w3.shape)
         #hidden_states = self.w2_.weight_.forward(F.silu(w1) * w3, input_args)
 
         # MoE
         # TODO: using multiple datasets
         final_hidden_states = None
         for expert_idx in range(self.num_experts_):
+            w1 = common_w1.clone()
             if self.w1_.enable_lora_:
-                w1 = self.w1_.loras_["mix_expert_" + expert_idx].forward(common_w1)
-            else:
-                w1 = common_w1
+                w1 += self.w1_.loras_["mix_expert_" + str(expert_idx)].forward(score_norm_data)
+            w3 = common_w3.clone()
             if self.w3_.enable_lora_:
-                w3 = self.w3_.loras_["mix_expert_" + expert_idx].forward(common_w3)
-            else:
-                w3 = common_w3
-            hidden_state = self.w2_.weight_.forward(F.silu(w1) * w3)
+                w3 += self.w3_.loras_["mix_expert_" + str(expert_idx)].forward(score_norm_data)
+            silu_result = F.silu(w1) * w3
+            hidden_state = self.w2_.weight_.forward(silu_result)
             if self.w2_.enable_lora_:
-                hidden_state = self.w2_.loras_["mix_expert_" + expert_idx].forward(hidden_state)
+                hidden_state += self.w2_.loras_["mix_expert_" + str(expert_idx)].forward(silu_result)
             expert_mask = (selected_experts == expert_idx)
             expert_weights = (routing_weights * expert_mask).sum(dim=-1, keepdim=True)
             current_hidden_states = hidden_state.mul_(expert_weights)
@@ -224,7 +230,7 @@ class MixSequentialWrapper(torch.nn.Module):
             raise f"module invalid: {module_name}"
 
 
-class MixModel(LLMModel):
+class MixModel():
     def __init__(self, args: LLMModelArgs):
         # weight
         self.token_embedding_: Embedding = None
@@ -281,6 +287,12 @@ class MixModel(LLMModel):
     def init_router_weight(self, weight: Optional[Dict[str, torch.Tensor]]):
         for transformer_layer in self.layers_:
             transformer_layer.init_router_layer_weight(weight)
+
+    def init_moe_config(self, num_experts: int, topk: int, batched_input: bool = False):
+        for transformer_layer in self.layers_:
+            transformer_layer.num_experts_ = num_experts
+            transformer_layer.topk_ = topk
+            transformer_layer.batched_input_ = batched_input
 
     def from_pretrained(path: str,
                         device: str,
@@ -366,24 +378,20 @@ class MixModel(LLMModel):
 
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}
+        moe_config = config["moe"]
+        adapter_name = "MixLoRA"
+        if adapter_name not in train_paramas:
+            train_paramas[adapter_name] = []
 
         for transformer_layer in self.layers_:
-            for lora_config in config["lora"]:
-                adapter_name = lora_config["name"]
-                if adapter_name not in train_paramas:
-                    train_paramas[adapter_name] = []
-
-                lora_layer_list = [transformer_layer.wq_.loras_, transformer_layer.wk_.loras_,
-                                   transformer_layer.wv_.loras_, transformer_layer.wo_.loras_,
-                                   transformer_layer.w1_.loras_, transformer_layer.w2_.loras_,
-                                   transformer_layer.w3_.loras_]
-
-                for lora_layer in lora_layer_list:
-                    if adapter_name in lora_layer:
-                        train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_a_)
-                        train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_b_)
+            lora_layer_list = [transformer_layer.w1_.loras_, transformer_layer.w2_.loras_,
+                               transformer_layer.w3_.loras_]
+            for lora_layer in lora_layer_list:
+                for expert_idx in range(moe_config["num_experts"]):
+                    train_paramas[adapter_name].append(
+                        lora_layer["mix_expert_" + str(expert_idx)].lora_a_)
+                    train_paramas[adapter_name].append(
+                        lora_layer["mix_expert_" + str(expert_idx)].lora_b_) 
 
         return train_paramas
 
