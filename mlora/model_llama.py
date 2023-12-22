@@ -212,7 +212,10 @@ class LlamaModel(LLMModel):
 
         seq_module = self.sequential_module()
 
-        data = (tokens, mask, self.rope_angle_, input, True)
+        if input.inference_model_:
+            data = (tokens, mask, self.rope_angle_, input, False)
+        else:
+            data = (tokens, mask, self.rope_angle_, input, True)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
