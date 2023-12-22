@@ -59,6 +59,12 @@ class RMSNormLayer(torch.nn.Module):
         return (self.weight_ * data).to(input_dtype)
 
 
+class MixMoELayer:
+    gate_: torch.nn.Linear = None
+    experts_: int = 8
+    topk_: int = 2
+
+
 class MixTransformer(torch.nn.Module):
     def __init__(self, layer_id: int, args: LLMModelArgs):
         super().__init__()
@@ -71,8 +77,6 @@ class MixTransformer(torch.nn.Module):
         self.w1_: Linear = None  # also gate FNN * dim
         self.w2_: Linear = None  # also down dim * FNN
         self.w3_: Linear = None  # also up   FNN * dim
-        # gate
-        self.gate_: torch.nn.Linear = None
         # norm
         self.attention_norm_: RMSNorm = None  # dim
         self.ffn_norm_: RMSNorm = None  # dim
@@ -83,14 +87,12 @@ class MixTransformer(torch.nn.Module):
         self.n_kv_heads_ = args.n_kv_heads_
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
-        # moe args
-        self.moe_experts_ = 8
-        self.moe_topk_ = 2
-        # Enable when using multiple datasets
-        # self.batched_input_: bool = False
+        # moe
+        self.moes_: Dict[str, MixMoELayer] = {}
 
     def init_moe_layer_weight(
         self,
+        moe_name: str,
         lora_r: int,
         lora_alpha: int,
         lora_dropout: float,
@@ -99,13 +101,29 @@ class MixTransformer(torch.nn.Module):
         target: Dict[str, bool],
         weight: Optional[torch.Tensor],
     ):
-        self.moe_experts_ = moe_experts
-        self.moe_topk_ = moe_topk
+        moe_layer = MixMoELayer()
+        moe_layer.gate_ = torch.nn.Linear(
+            self.n_heads_ * self.head_dim_,
+            moe_experts,
+            bias=False,
+            device=self.w1_.device_,
+        )
+        moe_layer.experts_ = moe_experts
+        moe_layer.topk_ = moe_topk
+
+        if weight is not None:
+            with torch.no_grad():
+                moe_layer.gate_.weight.copy_(
+                    weight[f"mixlora.layers.{self.layer_id_}.gate.weight"]
+                )
+
+        self.moes_[moe_name] = moe_layer
+
         linear_layer_list = [self.w1_, self.w2_, self.w3_]
         linear_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
         for idx, layer_name in enumerate(linear_layer_name_list):
             if layer_name in target and target[layer_name]:
-                for expert_idx in range(self.moe_experts_):
+                for expert_idx in range(moe_layer.experts_):
                     lora_a = None
                     lora_b = None
                     if weight is not None:
@@ -119,26 +137,13 @@ class MixTransformer(torch.nn.Module):
                         lora_b = weight[lora_b_name]
 
                     linear_layer_list[idx].init_lora_weight(
-                        "mix_expert_" + str(expert_idx),
+                        f"moe.{moe_name}.experts.{expert_idx}",
                         lora_r,
                         lora_alpha,
                         lora_dropout,
                         lora_a,
                         lora_b,
                     )
-
-        self.gate_ = torch.nn.Linear(
-            self.n_heads_ * self.head_dim_,
-            self.moe_experts_,
-            bias=False,
-            device=self.w1_.device_,
-        )
-
-        if weight is not None:
-            with torch.no_grad():
-                self.gate_.weight.copy_(
-                    weight[f"mixlora.layers.{self.layer_id_}.gate.weight"]
-                )
 
     # @torch.compile
     def forward(
@@ -176,48 +181,73 @@ class MixTransformer(torch.nn.Module):
         # get output attention score
         data = data + self.wo_.forward(attention_score, input_args)
 
-        score_norm_data = self.ffn_norm_.forward(data)
-
-        # routing to experts
-        router_logits = self.gate_.forward(score_norm_data)
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(
-            routing_weights, self.moe_topk_, dim=-1
-        )
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-
         # feed forward fully connected
+        score_norm_data = self.ffn_norm_.forward(data)
         common_w1 = self.w1_.weight_.forward(score_norm_data)
         common_w3 = self.w3_.weight_.forward(score_norm_data)
 
-        # mix of experts
-        final_hidden_states = None
-        for expert_idx in range(self.moe_experts_):
-            w1 = common_w1.clone()
-            if self.w1_.enable_lora_:
-                w1 += self.w1_.loras_["mix_expert_" + str(expert_idx)].forward(
-                    score_norm_data
-                )
-            w3 = common_w3.clone()
-            if self.w3_.enable_lora_:
-                w3 += self.w3_.loras_["mix_expert_" + str(expert_idx)].forward(
-                    score_norm_data
-                )
-            silu_result = F.silu(w1) * w3
-            hidden_state = self.w2_.weight_.forward(silu_result)
-            if self.w2_.enable_lora_:
-                hidden_state += self.w2_.loras_[
-                    "mix_expert_" + str(expert_idx)
-                ].forward(silu_result)
-            expert_mask = selected_experts == expert_idx
-            expert_weights = (routing_weights * expert_mask).sum(dim=-1, keepdim=True)
-            current_hidden_states = hidden_state.mul_(expert_weights)
-            if final_hidden_states is None:
-                final_hidden_states = current_hidden_states
-            else:
-                final_hidden_states.add_(current_hidden_states)
+        for lora_config in input_args.lora_batch_data_config_:
+            moe_name = lora_config.adapter_name_
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
 
-        return data + final_hidden_states
+            if moe_name == "" or moe_name not in self.moes_:
+                continue
+
+            moe_layer = self.moes_[moe_name]
+
+            norm_data = score_norm_data[start_idx:end_idx]
+            w1_data = common_w1[start_idx:end_idx]
+            w3_data = common_w3[start_idx:end_idx]
+
+            # routing to experts
+            router_logits = moe_layer.gate_.forward(norm_data)
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            routing_weights, selected_experts = torch.topk(
+                routing_weights, moe_layer.topk_, dim=-1
+            )
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+
+            # mix of experts
+            final_hidden_states = None
+            for expert_idx in range(moe_layer.experts_):
+                if self.w1_.enable_lora_:
+                    w1 = w1_data + self.w1_.loras_[
+                        f"moe.{moe_name}.experts.{expert_idx}"
+                    ].forward(norm_data)
+                else:
+                    w1 = w1_data
+
+                if self.w3_.enable_lora_:
+                    w3 = w3_data + self.w3_.loras_[
+                        f"moe.{moe_name}.experts.{expert_idx}"
+                    ].forward(norm_data)
+                else:
+                    w3 = w3_data
+
+                silu_result = F.silu(w1) * w3
+                if self.w2_.enable_lora_:
+                    hidden_state = self.w2_.weight_.forward(
+                        silu_result
+                    ) + self.w2_.loras_[f"moe.{moe_name}.experts.{expert_idx}"].forward(
+                        silu_result
+                    )
+                else:
+                    hidden_state = self.w2_.weight_.forward(silu_result)
+
+                expert_mask = selected_experts == expert_idx
+                expert_weights = (routing_weights * expert_mask).sum(
+                    dim=-1, keepdim=True
+                )
+                current_hidden_states = hidden_state.mul_(expert_weights)
+                if final_hidden_states is None:
+                    final_hidden_states = current_hidden_states
+                else:
+                    final_hidden_states.add_(current_hidden_states)
+
+            data[start_idx:end_idx] = data[start_idx:end_idx] + final_hidden_states
+
+        return data
 
 
 class MixSequentialWrapper(torch.nn.Module):
@@ -278,12 +308,6 @@ class MixModel:
         # need to set
         self.eos_token_id_ = -1
 
-        # MoE args
-        self.moe_experts_ = 8
-        self.moe_topk_ = 2
-        # Enable when using multiple datasets
-        # self.batched_input_: bool = False
-
     # train model or inference model: output is probs
     def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         tokens = torch.tensor(input.batch_tokens_, dtype=torch.int64).to(self.device_)
@@ -302,6 +326,7 @@ class MixModel:
 
     def init_moe_weight(
         self,
+        moe_name: str,
         lora_r: int,
         lora_alpha: int,
         lora_dropout: float,
@@ -310,10 +335,9 @@ class MixModel:
         target: Dict[str, bool],
         weight: Optional[Dict[str, torch.Tensor]],
     ):
-        self.moe_experts_ = moe_experts
-        self.moe_topk_ = moe_topk
         for transformer_layer in self.layers_:
             transformer_layer.init_moe_layer_weight(
+                moe_name=moe_name,
                 lora_r=lora_r,
                 lora_alpha=lora_alpha,
                 lora_dropout=lora_dropout,
@@ -427,29 +451,33 @@ class MixModel:
         self, config: Dict[str, str]
     ) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}
-        moe_config = config["moe"]
-        adapter_name = "MixLoRA"
-        if adapter_name not in train_paramas:
-            train_paramas[adapter_name] = []
 
         for transformer_layer in self.layers_:
-            lora_layer_list = [
-                transformer_layer.w1_.loras_,
-                transformer_layer.w2_.loras_,
-                transformer_layer.w3_.loras_,
-            ]
-            for lora_layer in lora_layer_list:
-                for expert_idx in range(moe_config["experts"]):
-                    train_paramas[adapter_name].append(
-                        lora_layer["mix_expert_" + str(expert_idx)].lora_a_
-                    )
-                    train_paramas[adapter_name].append(
-                        lora_layer["mix_expert_" + str(expert_idx)].lora_b_
-                    )
+            for moe_config in config["lora"]:
+                moe_name = moe_config["name"]
+                if moe_name not in train_paramas:
+                    train_paramas[moe_name] = []
+
+                lora_layer_list = [
+                    transformer_layer.w1_.loras_,
+                    transformer_layer.w2_.loras_,
+                    transformer_layer.w3_.loras_,
+                ]
+
+                for lora_layer in lora_layer_list:
+                    for expert_idx in range(moe_config["experts"]):
+                        train_paramas[moe_name].append(
+                            lora_layer[f"moe.{moe_name}.experts.{expert_idx}"].lora_a_
+                        )
+                        train_paramas[moe_name].append(
+                            lora_layer[f"moe.{moe_name}.experts.{expert_idx}"].lora_b_
+                        )
 
         return train_paramas
 
-    def get_moe_weight_dict(self) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+    def get_moe_weight_dict(
+        self, moe_name: str
+    ) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         moe_weight_dict = {}
         target_modules = []
         for idx, transformer_layer in enumerate(self.layers_):
@@ -462,22 +490,28 @@ class MixModel:
             lora_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
             for expert_idx in range(self.moe_experts_):
                 for idx, lora_layer in enumerate(lora_layer_list):
-                    if lora_layer_name_list[idx] not in target_modules:
-                        target_modules.append(lora_layer_name_list[idx])
-                    moe_weight_dict[
-                        layer_prefix_name
-                        + f".experts.{expert_idx}."
-                        + f"{lora_layer_name_list[idx]}.lora_A.weight"
-                    ] = lora_layer.loras_["mix_expert_" + str(expert_idx)].lora_a_
-                    moe_weight_dict[
-                        layer_prefix_name
-                        + f".experts.{expert_idx}."
-                        + f"{lora_layer_name_list[idx]}.lora_B.weight"
-                    ] = lora_layer.loras_["mix_expert_" + str(expert_idx)].lora_b_
+                    if moe_name in lora_layer.loras_:
+                        if lora_layer_name_list[idx] not in target_modules:
+                            target_modules.append(lora_layer_name_list[idx])
+                        moe_weight_dict[
+                            layer_prefix_name
+                            + f".experts.{expert_idx}."
+                            + f"{lora_layer_name_list[idx]}.lora_A.weight"
+                        ] = lora_layer.loras_[
+                            f"moe.{moe_name}.experts.{expert_idx}"
+                        ].lora_a_
+                        moe_weight_dict[
+                            layer_prefix_name
+                            + f".experts.{expert_idx}."
+                            + f"{lora_layer_name_list[idx]}.lora_B.weight"
+                        ] = lora_layer.loras_[
+                            f"moe.{moe_name}.experts.{expert_idx}"
+                        ].lora_b_
 
-            moe_weight_dict[
-                layer_prefix_name + f".gate.weight"
-            ] = transformer_layer.gate_.weight
+            if moe_name in transformer_layer.gates_:
+                moe_weight_dict[
+                    layer_prefix_name + f".gate.weight"
+                ] = transformer_layer.gates_[moe_name].weight
 
         return moe_weight_dict, target_modules
 
