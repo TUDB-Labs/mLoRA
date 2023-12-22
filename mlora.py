@@ -89,12 +89,21 @@ def setup_seed(seed):
 
 def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     if args.model_type == "llama":
-        model = mlora.LlamaModel.from_pretrained(
-            path=args.base_model,
-            device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            log_fn=log
-        )
+        if "mixlora" in config and config["mixlora"]:
+            log("Initializing MixLoRA model")
+            model = model = mlora.MixModel.from_pretrained(
+                path=args.base_model,
+                device=args.device,
+                bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+                log_fn=log
+            )
+        else:
+            model = mlora.LlamaModel.from_pretrained(
+                path=args.base_model,
+                device=args.device,
+                bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+                log_fn=log
+            )
     elif args.model_type == "chatglm":
         model = mlora.ChatGLMModel.from_pretrained(
             path=args.base_model,
@@ -112,23 +121,38 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel):
+def init_lora_model(config: Dict[str, any], llm_model):
     if args.disable_lora:
         return
 
     for lora_config in config["lora"]:
         lora_weight = None
-        if args.load_lora:
-            adapter_file_path = lora_config["output"] + "/adapter_model.bin"
-            print(f"load {adapter_file_path}")
-            lora_weight = torch.load(adapter_file_path)
+        if "mixlora" in config and config["mixlora"]:
+            if args.load_lora:
+                moe_file_path = lora_config["output"] + "/mixlora_model.bin"
+                print(f"load {moe_file_path}")
+                lora_weight = torch.load(moe_file_path)
 
-        llm_model.init_lora_weight(lora_config["name"],
-                                   lora_config["r"],
-                                   lora_config["alpha"],
-                                   lora_config["dropout"],
-                                   lora_config["target_modules"],
-                                   lora_weight)
+            llm_model.init_moe_weight(moe_name=lora_config["name"],
+                                      lora_r=lora_config["r"],
+                                      lora_alpha=lora_config["alpha"],
+                                      lora_dropout=lora_config["dropout"],
+                                      moe_experts=lora_config["experts"],
+                                      moe_topk=lora_config["topk"],
+                                      target=lora_config["target_modules"],
+                                      weight=lora_weight)
+        else:
+            if args.load_lora:
+                adapter_file_path = lora_config["output"] + "/adapter_model.bin"
+                print(f"load {adapter_file_path}")
+                lora_weight = torch.load(adapter_file_path)
+
+            llm_model.init_lora_weight(lora_config["name"],
+                                       lora_config["r"],
+                                       lora_config["alpha"],
+                                       lora_config["dropout"],
+                                       lora_config["target_modules"],
+                                       lora_weight)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
@@ -274,6 +298,7 @@ def inference(config: Dict[str, any],
 
 # Main Function
 if __name__ == "__main__":
+    torch.autograd.set_detect_anomaly(True)
     setup_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
