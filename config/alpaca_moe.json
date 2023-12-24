@@ -49,8 +49,8 @@
                 "w2_proj": true,
                 "w3_proj": true
             },
-            "experts": 8,
-            "topk": 2,
+            "experts": 9,
+            "topk": 3,
             "data": "yahma/alpaca-cleaned",
             "prompt": "template/template_demo.json"
         }
