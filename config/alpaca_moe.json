@@ -23,6 +23,10 @@
             "alpha": 16,
             "dropout": 0.05,
             "target_modules": {
+                "q_proj": true,
+                "k_proj": false,
+                "v_proj": true,
+                "o_proj": false,
                 "w1_proj": true,
                 "w2_proj": true,
                 "w3_proj": true
