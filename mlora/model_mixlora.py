@@ -1,12 +1,7 @@
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
-from mlora.model import (
-    repeat_kv,
-    apply_rotary_emb,
-    precompute_rope_angle,
-    precompute_mask,
-)
-from mlora.model import MoEModel, RMSNorm
+from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
+from mlora.model import CasualLMModel, MoEModel, RMSNorm
 from mlora.LoraLiner import Linear
 
 import torch
@@ -17,6 +12,8 @@ import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
 from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
+import os
+import json
 
 
 class Embedding(torch.nn.Module):
@@ -390,10 +387,10 @@ class MixModel(MoEModel):
         double_quant: bool = True,
         quant_type: str = "nf4",
         log_fn=None,
-    ) -> MoEModel:
+    ) -> CasualLMModel:
         if bits in [4, 8]:
             if log_fn is not None:
-                log_fn("Loading model with quantization, bits = %i" % bits)
+                log_fn(f"Loading model with quantization, bits = {bits}.")
             from transformers import BitsAndBytesConfig
 
             compute_dtype = (
@@ -528,7 +525,7 @@ class MixModel(MoEModel):
 
         return train_paramas
 
-    def get_moe_weight_dict(
+    def get_adapter_weight_dict(
         self, moe_name: str
     ) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         moe_weight_dict = {}
@@ -609,3 +606,31 @@ class MixModel(MoEModel):
         seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)
+
+    def save_model(self, config: Dict[str, str], dir_suffix=""):
+        for moe_config in config["lora"]:
+            moe_name = moe_config["name"]
+            output_dir = moe_config["output"]
+            if dir_suffix != "":
+                output_dir += os.sep + moe_config["output"] + "_" + dir_suffix
+
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            weight_dict, target_modules = self.get_adapter_weight_dict(
+                moe_name)
+            torch.save(weight_dict, output_dir + os.sep + "mixlora_model.bin")
+
+            mixlora_config = {}
+            mixlora_config["lora_alpha"] = moe_config["alpha"]
+            mixlora_config["lora_dropout"] = moe_config["dropout"]
+            mixlora_config["r"] = moe_config["r"]
+            mixlora_config["peft_type"] = "LORA"
+            mixlora_config["task_type"] = "CAUSAL_LM"
+            mixlora_config["bias"] = "none"
+            mixlora_config["target_modules"] = target_modules
+            mixlora_config["experts"] = moe_config["experts"]
+            mixlora_config["topk"] = moe_config["topk"]
+
+            with open(output_dir + os.sep + "mixlora_config.json", "w") as f:
+                json.dump(mixlora_config, f, indent=4)
