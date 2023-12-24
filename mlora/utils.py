@@ -1,5 +1,6 @@
 from typing import Dict
 from mlora.model_llama import LlamaModel
+from mlora.model_mixlora import MixModel
 from transformers import LlamaForCausalLM
 import os
 import json
@@ -44,3 +45,31 @@ def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
 
         with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)
+
+
+def save_mixlora_model(model: MixModel, config: Dict[str, str], dir_suffix=""):
+    for moe_config in config["lora"]:
+        moe_name = moe_config["name"]
+        output_dir = moe_config["output"]
+        if dir_suffix != "":
+            output_dir += os.sep + moe_config["output"] + "_" + dir_suffix
+
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        weight_dict, target_modules = model.get_moe_weight_dict(moe_name)
+        torch.save(weight_dict, output_dir + os.sep + "mixlora_model.bin")
+
+        mixlora_config = {}
+        mixlora_config["lora_alpha"] = moe_config["alpha"]
+        mixlora_config["lora_dropout"] = moe_config["dropout"]
+        mixlora_config["r"] = moe_config["r"]
+        mixlora_config["peft_type"] = "LORA"
+        mixlora_config["task_type"] = "CAUSAL_LM"
+        mixlora_config["bias"] = "none"
+        mixlora_config["target_modules"] = target_modules
+        mixlora_config["experts"] = moe_config["experts"]
+        mixlora_config["topk"] = moe_config["topk"]
+
+        with open(output_dir + os.sep + "mixlora_config.json", "w") as f:
+            json.dump(mixlora_config, f, indent=4)
