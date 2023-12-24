@@ -125,3 +125,32 @@ class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
     def sequential_module(self) -> torch.nn.Sequential:
         pass
+
+
+class MoEModel(metaclass=ABCMeta):
+    @abstractclassmethod
+    def forward(self, input: MultiLoraBatchData):
+        pass
+
+    @abstractclassmethod
+    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+        pass
+
+    @abstractclassmethod
+    def init_moe_weight(self, adapter_name: str,
+                        r: int,
+                        lora_alpha: int,
+                        lora_dropout: float,
+                        moe_experts: int,
+                        moe_topk: int,
+                        target: Dict[str, bool],
+                        weight: Optional[Dict[str, torch.Tensor]]):
+        pass
+
+    @abstractclassmethod
+    def get_moe_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+        pass
+
+    @abstractclassmethod
+    def sequential_module(self) -> torch.nn.Sequential:
+        pass

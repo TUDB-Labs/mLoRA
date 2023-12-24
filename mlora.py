@@ -22,7 +22,7 @@ import mlora
 import random
 import datetime
 import argparse
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Union
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
@@ -32,10 +32,16 @@ parser.add_argument('--model_type', type=str, default="llama",
                     help='The model type, support: llama, chatglm')
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
+parser.add_argument('--mixlora', action="store_true",
+                    help='Load lora with mix-of-experts architecture')
 parser.add_argument('--load_lora', action="store_true",
-                    help="Load lora from file instead of init randomly")
+                    help="[Legacy] Load lora from file instead of init randomly")
+parser.add_argument('--load_adapter', action="store_true",
+                    help="Load adapter from file instead of init randomly")
 parser.add_argument('--disable_lora', action="store_true",
-                    help="Disable the lora modules")
+                    help="[Legacy] Disable the lora modules")
+parser.add_argument('--disable_adapter', action="store_true",
+                    help="Disable the adapter modules")
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
 parser.add_argument('--load_8bit', action="store_true",
@@ -52,6 +58,14 @@ parser.add_argument('--log', type=bool, default=True,
                     help='Turn on or off log, default is true')
 
 args = parser.parse_args()
+
+
+# Processing legacy arguments
+if args.load_lora:
+    args.load_adapter = True
+
+if args.disable_lora:
+    args.disable_adapter = True
 
 
 def log(msg: str):
@@ -89,7 +103,7 @@ def setup_seed(seed):
 
 def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     if args.model_type == "llama":
-        if "mixlora" in config and config["mixlora"]:
+        if args.mixlora:
             log("Initializing MixLoRA model")
             model = model = mlora.MixModel.from_pretrained(
                 path=args.base_model,
@@ -123,14 +137,14 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any], llm_model):
-    if args.disable_lora:
+def init_lora_model(config: Dict[str, any], llm_model: Union[mlora.LLMModel, mlora.MoEModel]):
+    if args.disable_adapter:
         return
 
     for lora_config in config["lora"]:
         lora_weight = None
-        if "mixlora" in config and config["mixlora"]:
-            if args.load_lora:
+        if args.mixlora:
+            if args.load_adapter:
                 moe_file_path = lora_config["output"] + "/mixlora_model.bin"
                 print(f"load {moe_file_path}")
                 lora_weight = torch.load(moe_file_path)
@@ -144,7 +158,7 @@ def init_lora_model(config: Dict[str, any], llm_model):
                                       target=lora_config["target_modules"],
                                       weight=lora_weight)
         else:
-            if args.load_lora:
+            if args.load_adapter:
                 adapter_file_path = lora_config["output"] + \
                     "/adapter_model.bin"
                 print(f"load {adapter_file_path}")
@@ -239,12 +253,12 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            if "mixlora" in config and config["mixlora"]:
+            if args.mixlora:
                 mlora.save_mixlora_model(llm_model, config, f"{step_cnt}")
             else:
                 mlora.save_lora_model(llm_model, config, f"{step_cnt}")
 
-    if "mixlora" in config and config["mixlora"]:
+    if args.mixlora:
         mlora.save_mixlora_model(llm_model, config)
     else:
         mlora.save_lora_model(llm_model, config)
@@ -308,7 +322,6 @@ def inference(config: Dict[str, any],
 
 # Main Function
 if __name__ == "__main__":
-    torch.autograd.set_detect_anomaly(True)
     setup_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
