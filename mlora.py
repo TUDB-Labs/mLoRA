@@ -101,11 +101,11 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
+def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.CasualLMModel]:
     if args.model_type == "llama":
         if args.mixlora:
-            log("Initializing MixLoRA model")
-            model = model = mlora.MixModel.from_pretrained(
+            log("Initializing MixLoRA model.")
+            model = mlora.MixModel.from_pretrained(
                 path=args.base_model,
                 device=args.device,
                 bits=(8 if args.load_8bit else (
@@ -113,6 +113,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
                 log_fn=log
             )
         else:
+            log("Initializing LLaMA model.")
             model = mlora.LlamaModel.from_pretrained(
                 path=args.base_model,
                 device=args.device,
@@ -121,6 +122,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
                 log_fn=log
             )
     elif args.model_type == "chatglm":
+        log("Initializing ChatGLM model.")
         model = mlora.ChatGLMModel.from_pretrained(
             path=args.base_model,
             device=args.device,
@@ -137,7 +139,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any], llm_model: Union[mlora.LLMModel, mlora.MoEModel]):
+def init_lora_model(config: Dict[str, any], llm_model: mlora.CasualLMModel):
     if args.disable_adapter:
         return
 
@@ -208,7 +210,7 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 
 
 # to get test result and want early stop it
-def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
+def train(config: Dict[str, any], llm_model: mlora.CasualLMModel, dispatcher: mlora.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
                             ] = llm_model.get_train_paramas(config)
@@ -253,19 +255,13 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            if args.mixlora:
-                mlora.save_mixlora_model(llm_model, config, f"{step_cnt}")
-            else:
-                mlora.save_lora_model(llm_model, config, f"{step_cnt}")
+            llm_model.save_model(config, f"{step_cnt}")
 
-    if args.mixlora:
-        mlora.save_mixlora_model(llm_model, config)
-    else:
-        mlora.save_lora_model(llm_model, config)
+    llm_model.save_model(config)
 
 
 def inference(config: Dict[str, any],
-              llm_model: mlora.LLMModel,
+              llm_model: mlora.CasualLMModel,
               tokenizer: mlora.Tokenizer):
     lora_adapter_num = len(config["lora"])
     batch_data_config: List[mlora.LoraBatchDataConfig] = []

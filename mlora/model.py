@@ -100,7 +100,7 @@ class RMSNorm(torch.nn.Module):
         return (self.weight_ * data).to(input_dtype)
 
 
-class LLMModel(metaclass=ABCMeta):
+class CasualLMModel(metaclass=ABCMeta):
     @abstractclassmethod
     def forward(self, input: MultiLoraBatchData):
         pass
@@ -109,6 +109,20 @@ class LLMModel(metaclass=ABCMeta):
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
         pass
 
+    @abstractclassmethod
+    def save_model(config: Dict[str, str], dir_suffix=""):
+        pass
+
+    @abstractclassmethod
+    def get_adapter_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+        pass
+
+    @abstractclassmethod
+    def sequential_module(self) -> torch.nn.Sequential:
+        pass
+
+
+class LLMModel(CasualLMModel):
     @abstractclassmethod
     def init_lora_weight(self, adapter_name: str,
                          r: int,
@@ -118,24 +132,8 @@ class LLMModel(metaclass=ABCMeta):
                          weight: Optional[Dict[str, torch.Tensor]]):
         pass
 
-    @abstractclassmethod
-    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
-        pass
 
-    @abstractclassmethod
-    def sequential_module(self) -> torch.nn.Sequential:
-        pass
-
-
-class MoEModel(metaclass=ABCMeta):
-    @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData):
-        pass
-
-    @abstractclassmethod
-    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
-        pass
-
+class MoEModel(CasualLMModel):
     @abstractclassmethod
     def init_moe_weight(self, adapter_name: str,
                         r: int,
@@ -145,12 +143,4 @@ class MoEModel(metaclass=ABCMeta):
                         moe_topk: int,
                         target: Dict[str, bool],
                         weight: Optional[Dict[str, torch.Tensor]]):
-        pass
-
-    @abstractclassmethod
-    def get_moe_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
-        pass
-
-    @abstractclassmethod
-    def sequential_module(self) -> torch.nn.Sequential:
         pass

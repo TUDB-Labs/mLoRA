@@ -1,7 +1,7 @@
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
-from mlora.model import LLMModel, RMSNorm
+from mlora.model import CasualLMModel, LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
 
 import torch
@@ -12,6 +12,8 @@ import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
 from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
+import os
+import json
 
 
 class Embedding(torch.nn.Module):
@@ -239,10 +241,10 @@ class LlamaModel(LLMModel):
                         bf16: bool = True,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
-                        log_fn=None) -> LLMModel:
+                        log_fn=None) -> CasualLMModel:
         if bits in [4, 8]:
             if log_fn is not None:
-                log_fn('Loading model with quantization, bits = %i' % bits)
+                log_fn(f"Loading model with quantization, bits = {bits}.")
             from transformers import BitsAndBytesConfig
             compute_dtype = (torch.float16 if fp16 else (
                 torch.bfloat16 if bf16 else torch.float32))
@@ -337,7 +339,7 @@ class LlamaModel(LLMModel):
 
         return train_paramas
 
-    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+    def get_adapter_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         # return the lora weight and target_module's name
         lora_weight_dict = {}
         target_modules = []
@@ -379,3 +381,32 @@ class LlamaModel(LLMModel):
         seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)
+
+    def save_model(self, config: Dict[str, str], dir_suffix=""):
+        for lora_config in config["lora"]:
+            lora_name = lora_config["name"]
+            lora_output_dir = lora_config["output"]
+            if dir_suffix != "":
+                lora_output_dir += os.sep + \
+                    lora_config["output"] + "_" + dir_suffix
+
+            if not os.path.exists(lora_output_dir):
+                os.makedirs(lora_output_dir)
+
+            lora_weight_dict, target_modules = self.get_adapter_weight_dict(
+                lora_name)
+
+            torch.save(lora_weight_dict, lora_output_dir +
+                       os.sep + "adapter_model.bin")
+
+            adapter_config = {}
+            adapter_config["lora_alpha"] = lora_config["alpha"]
+            adapter_config["lora_dropout"] = lora_config["dropout"]
+            adapter_config["r"] = lora_config["r"]
+            adapter_config["peft_type"] = "LORA"
+            adapter_config["task_type"] = "CAUSAL_LM"
+            adapter_config["bias"] = "none"
+            adapter_config["target_modules"] = target_modules
+
+            with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
+                json.dump(adapter_config, f, indent=4)
