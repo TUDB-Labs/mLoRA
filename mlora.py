@@ -22,7 +22,7 @@ import mlora
 import random
 import datetime
 import argparse
-from typing import Dict, Tuple, List, Union
+from typing import Dict, Tuple, List
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
