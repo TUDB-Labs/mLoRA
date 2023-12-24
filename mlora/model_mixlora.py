@@ -276,7 +276,10 @@ class MixTransformer(torch.nn.Module):
                     [final_ffn_output, final_hidden_states], dim=0
                 )
 
-        return data + final_ffn_output
+        if final_ffn_output is None:
+            return data
+        else:
+            return data + final_ffn_output
 
 
 class MixSequentialWrapper(torch.nn.Module):
