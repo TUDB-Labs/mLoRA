@@ -246,7 +246,7 @@ def inference(config: Dict[str, any],
             batch_tokens_=[tokens] * lora_adapter_num,
             tokens_len_without_pad_=[token_len] * lora_adapter_num,
             batch_seq_len_=inference_max_len,
-            expand_side_="right",
+            expand_side_=["right"] * lora_adapter_num,
             inference_model_=True)
 
         eos_flag: List[bool] = [False] * lora_adapter_num
