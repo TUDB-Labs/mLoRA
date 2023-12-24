@@ -47,7 +47,7 @@
             "dropout": 0.05,
             "target_modules": {
                 "w1_proj": true,
-                "w2_proj": true,
+                "w2_proj": false,
                 "w3_proj": true
             },
             "experts": 9,
