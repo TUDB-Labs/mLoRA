@@ -1,5 +1,5 @@
 {
-    "cutoff_len": 512,
+    "cutoff_len": 256,
     "group_by_length": false,
     "expand_right": true,
     "pad_token_id": -1,
@@ -23,6 +23,10 @@
             "alpha": 16,
             "dropout": 0.05,
             "target_modules": {
+                "q_proj": true,
+                "k_proj": false,
+                "v_proj": true,
+                "o_proj": false,
                 "w1_proj": true,
                 "w2_proj": true,
                 "w3_proj": true
