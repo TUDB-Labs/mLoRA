@@ -1,5 +1,5 @@
 {
-    "cutoff_len": 256,
+    "cutoff_len": 512,
     "group_by_length": false,
     "expand_right": true,
     "pad_token_id": -1,
