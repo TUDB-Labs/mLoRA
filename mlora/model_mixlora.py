@@ -101,6 +101,29 @@ class MixTransformer(torch.nn.Module):
         target: Dict[str, bool],
         weight: Optional[torch.Tensor],
     ):
+        # Inject LoRA configs into Attention Layer
+        attention_layer_list = [self.wk_, self.wq_, self.wv_, self.wo_]
+        attention_layer_name_list = ["k_proj", "q_proj", "v_proj", "o_proj"]
+
+        for idx, layer_name in enumerate(attention_layer_name_list):
+            if layer_name in target and target[layer_name]:
+                lora_a = None
+                lora_b = None
+                if weight is not None:
+                    lora_a_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
+                    lora_b_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
+                    if lora_a_name not in weight:
+                        raise f"can not found the layer {lora_a_name} in model"
+                    if lora_b_name not in weight:
+                        raise f"can not found the layer {lora_b_name} in model"
+                    lora_a = weight[lora_a_name]
+                    lora_b = weight[lora_b_name]
+
+                attention_layer_list[idx].init_lora_weight(
+                    moe_name, lora_r, lora_alpha, lora_dropout, lora_a, lora_b
+                )
+
+        # Inject LoRA configs into FFN layer
         moe_layer = MixMoELayer()
         moe_layer.gate_ = torch.nn.Linear(
             self.n_heads_ * self.head_dim_,
@@ -119,9 +142,9 @@ class MixTransformer(torch.nn.Module):
 
         self.moes_[moe_name] = moe_layer
 
-        linear_layer_list = [self.w1_, self.w2_, self.w3_]
-        linear_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
-        for idx, layer_name in enumerate(linear_layer_name_list):
+        ffn_layer_list = [self.w1_, self.w2_, self.w3_]
+        ffn_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
+        for idx, layer_name in enumerate(ffn_layer_name_list):
             if layer_name in target and target[layer_name]:
                 for expert_idx in range(moe_layer.experts_):
                     lora_a = None
@@ -136,7 +159,7 @@ class MixTransformer(torch.nn.Module):
                         lora_a = weight[lora_a_name]
                         lora_b = weight[lora_b_name]
 
-                    linear_layer_list[idx].init_lora_weight(
+                    ffn_layer_list[idx].init_lora_weight(
                         f"moe.{moe_name}.experts.{expert_idx}",
                         lora_r,
                         lora_alpha,
@@ -463,21 +486,29 @@ class MixModel:
                     train_paramas[moe_name] = []
 
                 lora_layer_list = [
+                    transformer_layer.wq_.loras_,
+                    transformer_layer.wk_.loras_,
+                    transformer_layer.wv_.loras_,
+                    transformer_layer.wo_.loras_,
                     transformer_layer.w1_.loras_,
                     transformer_layer.w2_.loras_,
                     transformer_layer.w3_.loras_,
                 ]
 
                 for lora_layer in lora_layer_list:
-                    for expert_idx in range(moe_config["experts"]):
-                        lora_name = f"moe.{moe_name}.experts.{expert_idx}"
-                        if lora_name in lora_layer:
-                            train_paramas[moe_name].append(
-                                lora_layer[lora_name].lora_a_
-                            )
-                            train_paramas[moe_name].append(
-                                lora_layer[lora_name].lora_b_
-                            )
+                    if moe_name in lora_layer:
+                        train_paramas[moe_name].append(lora_layer[moe_name].lora_a_)
+                        train_paramas[moe_name].append(lora_layer[moe_name].lora_b_)
+                    else:
+                        for expert_idx in range(moe_config["experts"]):
+                            lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+                            if lora_name in lora_layer:
+                                train_paramas[moe_name].append(
+                                    lora_layer[lora_name].lora_a_
+                                )
+                                train_paramas[moe_name].append(
+                                    lora_layer[lora_name].lora_b_
+                                )
 
         return train_paramas
 
@@ -487,34 +518,58 @@ class MixModel:
         moe_weight_dict = {}
         target_modules = []
         for idx, transformer_layer in enumerate(self.layers_):
-            layer_prefix_name = "mixlora.layers." + str(idx)
+            layer_prefix_name = f"mixlora.layers.{idx}."
             lora_layer_list = [
+                transformer_layer.wq_,
+                transformer_layer.wk_,
+                transformer_layer.wv_,
+                transformer_layer.wo_,
                 transformer_layer.w1_,
                 transformer_layer.w2_,
                 transformer_layer.w3_,
             ]
-            lora_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
-            moe_layer = transformer_layer.moes_[moe_name]
-            for expert_idx in range(moe_layer.experts_):
-                for idx, lora_layer in enumerate(lora_layer_list):
-                    lora_name = f"moe.{moe_name}.experts.{expert_idx}"
-                    if lora_name in lora_layer.loras_:
-                        if lora_layer_name_list[idx] not in target_modules:
-                            target_modules.append(lora_layer_name_list[idx])
-                        moe_weight_dict[
-                            layer_prefix_name
-                            + f".experts.{expert_idx}."
-                            + f"{lora_layer_name_list[idx]}.lora_A.weight"
-                        ] = lora_layer.loras_[lora_name].lora_a_
-                        moe_weight_dict[
-                            layer_prefix_name
-                            + f".experts.{expert_idx}."
-                            + f"{lora_layer_name_list[idx]}.lora_B.weight"
-                        ] = lora_layer.loras_[lora_name].lora_b_
+            lora_layer_name_list = [
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "w1_proj",
+                "w2_proj",
+                "w3_proj",
+            ]
+            for idx, lora_layer in enumerate(lora_layer_list):
+                if moe_name in lora_layer.loras_:
+                    if lora_layer_name_list[idx] not in target_modules:
+                        target_modules.append(lora_layer_name_list[idx])
+                    moe_weight_dict[
+                        layer_prefix_name
+                        + f"self_attn.{lora_layer_name_list[idx]}.lora_A.weight"
+                    ] = lora_layer.loras_[moe_name].lora_a_
+                    moe_weight_dict[
+                        layer_prefix_name
+                        + f"self_attn.{lora_layer_name_list[idx]}.lora_B.weight"
+                    ] = lora_layer.loras_[moe_name].lora_b_
+                else:
+                    moe_layer = transformer_layer.moes_[moe_name]
+                    for expert_idx in range(moe_layer.experts_):
+                        lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+                        if lora_name in lora_layer.loras_:
+                            if lora_layer_name_list[idx] not in target_modules:
+                                target_modules.append(lora_layer_name_list[idx])
+                            moe_weight_dict[
+                                layer_prefix_name
+                                + f"experts.{expert_idx}."
+                                + f"{lora_layer_name_list[idx]}.lora_A.weight"
+                            ] = lora_layer.loras_[lora_name].lora_a_
+                            moe_weight_dict[
+                                layer_prefix_name
+                                + f"experts.{expert_idx}."
+                                + f"{lora_layer_name_list[idx]}.lora_B.weight"
+                            ] = lora_layer.loras_[lora_name].lora_b_
 
-            moe_weight_dict[
-                layer_prefix_name + f".gate.weight"
-            ] = moe_layer.gate_.weight
+                    moe_weight_dict[
+                        layer_prefix_name + "gate.weight"
+                    ] = moe_layer.gate_.weight
 
         return moe_weight_dict, target_modules
 
