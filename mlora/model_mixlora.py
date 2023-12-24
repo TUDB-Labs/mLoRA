@@ -186,6 +186,7 @@ class MixTransformer(torch.nn.Module):
         common_w1 = self.w1_.weight_.forward(score_norm_data)
         common_w3 = self.w3_.weight_.forward(score_norm_data)
 
+        final_ffn_output = None
         for lora_config in input_args.lora_batch_data_config_:
             moe_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
@@ -245,9 +246,17 @@ class MixTransformer(torch.nn.Module):
                 else:
                     final_hidden_states.add_(current_hidden_states)
 
-            data[start_idx:end_idx] = data[start_idx:end_idx] + final_hidden_states
+            # print(final_hidden_states.shape)
+            if final_ffn_output is None:
+                final_ffn_output = final_hidden_states
+            else:
+                final_ffn_output = torch.cat(
+                    [final_ffn_output, final_hidden_states], dim=0
+                )
+            # print(final_ffn_output.shape)
+            # data[start_idx:end_idx] = data[start_idx:end_idx] + final_hidden_states
 
-        return data
+        return data + final_ffn_output
 
 
 class MixSequentialWrapper(torch.nn.Module):
@@ -317,7 +326,10 @@ class MixModel:
 
         seq_module = self.sequential_module()
 
-        data = (tokens, mask, self.rope_angle_, input, True)
+        if input.inference_model_:
+            data = (tokens, mask, self.rope_angle_, input, False)
+        else:
+            data = (tokens, mask, self.rope_angle_, input, True)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
@@ -488,30 +500,27 @@ class MixModel:
                 transformer_layer.w3_,
             ]
             lora_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
-            for expert_idx in range(self.moe_experts_):
+            moe_layer = transformer_layer.moes_[moe_name]
+            for expert_idx in range(moe_layer.experts_):
                 for idx, lora_layer in enumerate(lora_layer_list):
-                    if moe_name in lora_layer.loras_:
+                    lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+                    if lora_name in lora_layer.loras_:
                         if lora_layer_name_list[idx] not in target_modules:
                             target_modules.append(lora_layer_name_list[idx])
                         moe_weight_dict[
                             layer_prefix_name
                             + f".experts.{expert_idx}."
                             + f"{lora_layer_name_list[idx]}.lora_A.weight"
-                        ] = lora_layer.loras_[
-                            f"moe.{moe_name}.experts.{expert_idx}"
-                        ].lora_a_
+                        ] = lora_layer.loras_[lora_name].lora_a_
                         moe_weight_dict[
                             layer_prefix_name
                             + f".experts.{expert_idx}."
                             + f"{lora_layer_name_list[idx]}.lora_B.weight"
-                        ] = lora_layer.loras_[
-                            f"moe.{moe_name}.experts.{expert_idx}"
-                        ].lora_b_
+                        ] = lora_layer.loras_[lora_name].lora_b_
 
-            if moe_name in transformer_layer.gates_:
-                moe_weight_dict[
-                    layer_prefix_name + f".gate.weight"
-                ] = transformer_layer.gates_[moe_name].weight
+            moe_weight_dict[
+                layer_prefix_name + f".gate.weight"
+            ] = moe_layer.gate_.weight
 
         return moe_weight_dict, target_modules
 
@@ -536,27 +545,28 @@ class MixModel:
 
 
 def save_mixlora_model(model: MixModel, config: Dict[str, str], dir_suffix=""):
-    moe_config = config["moe"]
-    output_dir = moe_config["output"]
-    if dir_suffix != "":
-        output_dir += os.sep + moe_config["output"] + "_" + dir_suffix
+    for moe_config in config["lora"]:
+        moe_name = moe_config["name"]
+        output_dir = moe_config["output"]
+        if dir_suffix != "":
+            output_dir += os.sep + moe_config["output"] + "_" + dir_suffix
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
-    weight_dict, target_modules = model.get_moe_weight_dict()
-    torch.save(weight_dict, output_dir + os.sep + "mixlora_model.bin")
+        weight_dict, target_modules = model.get_moe_weight_dict(moe_name)
+        torch.save(weight_dict, output_dir + os.sep + "mixlora_model.bin")
 
-    mixlora_config = {}
-    mixlora_config["lora_alpha"] = moe_config["alpha"]
-    mixlora_config["lora_dropout"] = moe_config["dropout"]
-    mixlora_config["r"] = moe_config["r"]
-    mixlora_config["peft_type"] = "LORA"
-    mixlora_config["task_type"] = "CAUSAL_LM"
-    mixlora_config["bias"] = "none"
-    mixlora_config["target_modules"] = target_modules
-    mixlora_config["experts"] = moe_config["experts"]
-    mixlora_config["topk"] = moe_config["topk"]
+        mixlora_config = {}
+        mixlora_config["lora_alpha"] = moe_config["alpha"]
+        mixlora_config["lora_dropout"] = moe_config["dropout"]
+        mixlora_config["r"] = moe_config["r"]
+        mixlora_config["peft_type"] = "LORA"
+        mixlora_config["task_type"] = "CAUSAL_LM"
+        mixlora_config["bias"] = "none"
+        mixlora_config["target_modules"] = target_modules
+        mixlora_config["experts"] = moe_config["experts"]
+        mixlora_config["topk"] = moe_config["topk"]
 
-    with open(output_dir + os.sep + "mixlora_config.json", "w") as f:
-        json.dump(mixlora_config, f, indent=4)
+        with open(output_dir + os.sep + "mixlora_config.json", "w") as f:
+            json.dump(mixlora_config, f, indent=4)
