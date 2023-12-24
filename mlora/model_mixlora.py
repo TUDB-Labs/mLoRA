@@ -28,7 +28,8 @@ class Embedding(torch.nn.Module):
         self.padding_idx_: int = pad_token
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        data = F.embedding(tokens, self.token_embedding_, padding_idx=self.padding_idx_)
+        data = F.embedding(tokens, self.token_embedding_,
+                           padding_idx=self.padding_idx_)
         data.requires_grad_(True)
         return data
 
@@ -198,7 +199,8 @@ class MixTransformer(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        attention_score = xformers.ops.memory_efficient_attention(xq, xk, xv, mask)
+        attention_score = xformers.ops.memory_efficient_attention(
+            xq, xk, xv, mask)
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
         # get output attention score
@@ -226,7 +228,8 @@ class MixTransformer(torch.nn.Module):
 
             # routing to experts
             router_logits = moe_layer.gate_.forward(norm_data)
-            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            routing_weights = F.softmax(
+                router_logits, dim=1, dtype=torch.float)
             routing_weights, selected_experts = torch.topk(
                 routing_weights, moe_layer.topk_, dim=-1
             )
@@ -237,12 +240,14 @@ class MixTransformer(torch.nn.Module):
             for expert_idx in range(moe_layer.experts_):
                 lora_name = f"moe.{moe_name}.experts.{expert_idx}"
                 if lora_name in self.w1_.loras_:
-                    w1 = w1_data + self.w1_.loras_[lora_name].forward(norm_data)
+                    w1 = w1_data + \
+                        self.w1_.loras_[lora_name].forward(norm_data)
                 else:
                     w1 = w1_data
 
                 if lora_name in self.w3_.loras_:
-                    w3 = w3_data + self.w3_.loras_[lora_name].forward(norm_data)
+                    w3 = w3_data + \
+                        self.w3_.loras_[lora_name].forward(norm_data)
                 else:
                     w3 = w3_data
 
@@ -334,7 +339,8 @@ class MixModel:
 
     # train model or inference model: output is probs
     def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
-        tokens = torch.tensor(input.batch_tokens_, dtype=torch.int64).to(self.device_)
+        tokens = torch.tensor(input.batch_tokens_,
+                              dtype=torch.int64).to(self.device_)
 
         # only for train
         mask = precompute_mask(input, self.n_heads_, self.device_)
@@ -390,7 +396,8 @@ class MixModel:
             from transformers import BitsAndBytesConfig
 
             compute_dtype = (
-                torch.float16 if fp16 else (torch.bfloat16 if bf16 else torch.float32)
+                torch.float16 if fp16 else (
+                    torch.bfloat16 if bf16 else torch.float32)
             )
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
@@ -441,7 +448,8 @@ class MixModel:
         embedding_weight = llama_model.model.embed_tokens.weight.to(
             device=device
         ).requires_grad_(False)
-        model.token_embedding_ = Embedding(embedding_weight, llama_args.pad_token_id_)
+        model.token_embedding_ = Embedding(
+            embedding_weight, llama_args.pad_token_id_)
 
         output_weight = llama_model.lm_head.weight.to(
             dtype=torch.float32, device=device
@@ -454,15 +462,20 @@ class MixModel:
         model.norm_ = RMSNormLayer(norm_weight, model.norm_eps_)
 
         for idx, layer in enumerate(llama_model.model.layers):
-            model.layers_[idx].wq_ = Linear(layer.self_attn.q_proj, device=device)
-            model.layers_[idx].wk_ = Linear(layer.self_attn.k_proj, device=device)
-            model.layers_[idx].wv_ = Linear(layer.self_attn.v_proj, device=device)
-            model.layers_[idx].wo_ = Linear(layer.self_attn.o_proj, device=device)
+            model.layers_[idx].wq_ = Linear(
+                layer.self_attn.q_proj, device=device)
+            model.layers_[idx].wk_ = Linear(
+                layer.self_attn.k_proj, device=device)
+            model.layers_[idx].wv_ = Linear(
+                layer.self_attn.v_proj, device=device)
+            model.layers_[idx].wo_ = Linear(
+                layer.self_attn.o_proj, device=device)
             model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=device)
             model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=device)
             model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=device)
             model.layers_[idx].attention_norm_ = RMSNorm(
-                layer.input_layernorm.weight.to(device=device).requires_grad_(False),
+                layer.input_layernorm.weight.to(
+                    device=device).requires_grad_(False),
                 model.norm_eps_,
             )
             model.layers_[idx].ffn_norm_ = RMSNorm(
@@ -497,8 +510,10 @@ class MixModel:
 
                 for lora_layer in lora_layer_list:
                     if moe_name in lora_layer:
-                        train_paramas[moe_name].append(lora_layer[moe_name].lora_a_)
-                        train_paramas[moe_name].append(lora_layer[moe_name].lora_b_)
+                        train_paramas[moe_name].append(
+                            lora_layer[moe_name].lora_a_)
+                        train_paramas[moe_name].append(
+                            lora_layer[moe_name].lora_b_)
                     else:
                         for expert_idx in range(moe_config["experts"]):
                             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
@@ -555,7 +570,8 @@ class MixModel:
                         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
                         if lora_name in lora_layer.loras_:
                             if lora_layer_name_list[idx] not in target_modules:
-                                target_modules.append(lora_layer_name_list[idx])
+                                target_modules.append(
+                                    lora_layer_name_list[idx])
                             moe_weight_dict[
                                 layer_prefix_name
                                 + f"experts.{expert_idx}."
@@ -576,7 +592,8 @@ class MixModel:
     def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()
 
-        seq_module.update({"embedding": MixSequentialWrapper(self.token_embedding_)})
+        seq_module.update(
+            {"embedding": MixSequentialWrapper(self.token_embedding_)})
         seq_module.move_to_end("embedding")
 
         for index, layer in enumerate(self.layers_):
