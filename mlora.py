@@ -236,9 +236,15 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            mlora.save_lora_model(llm_model, config, f"{step_cnt}")
+            if "mixlora" in config and config["mixlora"]:
+                mlora.save_mixlora_model(llm_model, config, f"{step_cnt}")
+            else:
+                mlora.save_lora_model(llm_model, config, f"{step_cnt}")
 
-    mlora.save_lora_model(llm_model, config)
+    if "mixlora" in config and config["mixlora"]:
+        mlora.save_mixlora_model(llm_model, config)
+    else:
+        mlora.save_lora_model(llm_model, config)
 
 
 def inference(config: Dict[str, any],
