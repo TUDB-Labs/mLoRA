@@ -212,27 +212,22 @@ class MixTransformer(torch.nn.Module):
             # mix of experts
             final_hidden_states = None
             for expert_idx in range(moe_layer.experts_):
-                if self.w1_.enable_lora_:
-                    w1 = w1_data + self.w1_.loras_[
-                        f"moe.{moe_name}.experts.{expert_idx}"
-                    ].forward(norm_data)
+                lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+                if lora_name in self.w1_.loras_:
+                    w1 = w1_data + self.w1_.loras_[lora_name].forward(norm_data)
                 else:
                     w1 = w1_data
 
-                if self.w3_.enable_lora_:
-                    w3 = w3_data + self.w3_.loras_[
-                        f"moe.{moe_name}.experts.{expert_idx}"
-                    ].forward(norm_data)
+                if lora_name in self.w3_.loras_:
+                    w3 = w3_data + self.w3_.loras_[lora_name].forward(norm_data)
                 else:
                     w3 = w3_data
 
                 silu_result = F.silu(w1) * w3
-                if self.w2_.enable_lora_:
+                if lora_name in self.w2_.loras_:
                     hidden_state = self.w2_.weight_.forward(
                         silu_result
-                    ) + self.w2_.loras_[f"moe.{moe_name}.experts.{expert_idx}"].forward(
-                        silu_result
-                    )
+                    ) + self.w2_.loras_[lora_name].forward(silu_result)
                 else:
                     hidden_state = self.w2_.weight_.forward(silu_result)
 
@@ -246,15 +241,12 @@ class MixTransformer(torch.nn.Module):
                 else:
                     final_hidden_states.add_(current_hidden_states)
 
-            # print(final_hidden_states.shape)
             if final_ffn_output is None:
                 final_ffn_output = final_hidden_states
             else:
                 final_ffn_output = torch.cat(
                     [final_ffn_output, final_hidden_states], dim=0
                 )
-            # print(final_ffn_output.shape)
-            # data[start_idx:end_idx] = data[start_idx:end_idx] + final_hidden_states
 
         return data + final_ffn_output
 
@@ -478,12 +470,14 @@ class MixModel:
 
                 for lora_layer in lora_layer_list:
                     for expert_idx in range(moe_config["experts"]):
-                        train_paramas[moe_name].append(
-                            lora_layer[f"moe.{moe_name}.experts.{expert_idx}"].lora_a_
-                        )
-                        train_paramas[moe_name].append(
-                            lora_layer[f"moe.{moe_name}.experts.{expert_idx}"].lora_b_
-                        )
+                        lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+                        if lora_name in lora_layer:
+                            train_paramas[moe_name].append(
+                                lora_layer[lora_name].lora_a_
+                            )
+                            train_paramas[moe_name].append(
+                                lora_layer[lora_name].lora_b_
+                            )
 
         return train_paramas
 
