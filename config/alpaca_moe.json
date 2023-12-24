@@ -8,25 +8,51 @@
     "train_lora_candidate_num": 4,
     "train_lora_simultaneously_num": 2,
     "train_strategy": "optim",
-    "moe": {
-        "output": "alpaca-mixlora",
-        "optim": "adamw",
-        "lr": 1e-5,
-        "batch_size": 16,
-        "micro_batch_size": 4,
-        "test_batch_size": 64,
-        "num_epochs": 3,
-        "r": 8,
-        "alpha": 16,
-        "dropout": 0.05,
-        "target_modules": {
-            "w1_proj": true,
-            "w2_proj": true,
-            "w3_proj": true
+    "mixlora": true,
+    "lora": [
+        {
+            "name": "mixlora_0",
+            "output": "mixlora_0",
+            "optim": "adamw",
+            "lr": 3e-4,
+            "batch_size": 16,
+            "micro_batch_size": 4,
+            "test_batch_size": 64,
+            "num_epochs": 3,
+            "r": 8,
+            "alpha": 16,
+            "dropout": 0.05,
+            "target_modules": {
+                "w1_proj": true,
+                "w2_proj": true,
+                "w3_proj": true
+            },
+            "experts": 8,
+            "topk": 2,
+            "data": "yahma/alpaca-cleaned",
+            "prompt": "template/template_demo.json"
         },
-        "experts": 8,
-        "topk": 2,
-        "data": "yahma/alpaca-cleaned",
-        "prompt": "template/template_demo.json"
-    }
+        {
+            "name": "mixlora_1",
+            "output": "mixlora_1",
+            "optim": "adamw",
+            "lr": 3e-4,
+            "batch_size": 16,
+            "micro_batch_size": 4,
+            "test_batch_size": 64,
+            "num_epochs": 3,
+            "r": 8,
+            "alpha": 16,
+            "dropout": 0.05,
+            "target_modules": {
+                "w1_proj": true,
+                "w2_proj": true,
+                "w3_proj": true
+            },
+            "experts": 8,
+            "topk": 2,
+            "data": "yahma/alpaca-cleaned",
+            "prompt": "template/template_demo.json"
+        }
+    ]
 }
