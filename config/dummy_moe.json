@@ -46,9 +46,13 @@
             "alpha": 16,
             "dropout": 0.05,
             "target_modules": {
-                "w1_proj": true,
-                "w2_proj": false,
-                "w3_proj": true
+                "q_proj": true,
+                "k_proj": false,
+                "v_proj": true,
+                "o_proj": false,
+                "w1_proj": false,
+                "w2_proj": true,
+                "w3_proj": false
             },
             "experts": 9,
             "topk": 3,
