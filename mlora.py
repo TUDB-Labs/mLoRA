@@ -94,14 +94,16 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
             model = model = mlora.MixModel.from_pretrained(
                 path=args.base_model,
                 device=args.device,
-                bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+                bits=(8 if args.load_8bit else (
+                    4 if args.load_4bit else None)),
                 log_fn=log
             )
         else:
             model = mlora.LlamaModel.from_pretrained(
                 path=args.base_model,
                 device=args.device,
-                bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+                bits=(8 if args.load_8bit else (
+                    4 if args.load_4bit else None)),
                 log_fn=log
             )
     elif args.model_type == "chatglm":
@@ -143,7 +145,8 @@ def init_lora_model(config: Dict[str, any], llm_model):
                                       weight=lora_weight)
         else:
             if args.load_lora:
-                adapter_file_path = lora_config["output"] + "/adapter_model.bin"
+                adapter_file_path = lora_config["output"] + \
+                    "/adapter_model.bin"
                 print(f"load {adapter_file_path}")
                 lora_weight = torch.load(adapter_file_path)
 
