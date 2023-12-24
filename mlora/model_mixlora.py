@@ -6,7 +6,7 @@ from mlora.model import (
     precompute_rope_angle,
     precompute_mask,
 )
-from mlora.model import LLMModel, RMSNorm
+from mlora.model import MoEModel, RMSNorm
 from mlora.LoraLiner import Linear
 
 import torch
@@ -312,7 +312,7 @@ class MixSequentialWrapper(torch.nn.Module):
             raise f"module invalid: {module_name}"
 
 
-class MixModel:
+class MixModel(MoEModel):
     def __init__(self, args: LLMModelArgs):
         # weight
         self.token_embedding_: Embedding = None
@@ -392,7 +392,7 @@ class MixModel:
         double_quant: bool = True,
         quant_type: str = "nf4",
         log_fn=None,
-    ) -> LLMModel:
+    ) -> MoEModel:
         if bits in [4, 8]:
             if log_fn is not None:
                 log_fn("Loading model with quantization, bits = %i" % bits)
@@ -611,31 +611,3 @@ class MixModel:
         seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)
-
-
-def save_mixlora_model(model: MixModel, config: Dict[str, str], dir_suffix=""):
-    for moe_config in config["lora"]:
-        moe_name = moe_config["name"]
-        output_dir = moe_config["output"]
-        if dir_suffix != "":
-            output_dir += os.sep + moe_config["output"] + "_" + dir_suffix
-
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-
-        weight_dict, target_modules = model.get_moe_weight_dict(moe_name)
-        torch.save(weight_dict, output_dir + os.sep + "mixlora_model.bin")
-
-        mixlora_config = {}
-        mixlora_config["lora_alpha"] = moe_config["alpha"]
-        mixlora_config["lora_dropout"] = moe_config["dropout"]
-        mixlora_config["r"] = moe_config["r"]
-        mixlora_config["peft_type"] = "LORA"
-        mixlora_config["task_type"] = "CAUSAL_LM"
-        mixlora_config["bias"] = "none"
-        mixlora_config["target_modules"] = target_modules
-        mixlora_config["experts"] = moe_config["experts"]
-        mixlora_config["topk"] = moe_config["topk"]
-
-        with open(output_dir + os.sep + "mixlora_config.json", "w") as f:
-            json.dump(mixlora_config, f, indent=4)

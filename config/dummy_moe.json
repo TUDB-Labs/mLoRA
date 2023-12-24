@@ -5,7 +5,6 @@
     "train_lora_candidate_num": 2,
     "train_lora_simultaneously_num": 2,
     "train_strategy": "optim",
-    "mixlora": true,
     "lora": [
         {
             "name": "mixlora_0",
