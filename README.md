@@ -11,7 +11,7 @@ m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning 
 
 - Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/QLoRA adapters.
 
-- LoRA based Mix-of-Expert: Support for MixLoRA, which implements Mix-of-Expert architecture based on multiple LoRA adapters for frozen FFN layer.
+- LoRA based Mix-of-Expert: Support for [MixLoRA](./MixLoRA.md), which implements Mix-of-Expert architecture based on multiple LoRA adapters for frozen FFN layer.
 
 ## Contents
 
