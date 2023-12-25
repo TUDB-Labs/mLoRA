@@ -24,12 +24,12 @@ jobs:
       - name: finetune llama-7b
         run: |
           cd /workspace/multi-lora-fine-tune
-          python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune.json --load_8bit
+          python mlora.py --base_model /data/llama-7b-hf --config ./config/dummy.json --load_8bit
 
       - name: test inference with lora
         run: |
           cd /workspace/multi-lora-fine-tune
-          python .github/workflows/ci_script.py "llama" "/data/llama-7b-hf" "./lora_0" "Say something."
+          python .github/workflows/ci_script.py "llama" "/data/llama-7b-hf" "./lora_1" "What is m-LoRA?"
 
   test-vicuna-7b:
     runs-on: self-hosted
