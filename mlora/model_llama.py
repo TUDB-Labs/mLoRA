@@ -309,11 +309,21 @@ class LlamaModel(CasualLMModel):
         if self.adapter_type_ == "lora":
             for transformer_layer in self.layers_:
                 transformer_layer.init_lora_layer_weight(
-                    kwargs["adapter_name"], kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], kwargs["target"], weight)
+                    kwargs["adapter_name"],
+                    kwargs["lora_r"],
+                    kwargs["lora_alpha"],
+                    kwargs["lora_dropout"],
+                    kwargs["target"], weight)
         elif self.adapter_type_ == "mixlora":
             for transformer_layer in self.layers_:
                 transformer_layer.init_mixlora_layer_weight(
-                    kwargs["adapter_name"], kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], kwargs["moe_experts"], kwargs["moe_topk"], kwargs["target"], weight)
+                    kwargs["adapter_name"],
+                    kwargs["lora_r"],
+                    kwargs["lora_alpha"],
+                    kwargs["lora_dropout"],
+                    kwargs["moe_experts"],
+                    kwargs["moe_topk"],
+                    kwargs["target"], weight)
         else:
             raise f"unkown adapter type {self.adapter_type_}"
 
