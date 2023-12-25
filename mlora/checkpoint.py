@@ -117,7 +117,6 @@ class CheckpointRecomputeFunction(torch.autograd.Function):
             torch.set_rng_state(ctx.fwd_cpu_state)
             if ctx.had_cuda_in_fwd:
                 set_device_states(ctx.fwd_gpu_devices, ctx.fwd_gpu_states)
-
             detached_inputs = detach_variable(tuple(inputs))
             with torch.enable_grad(), \
                     torch.cuda.amp.autocast(**ctx.gpu_autocast_kwargs), \
@@ -134,9 +133,9 @@ class CheckpointRecomputeFunction(torch.autograd.Function):
                 outputs_with_grad.append(outputs[i])
                 args_with_grad.append(args[i])
         if len(outputs_with_grad) == 0:
-            raise RuntimeError("No output whth grad")
+            raise RuntimeError("No output with grad")
         torch.autograd.backward(outputs_with_grad, args_with_grad)
         grads = tuple(inp.grad if isinstance(inp, torch.Tensor) else None
                       for inp in detached_inputs)
 
-        return (None, None) + grads
+        return (None,) + grads
