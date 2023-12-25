@@ -26,7 +26,7 @@ class MixGate(torch.nn.Module):
         self.topk_ = moe_topk
 
     def routing(self, norm_data: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # routing to experts
+        # routing to experts based on softmax and top-k selection
         router_logits = self.gate_.forward(norm_data)
         routing_weights = F.softmax(
             router_logits, dim=1, dtype=torch.float)
@@ -38,6 +38,7 @@ class MixGate(torch.nn.Module):
 
     def forward(self, routing_state: Tuple[torch.Tensor, torch.Tensor],
                 hidden_state: torch.Tensor, expert_idx: int) -> torch.Tensor:
+        # do routing by masking the unselected experts
         routing_weights, selected_experts = routing_state
         expert_mask = selected_experts == expert_idx
         expert_weights = (routing_weights * expert_mask).sum(
@@ -73,8 +74,11 @@ class MixMoe(torch.nn.Module):
                 self.moes_[adapter_name].gate_.weight.copy_(gate)
 
     def forward(self, score_norm_data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+        # score_norm_data shape is: batch_size * max_seq_len * dim
+        # Calculate the shared w1 and w3 projection result
         common_w1 = self.w1_.weight_.forward(score_norm_data)
         common_w3 = self.w3_.weight_.forward(score_norm_data)
+        # Mix of experts
         final_ffn_output = None
         for lora_config in input_args.lora_batch_data_config_:
             moe_name = lora_config.adapter_name_
@@ -84,17 +88,20 @@ class MixMoe(torch.nn.Module):
             if moe_name == "" or moe_name not in self.moes_:
                 continue
 
+            # Unpack batching data
             moe_layer = self.moes_[moe_name]
 
             norm_data = score_norm_data[start_idx:end_idx]
             w1_data = common_w1[start_idx:end_idx]
             w3_data = common_w3[start_idx:end_idx]
 
+            # Calculate routing data
             routing_state = moe_layer.routing(norm_data)
 
-            # mix of experts
+            # Routing to experts
             final_hidden_states = None
             for expert_idx in range(moe_layer.experts_):
+                # Applying LoRA weights to FFN weights
                 lora_name = f"moe.{moe_name}.experts.{expert_idx}"
                 if lora_name in self.w1_.loras_:
                     w1 = w1_data + \
@@ -108,6 +115,7 @@ class MixMoe(torch.nn.Module):
                 else:
                     w3 = w3_data
 
+                # Calculating results for an expert FFN
                 silu_result = F.silu(w1) * w3
                 if lora_name in self.w2_.loras_:
                     hidden_state = self.w2_.weight_.forward(
@@ -116,6 +124,7 @@ class MixMoe(torch.nn.Module):
                 else:
                     hidden_state = self.w2_.weight_.forward(silu_result)
 
+                # Do routing
                 current_hidden_states = moe_layer.forward(
                     routing_state, hidden_state, expert_idx)
                 if final_hidden_states is None:
@@ -123,6 +132,7 @@ class MixMoe(torch.nn.Module):
                 else:
                     final_hidden_states.add_(current_hidden_states)
 
+            # Collecting results
             if final_ffn_output is None:
                 final_ffn_output = final_hidden_states
             else:

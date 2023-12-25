@@ -217,6 +217,7 @@ class Transformer(torch.nn.Module):
         # feed forward fully connected
         score_norm_data = self.ffn_norm_.forward(data)
 
+        # Switching to a dedicated MoE FFN layer when available
         if self.moe_ is not None:
             final_ffn_output = self.moe_.forward(score_norm_data, input_args)
         else:
