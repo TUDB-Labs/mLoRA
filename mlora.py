@@ -101,7 +101,7 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.CasualLMModel]:
+def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     if args.model_type == "llama":
         log("Initializing LLaMA model.")
         model = mlora.LlamaModel.from_pretrained(
@@ -129,7 +129,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.Casu
     return tokenizer, model
 
 
-def init_adapter_model(config: Dict[str, any], llm_model: mlora.CasualLMModel):
+def init_adapter_model(config: Dict[str, any], llm_model: mlora.LLMModel):
     if args.disable_adapter:
         return
 
@@ -202,7 +202,7 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 
 
 # to get test result and want early stop it
-def train(config: Dict[str, any], llm_model: mlora.CasualLMModel, dispatcher: mlora.Dispatcher):
+def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
                             ] = llm_model.get_train_paramas(config)
@@ -253,7 +253,7 @@ def train(config: Dict[str, any], llm_model: mlora.CasualLMModel, dispatcher: ml
 
 
 def inference(config: Dict[str, any],
-              llm_model: mlora.CasualLMModel,
+              llm_model: mlora.LLMModel,
               tokenizer: mlora.Tokenizer):
     lora_adapter_num = len(config["lora"])
     batch_data_config: List[mlora.LoraBatchDataConfig] = []
