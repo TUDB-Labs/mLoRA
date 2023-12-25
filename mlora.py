@@ -103,24 +103,14 @@ def setup_seed(seed):
 
 def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.CasualLMModel]:
     if args.model_type == "llama":
-        if args.mixlora:
-            log("Initializing MixLoRA model.")
-            model = mlora.MixModel.from_pretrained(
-                path=args.base_model,
-                device=args.device,
-                bits=(8 if args.load_8bit else (
-                    4 if args.load_4bit else None)),
-                log_fn=log
-            )
-        else:
-            log("Initializing LLaMA model.")
-            model = mlora.LlamaModel.from_pretrained(
-                path=args.base_model,
-                device=args.device,
-                bits=(8 if args.load_8bit else (
-                    4 if args.load_4bit else None)),
-                log_fn=log
-            )
+        log("Initializing LLaMA model.")
+        model = mlora.LlamaModel.from_pretrained(
+            path=args.base_model,
+            device=args.device,
+            bits=(8 if args.load_8bit else (
+                4 if args.load_4bit else None)),
+            log_fn=log
+        )
     elif args.model_type == "chatglm":
         log("Initializing ChatGLM model.")
         model = mlora.ChatGLMModel.from_pretrained(
@@ -139,7 +129,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.Casu
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any], llm_model: mlora.CasualLMModel):
+def init_adapter_model(config: Dict[str, any], llm_model: mlora.CasualLMModel):
     if args.disable_adapter:
         return
 
@@ -148,30 +138,32 @@ def init_lora_model(config: Dict[str, any], llm_model: mlora.CasualLMModel):
         if args.mixlora:
             if args.load_adapter:
                 moe_file_path = lora_config["output"] + "/mixlora_model.bin"
-                print(f"load {moe_file_path}")
+                log(f"Load MixLoRA adapter: {moe_file_path}")
                 lora_weight = torch.load(moe_file_path)
 
-            llm_model.init_moe_weight(moe_name=lora_config["name"],
-                                      lora_r=lora_config["r"],
-                                      lora_alpha=lora_config["alpha"],
-                                      lora_dropout=lora_config["dropout"],
-                                      moe_experts=lora_config["experts"],
-                                      moe_topk=lora_config["topk"],
-                                      target=lora_config["target_modules"],
-                                      weight=lora_weight)
+            llm_model.init_adapter_weight(adapter_name=lora_config["name"],
+                                          adapter_type="mixlora",
+                                          lora_r=lora_config["r"],
+                                          lora_alpha=lora_config["alpha"],
+                                          lora_dropout=lora_config["dropout"],
+                                          moe_experts=lora_config["experts"],
+                                          moe_topk=lora_config["topk"],
+                                          target=lora_config["target_modules"],
+                                          weight=lora_weight)
         else:
             if args.load_adapter:
                 adapter_file_path = lora_config["output"] + \
                     "/adapter_model.bin"
-                print(f"load {adapter_file_path}")
+                log(f"Load LoRA adapter: {adapter_file_path}")
                 lora_weight = torch.load(adapter_file_path)
 
-            llm_model.init_lora_weight(lora_config["name"],
-                                       lora_config["r"],
-                                       lora_config["alpha"],
-                                       lora_config["dropout"],
-                                       lora_config["target_modules"],
-                                       lora_weight)
+            llm_model.init_adapter_weight(adapter_name=lora_config["name"],
+                                          adapter_type="lora",
+                                          lora_r=lora_config["r"],
+                                          lora_alpha=lora_config["alpha"],
+                                          lora_dropout=lora_config["dropout"],
+                                          target=lora_config["target_modules"],
+                                          weight=lora_weight)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
@@ -255,9 +247,9 @@ def train(config: Dict[str, any], llm_model: mlora.CasualLMModel, dispatcher: ml
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            llm_model.save_model(config, f"{step_cnt}")
+            llm_model.save_adapter_weight(config, f"{step_cnt}")
 
-    llm_model.save_model(config)
+    llm_model.save_adapter_weight(config)
 
 
 def inference(config: Dict[str, any],
@@ -324,7 +316,7 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     tokenizer, model = load_base_model(config)
-    init_lora_model(config, model)
+    init_adapter_model(config, model)
 
     torch.cuda.empty_cache()
 
