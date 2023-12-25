@@ -8,7 +8,6 @@ def inference_llama(base_model_name_or_path, lora_weights_path, prompt, device):
     tokenizer = LlamaTokenizer.from_pretrained(base_model_name_or_path)
     model = LlamaForCausalLM.from_pretrained(
         base_model_name_or_path,
-        load_in_8bit=True,
         torch_dtype=torch.float16,
         device_map=device,
     )
@@ -17,20 +16,24 @@ def inference_llama(base_model_name_or_path, lora_weights_path, prompt, device):
 
 
 def inference_chatglm(base_model_name_or_path, lora_weights_path, prompt, device):
-    tokenizer = AutoTokenizer.from_pretrained(base_model_name_or_path, trust_remote_code=True)
-    model = AutoModel.from_pretrained(base_model_name_or_path, trust_remote_code=True).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(
+        base_model_name_or_path, trust_remote_code=True)
+    model = AutoModel.from_pretrained(
+        base_model_name_or_path, trust_remote_code=True).to(device)
     inference(tokenizer, model, device, prompt, lora_weights_path)
 
 
 def inference(tokenizer, model, device, prompt, lora_weights_path):
-    model = PeftModel.from_pretrained(model, lora_weights_path, torch_dtype=torch.float16)
+    model = PeftModel.from_pretrained(
+        model, lora_weights_path, torch_dtype=torch.float16)
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
     with torch.inference_mode():
         outputs = model.generate(
             input_ids=input_ids,
-            max_new_tokens=100, do_sample=True, top_p=0.9, temperature=0.5
+            max_new_tokens=100, do_sample=True, top_p=1, temperature=1
         )
-        output = tokenizer.batch_decode(outputs.detach().cpu().numpy(), skip_special_tokens=True)[0][len(prompt):]
+        output = tokenizer.batch_decode(outputs.detach().cpu(
+        ).numpy(), skip_special_tokens=True)[0][len(prompt):]
 
         print(f"Prompt:\n{prompt}\n")
         print(f"Generated:\n{output}")
