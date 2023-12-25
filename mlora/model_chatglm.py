@@ -1,6 +1,6 @@
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
-from mlora.model import CasualLMModel, LLMModel, RMSNorm
+from mlora.model import CasualLMModel, RMSNorm
 from mlora.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
 from mlora.LoraLiner import Linear
 
@@ -125,7 +125,7 @@ class Transformer:
         return mlp_output
 
 
-class ChatGLMModel(LLMModel):
+class ChatGLMModel(CasualLMModel):
     def __init__(self, args: LLMModelArgs):
         # weight
         self.token_embedding_: torch.Tensor = None
@@ -259,15 +259,13 @@ class ChatGLMModel(LLMModel):
 
         return model
 
-    def init_lora_weight(self, adapter_name: str,
-                         r: int,
-                         lora_alpha: int,
-                         lora_dropout: float,
-                         target: Dict[str, bool],
-                         weight: Optional[Dict[str, torch.Tensor]]):
+    def init_adapter_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
+        if "adapter_type" in kwargs and kwargs['adapter_type'] != "lora":
+            raise f"unkown adapter type {kwargs['adapter_type']}"
+
         for transformer_layer in self.layers_:
             transformer_layer.init_lora_layer_weight(
-                adapter_name, r, lora_alpha, lora_dropout, target, weight)
+                kwargs["adapter_name"], kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], kwargs["target"], weight)
 
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}
@@ -317,7 +315,7 @@ class ChatGLMModel(LLMModel):
     def sequential_module(self) -> torch.nn.Sequential:
         pass
 
-    def save_model(self, config: Dict[str, str], dir_suffix=""):
+    def save_adapter_weight(self, config: Dict[str, str], dir_suffix=""):
         for lora_config in config["lora"]:
             lora_name = lora_config["name"]
             lora_output_dir = lora_config["output"]
