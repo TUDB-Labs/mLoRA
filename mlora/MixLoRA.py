@@ -57,7 +57,11 @@ class MixMoe(torch.nn.Module):
         # mix of experts
         self.moes_: Dict[str, MixGate] = {}
 
-    def init_moe_weight(self, adapter_name: str, moe_in_features: int, moe_experts: int, moe_topk: int, gate: Optional[torch.Tensor] = None):
+    def init_moe_weight(self, adapter_name: str,
+                        moe_in_features: int,
+                        moe_experts: int,
+                        moe_topk: int,
+                        gate: Optional[torch.Tensor] = None):
         if adapter_name not in self.moes_:
             self.moes_[adapter_name] = MixGate(adapter_name)
 

@@ -265,7 +265,11 @@ class ChatGLMModel(CasualLMModel):
 
         for transformer_layer in self.layers_:
             transformer_layer.init_lora_layer_weight(
-                kwargs["adapter_name"], kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], kwargs["target"], weight)
+                kwargs["adapter_name"],
+                kwargs["lora_r"],
+                kwargs["lora_alpha"],
+                kwargs["lora_dropout"],
+                kwargs["target"], weight)
 
     def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}
