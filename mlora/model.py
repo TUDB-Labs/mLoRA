@@ -100,7 +100,7 @@ class RMSNorm(torch.nn.Module):
         return (self.weight_ * data).to(input_dtype)
 
 
-class CasualLMModel(metaclass=ABCMeta):
+class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
     def forward(self, input: MultiLoraBatchData):
         pass

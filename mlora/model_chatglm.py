@@ -1,6 +1,6 @@
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
-from mlora.model import CasualLMModel, RMSNorm
+from mlora.model import LLMModel, RMSNorm
 from mlora.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
 from mlora.LoraLiner import Linear
 
@@ -125,7 +125,7 @@ class Transformer:
         return mlp_output
 
 
-class ChatGLMModel(CasualLMModel):
+class ChatGLMModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
         # weight
         self.token_embedding_: torch.Tensor = None
@@ -182,7 +182,7 @@ class ChatGLMModel(CasualLMModel):
                         bf16: bool = True,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
-                        log_fn=None) -> CasualLMModel:
+                        log_fn=None) -> LLMModel:
         # now only support the qlora - 4bit
         if bits in [4, 8]:
             if log_fn is not None:

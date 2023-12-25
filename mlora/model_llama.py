@@ -1,7 +1,7 @@
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
-from mlora.model import CasualLMModel, RMSNorm
+from mlora.model import LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
 from mlora.MixLoRA import MixMoe
 
@@ -254,7 +254,7 @@ class LlamaSequentialWrapper(torch.nn.Module):
             raise f"module invalid: {module_name}"
 
 
-class LlamaModel(CasualLMModel):
+class LlamaModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
         # weight
         self.token_embedding_: Embedding = None
@@ -334,7 +334,7 @@ class LlamaModel(CasualLMModel):
                         bf16: bool = True,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
-                        log_fn=None) -> CasualLMModel:
+                        log_fn=None) -> LLMModel:
         if bits in [4, 8]:
             if log_fn is not None:
                 log_fn(f"Loading model with quantization, bits = {bits}.")
