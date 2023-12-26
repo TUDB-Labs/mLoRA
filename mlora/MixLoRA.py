@@ -90,7 +90,7 @@ class BasicMoe(torch.nn.Module):
             else:
                 final_hidden_states.add_(current_hidden_states)
 
-        return final_hidden_states
+        return final_hidden_states, None
 
 
 class SwitchMoe(torch.nn.Module):
@@ -188,14 +188,14 @@ class MixMLP(torch.nn.Module):
         else:
             return self.w2_.weight_.forward(silu_result)
 
-    def forward(self, score_norm_data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def forward(self, score_norm_data: torch.Tensor, router_outputs: Tuple, input_args: MultiLoraBatchData) -> torch.Tensor:
         if not self.enable_moe_:
             w1 = self.w1_.forward(score_norm_data, input_args)
             w3 = self.w3_.forward(score_norm_data, input_args)
             return self.w2_.forward(F.silu(w1) * w3, input_args)
 
         final_hidden_states = None
-        for lora_config in input_args.lora_batch_data_config_:
+        for idx, lora_config in enumerate(input_args.lora_batch_data_config_):
             moe_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
@@ -203,17 +203,11 @@ class MixMLP(torch.nn.Module):
             if moe_name == "" or moe_name not in self.moes_:
                 continue
 
-            output = self.moes_[
+            current_hidden_states, current_router_outputs = self.moes_[
                 moe_name].forward(self._expert_forward, score_norm_data[start_idx:end_idx])
 
-            if isinstance(output, Tuple):
-                current_hidden_states, router_tuple = output
-                if lora_config.aux_output_ is None:
-                    lora_config.aux_output_ = (router_tuple,)
-                else:
-                    lora_config.aux_output_ += (router_tuple,)
-            else:
-                current_hidden_states = output
+            if current_router_outputs is not None:
+                router_outputs[idx].append(current_router_outputs)
 
             if final_hidden_states is None:
                 final_hidden_states = current_hidden_states

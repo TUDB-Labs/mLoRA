@@ -151,6 +151,7 @@ class Transformer(torch.nn.Module):
                 data: torch.Tensor,
                 mask: torch.Tensor,
                 rope_angle: Tuple[torch.Tensor, torch.Tensor],
+                router_outputs: Tuple,
                 input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
@@ -183,7 +184,8 @@ class Transformer(torch.nn.Module):
 
         # feed forward fully connected
         score_norm_data = self.ffn_norm_.forward(data)
-        data = data + self.ffn_.forward(score_norm_data, input_args)
+        data = data + self.ffn_.forward(
+            score_norm_data, router_outputs, input_args)
 
         return data
 
@@ -251,17 +253,22 @@ class LlamaModel(LLMModel):
         # only for train
         mask = precompute_mask(input, self.n_heads_, self.device_)
 
+        # only for MoEs
+        router_outputs = ([],)*len(input.lora_batch_data_config_)
+
         seq_module = self.sequential_module()
 
         if input.inference_model_:
-            data = (tokens, mask, self.rope_angle_, input, False)
+            data = (tokens, mask, self.rope_angle_,
+                    router_outputs, input, False)
         else:
-            data = (tokens, mask, self.rope_angle_, input, True)
+            data = (tokens, mask, self.rope_angle_,
+                    router_outputs, input, True)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
 
-        return data[0]
+        return data[0], router_outputs
 
     def init_adapter_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
         self.adapter_type_ = kwargs.get("adapter_type", "lora")
