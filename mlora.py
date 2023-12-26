@@ -317,7 +317,7 @@ def inference(config: Dict[str, any],
         for pos in range(token_len, inference_max_len):
             with torch.no_grad():
                 # batch_size, seq_len, voc_logs
-                outputs = llm_model.forward(input_data)
+                outputs = llm_model.forward(input_data)[0]
                 next_token = outputs[:, pos - 1, :]
                 next_token = torch.argmax(next_token, dim=-1)
                 for idx in range(len(input_data.batch_tokens_)):
