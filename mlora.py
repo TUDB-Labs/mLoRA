@@ -173,7 +173,7 @@ def init_adapter_model(config: Dict[str, any], llm_model: mlora.LLMModel):
                                 lora_dropout=lora_config["dropout"],
                                 target=lora_config["target_modules"],)
 
-        llm_model.init_adapter_weight(
+        llm_model.init_lora_layer_weight(
             weight=lora_weight, adapter_name=lora_config["name"], **kwargs)
 
 
