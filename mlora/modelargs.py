@@ -32,7 +32,6 @@ class LoraBatchDataConfig:
     adapter_name_: str = ""
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
-    aux_output_ = None
 
 
 @dataclass
