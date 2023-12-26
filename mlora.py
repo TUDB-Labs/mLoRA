@@ -231,12 +231,13 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
 
         step_cnt += 1
 
-        output = llm_model.forward(input)
+        output, router_outputs = llm_model.forward(input)
+
         labels = torch.tensor(input.batch_tokens_,
                               dtype=torch.long).to(args.device)
 
         total_loss = None
-        for lora_config in input.lora_batch_data_config_:
+        for idx, lora_config in enumerate(input.lora_batch_data_config_):
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
             loss_input = output[start_idx:end_idx][..., :-1,
@@ -245,7 +246,7 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                                                     1:].contiguous().view(-1)
             loss = loss_fn(loss_input, loss_target) / \
                 accumulation_step[lora_config.adapter_name_]
-            if lora_config.aux_output_ is not None:
+            if len(router_outputs[idx]) > 0:
                 for ilora_config in config["lora"]:
                     if ilora_config["name"] == lora_config.adapter_name_:
                         z_loss_coef = ilora_config.get(
@@ -253,7 +254,7 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                         aux_loss_coef = ilora_config.get(
                             "router_aux_loss_coef", 0.001)
                         loss += mlora.switch_router_loss(
-                            z_loss_coef, aux_loss_coef, lora_config.aux_output_) / \
+                            z_loss_coef, aux_loss_coef, router_outputs[idx]) / \
                             accumulation_step[lora_config.adapter_name_]
                         break
             print(
