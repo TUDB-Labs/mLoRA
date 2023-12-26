@@ -47,15 +47,16 @@ class MixGate(torch.nn.Module):
         return hidden_state.mul_(expert_weights)
 
 
-class MixMoe(torch.nn.Module):
-    def __init__(self, w1: Linear, w2: Linear, w3: Linear) -> None:
+class MixFFN(torch.nn.Module):
+    def __init__(self) -> None:
         super().__init__()
 
         # feed forward
-        self.w1_: Linear = w1  # also gate FNN * dim
-        self.w2_: Linear = w2  # also down dim * FNN
-        self.w3_: Linear = w3  # also up   FNN * dim
+        self.w1_: Linear = None  # also gate FNN * dim
+        self.w2_: Linear = None  # also down dim * FNN
+        self.w3_: Linear = None  # also up   FNN * dim
         # mix of experts
+        self.enable_moe_: bool = False
         self.moes_: Dict[str, MixGate] = {}
 
     def init_moe_weight(self, adapter_name: str,
@@ -73,8 +74,15 @@ class MixMoe(torch.nn.Module):
             with torch.no_grad():
                 self.moes_[adapter_name].gate_.weight.copy_(gate)
 
+        self.enable_moe_ = True
+
     def forward(self, score_norm_data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
         # score_norm_data shape is: batch_size * max_seq_len * dim
+        if not self.enable_moe_:
+            w1 = self.w1_.forward(score_norm_data, input_args)
+            w3 = self.w3_.forward(score_norm_data, input_args)
+            return self.w2_.forward(F.silu(w1) * w3, input_args)
+
         # Calculate the shared w1 and w3 projection result
         common_w1 = self.w1_.weight_.forward(score_norm_data)
         common_w3 = self.w3_.weight_.forward(score_norm_data)
