@@ -253,12 +253,18 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                             "router_z_loss_coef", 0.001)
                         aux_loss_coef = ilora_config.get(
                             "router_aux_loss_coef", 0.001)
-                        loss += mlora.switch_router_loss(
+                        router_loss = mlora.switch_router_loss(
                             z_loss_coef, aux_loss_coef, router_outputs[idx]) / \
                             accumulation_step[lora_config.adapter_name_]
+                        loss += router_loss
+                        print(
+                            f"    adapter: {lora_config.adapter_name_} loss: {loss}")
+                        print(
+                            f"{' '*(6 + len(lora_config.adapter_name_))} router loss: {router_loss}")
                         break
-            print(
-                f"    adapter: {lora_config.adapter_name_} loss: {loss}")
+            else:
+                print(
+                    f"    adapter: {lora_config.adapter_name_} loss: {loss}")
             if total_loss is None:
                 total_loss = loss
             else:
