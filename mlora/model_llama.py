@@ -254,7 +254,8 @@ class LlamaModel(LLMModel):
         mask = precompute_mask(input, self.n_heads_, self.device_)
 
         # only for MoEs
-        router_outputs = ([],)*len(input.lora_batch_data_config_)
+        router_outputs = tuple([] for _ in range(
+            len(input.lora_batch_data_config_)))
 
         seq_module = self.sequential_module()
 

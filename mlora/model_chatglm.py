@@ -173,7 +173,7 @@ class ChatGLMModel(LLMModel):
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
 
-        return data, ([],)*len(input.lora_batch_data_config_)
+        return data, tuple([] for _ in range(len(input.lora_batch_data_config_)))
 
     def from_pretrained(path: str,
                         device: str,
