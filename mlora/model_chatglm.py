@@ -173,7 +173,7 @@ class ChatGLMModel(LLMModel):
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
 
-        return data
+        return data, ([],)*len(input.lora_batch_data_config_)
 
     def from_pretrained(path: str,
                         device: str,
@@ -259,7 +259,7 @@ class ChatGLMModel(LLMModel):
 
         return model
 
-    def init_adapter_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
+    def init_lora_layer_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
         if "adapter_type" in kwargs and kwargs['adapter_type'] != "lora":
             raise f"unkown adapter type {kwargs['adapter_type']}"
 
@@ -294,7 +294,7 @@ class ChatGLMModel(LLMModel):
 
         return train_paramas
 
-    def get_adapter_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         # return the lora weight and target_module's name
         lora_weight_dict = {}
         target_modules = []
@@ -330,7 +330,7 @@ class ChatGLMModel(LLMModel):
             if not os.path.exists(lora_output_dir):
                 os.makedirs(lora_output_dir)
 
-            lora_weight_dict, target_modules = self.get_adapter_weight_dict(
+            lora_weight_dict, target_modules = self.get_lora_weight_dict(
                 lora_name)
 
             torch.save(lora_weight_dict, lora_output_dir +
