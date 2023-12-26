@@ -133,7 +133,7 @@ def get_kwargs(**kwargs):
     return kwargs
 
 
-def init_adapter_model(config: Dict[str, any], llm_model: mlora.LLMModel):
+def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel):
     if args.disable_adapter:
         return
 
@@ -333,14 +333,13 @@ def inference(config: Dict[str, any],
 
 # Main Function
 if __name__ == "__main__":
-    torch.autograd.set_detect_anomaly(True)
     setup_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
 
     tokenizer, model = load_base_model(config)
-    init_adapter_model(config, model)
+    init_lora_model(config, model)
 
     torch.cuda.empty_cache()
 
