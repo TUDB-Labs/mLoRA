@@ -50,7 +50,7 @@ def unpack_router_logits(router_outputs):
 def switch_router_loss(z_loss_coef, aux_loss_coef, router_outputs):
     router_logits, expert_indexes = unpack_router_logits(router_outputs)
     z_loss = router_z_loss_func(router_logits)
-    router_probs = torch.nn.Softmax(dim=-1)(router_logits)
+    router_probs = F.softmax(router_logits, dim=-1)
     aux_loss = load_balancing_loss_func(router_probs, expert_indexes)
     return z_loss_coef * z_loss + aux_loss_coef * aux_loss
 
@@ -140,7 +140,7 @@ class SwitchMoe(torch.nn.Module):
         for idx in range(self.experts_):
             token_indices = router_mask[:, :, idx].bool()
             next_states[token_indices] = expert_fn(
-                self.adapter_name_, idx, norm_data[token_indices])
+                self.adapter_name_, idx, norm_data[token_indices]).to(next_states.dtype)
 
         hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
@@ -203,16 +203,17 @@ class MixMLP(torch.nn.Module):
             if moe_name == "" or moe_name not in self.moes_:
                 continue
 
-            current_hidden_states = self.moes_[
+            output = self.moes_[
                 moe_name].forward(self._expert_forward, score_norm_data[start_idx:end_idx])
 
-            if isinstance(current_hidden_states, Tuple):
-                current_hidden_states, aux_data = current_hidden_states
+            if isinstance(output, Tuple):
+                current_hidden_states, router_tuple = output
                 if lora_config.aux_output_ is None:
-                    lora_config.aux_output_ = (aux_data,)
+                    lora_config.aux_output_ = (router_tuple,)
                 else:
-                    lora_config.aux_output_ = lora_config.aux_output_ + \
-                        (aux_data,)
+                    lora_config.aux_output_ += (router_tuple,)
+            else:
+                current_hidden_states = output
 
             if final_hidden_states is None:
                 final_hidden_states = current_hidden_states
