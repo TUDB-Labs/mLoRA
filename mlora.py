@@ -129,41 +129,52 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     return tokenizer, model
 
 
+def get_kwargs(**kwargs):
+    return kwargs
+
+
 def init_adapter_model(config: Dict[str, any], llm_model: mlora.LLMModel):
     if args.disable_adapter:
         return
 
     for lora_config in config["lora"]:
         lora_weight = None
-        if args.mixlora:
-            if args.load_adapter:
+        if args.load_adapter:
+            if args.mixlora:
                 moe_file_path = lora_config["output"] + "/mixlora_model.bin"
                 log(f"Load MixLoRA adapter: {moe_file_path}")
                 lora_weight = torch.load(moe_file_path)
-
-            llm_model.init_adapter_weight(adapter_name=lora_config["name"],
-                                          adapter_type="mixlora",
-                                          lora_r=lora_config["r"],
-                                          lora_alpha=lora_config["alpha"],
-                                          lora_dropout=lora_config["dropout"],
-                                          moe_experts=lora_config["experts"],
-                                          moe_topk=lora_config["topk"],
-                                          target=lora_config["target_modules"],
-                                          weight=lora_weight)
-        else:
-            if args.load_adapter:
+            else:
                 adapter_file_path = lora_config["output"] + \
                     "/adapter_model.bin"
                 log(f"Load LoRA adapter: {adapter_file_path}")
                 lora_weight = torch.load(adapter_file_path)
 
-            llm_model.init_adapter_weight(adapter_name=lora_config["name"],
-                                          adapter_type="lora",
-                                          lora_r=lora_config["r"],
-                                          lora_alpha=lora_config["alpha"],
-                                          lora_dropout=lora_config["dropout"],
-                                          target=lora_config["target_modules"],
-                                          weight=lora_weight)
+        if args.mixlora:
+            kwargs = get_kwargs(adapter_type="mixlora",
+                                lora_r=lora_config["r"],
+                                lora_alpha=lora_config["alpha"],
+                                lora_dropout=lora_config["dropout"],
+                                target=lora_config["target_modules"],
+                                routing_strategy=lora_config.get("routing_strategy", "basic"))
+            if kwargs["routing_strategy"] == "basic":
+                kwargs.update(get_kwargs(moe_experts=lora_config["experts"],
+                                         moe_topk=lora_config["topk"]))
+            elif kwargs["routing_strategy"] == "switch":
+                kwargs.update(get_kwargs(moe_expert_capacity=lora_config["expert_capacity"],
+                                         moe_jitter_noise=lora_config["jitter_noise"],
+                                         moe_experts=lora_config["experts"],))
+            else:
+                raise f"unkown routing strategy {kwargs['routing_strategy']}"
+        else:
+            kwargs = get_kwargs(adapter_type="lora",
+                                lora_r=lora_config["r"],
+                                lora_alpha=lora_config["alpha"],
+                                lora_dropout=lora_config["dropout"],
+                                target=lora_config["target_modules"],)
+
+        llm_model.init_adapter_weight(
+            weight=lora_weight, adapter_name=lora_config["name"], **kwargs)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
@@ -310,6 +321,7 @@ def inference(config: Dict[str, any],
 
 # Main Function
 if __name__ == "__main__":
+    torch.autograd.set_detect_anomaly(True)
     setup_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
