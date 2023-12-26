@@ -3,7 +3,7 @@ from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
 from mlora.model import LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
-from mlora.MixLoRA import MixFFN
+from mlora.MixLoRA import MixMLP, BasicMoe, SwitchMoe
 
 import torch
 import torch.nn.functional as F
@@ -65,7 +65,7 @@ class Transformer(torch.nn.Module):
         self.wv_: Linear = None  # dim * dim
         self.wo_: Linear = None  # dim * dim
         # feed forward
-        self.ffn_ = MixFFN()
+        self.ffn_ = MixMLP()
         # norm
         self.attention_norm_: RMSNorm = None  # dim
         self.ffn_norm_: RMSNorm = None        # dim
@@ -90,12 +90,15 @@ class Transformer(torch.nn.Module):
 
         if adapter_type == "mixlora":
             # Inject LoRA configs into FFN layer
-            if weight is not None:
-                self.ffn_.init_moe_weight(adapter_name, self.n_heads_ * self.head_dim_, kwargs["moe_experts"],
-                                          kwargs["moe_topk"], weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
+            routing_strategy = kwargs.get("routing_strategy", "basic")
+            if routing_strategy == "basic":
+                self.ffn_.init_moe_weight(adapter_name, BasicMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.w1_.device_, **kwargs),
+                                          weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
+            elif routing_strategy == "switch":
+                self.ffn_.init_moe_weight(adapter_name, SwitchMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.w1_.device_, **kwargs),
+                                          weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
             else:
-                self.ffn_.init_moe_weight(
-                    adapter_name, self.n_heads_ * self.head_dim_, kwargs["moe_experts"], kwargs["moe_topk"], None)
+                raise f"unkown routing strategy {routing_strategy}"
 
             moe_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
         else:
@@ -125,8 +128,10 @@ class Transformer(torch.nn.Module):
                     lora_b = None
                     if weight is not None:
                         if adapter_type == "lora":
-                            lora_a_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
-                            lora_b_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
+                            lora_a_name = "base_model.model.model.layers." + \
+                                f"{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
+                            lora_b_name = "base_model.model.model.layers." + \
+                                f"{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
                         elif adapter_type == "mixlora":
                             lora_a_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
                             lora_b_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
@@ -491,8 +496,14 @@ class LlamaModel(LLMModel):
                 mixlora_config["task_type"] = "CAUSAL_LM"
                 mixlora_config["bias"] = "none"
                 mixlora_config["target_modules"] = target_modules
-                mixlora_config["experts"] = lora_config["experts"]
-                mixlora_config["topk"] = lora_config["topk"]
+                routing_strategy = lora_config.get("routing_strategy", "basic")
+                if routing_strategy == "basic":
+                    mixlora_config["experts"] = lora_config["experts"]
+                    mixlora_config["topk"] = lora_config["topk"]
+                elif routing_strategy == "switch":
+                    mixlora_config["routing_strategy"] = lora_config["routing_strategy"]
+                    mixlora_config["expert_capacity"] = lora_config["expert_capacity"]
+                    mixlora_config["experts"] = lora_config["experts"]
 
                 with open(lora_output_dir + os.sep + "mixlora_config.json", "w") as f:
                     json.dump(mixlora_config, f, indent=4)
