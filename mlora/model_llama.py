@@ -3,7 +3,7 @@ from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
 from mlora.model import LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
-from mlora.MixLoRA import MixMLP, BasicMoe, SwitchMoe
+from mlora.MixLoRA import MLP, BasicMoe, SwitchMoe
 
 import torch
 import torch.nn.functional as F
@@ -65,7 +65,7 @@ class Transformer(torch.nn.Module):
         self.wv_: Linear = None  # dim * dim
         self.wo_: Linear = None  # dim * dim
         # feed forward
-        self.ffn_ = MixMLP()
+        self.ffn_: MLP = None
         # norm
         self.attention_norm_: RMSNorm = None  # dim
         self.ffn_norm_: RMSNorm = None        # dim
@@ -77,7 +77,7 @@ class Transformer(torch.nn.Module):
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
 
-    def init_adapter_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
+    def init_lora_layer_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
         adapter_type = kwargs.get("adapter_type", "lora")
         if adapter_type not in ["lora", "mixlora"]:
             raise f"unkown adapter type {adapter_type}"
@@ -92,10 +92,10 @@ class Transformer(torch.nn.Module):
             # Inject LoRA configs into FFN layer
             routing_strategy = kwargs.get("routing_strategy", "basic")
             if routing_strategy == "basic":
-                self.ffn_.init_moe_weight(adapter_name, BasicMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.w1_.device_, **kwargs),
+                self.ffn_.init_moe_weight(adapter_name, BasicMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.device_, **kwargs),
                                           weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
             elif routing_strategy == "switch":
-                self.ffn_.init_moe_weight(adapter_name, SwitchMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.w1_.device_, **kwargs),
+                self.ffn_.init_moe_weight(adapter_name, SwitchMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.device_, **kwargs),
                                           weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
             else:
                 raise f"unkown routing strategy {routing_strategy}"
@@ -270,10 +270,10 @@ class LlamaModel(LLMModel):
 
         return data[0], router_outputs
 
-    def init_adapter_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
+    def init_lora_layer_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
         self.adapter_type_ = kwargs.get("adapter_type", "lora")
         for transformer_layer in self.layers_:
-            transformer_layer.init_adapter_weight(weight, **kwargs)
+            transformer_layer.init_lora_layer_weight(weight, **kwargs)
 
     def from_pretrained(path: str,
                         device: str,
@@ -347,12 +347,12 @@ class LlamaModel(LLMModel):
                 layer.self_attn.v_proj, device=device)
             model.layers_[idx].wo_ = Linear(
                 layer.self_attn.o_proj, device=device)
-            model.layers_[idx].ffn_.w1_ = Linear(
-                layer.mlp.gate_proj, device=device)
-            model.layers_[idx].ffn_.w2_ = Linear(
-                layer.mlp.down_proj, device=device)
-            model.layers_[idx].ffn_.w3_ = Linear(
-                layer.mlp.up_proj, device=device)
+            model.layers_[idx].ffn_ = MLP(
+                w1=Linear(layer.mlp.gate_proj, device=device),
+                w2=Linear(layer.mlp.down_proj, device=device),
+                w3=Linear(layer.mlp.up_proj, device=device),
+                device=device
+            )
             model.layers_[idx].attention_norm_ = RMSNorm(
                 layer.input_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
             model.layers_[idx].ffn_norm_ = RMSNorm(
@@ -391,7 +391,7 @@ class LlamaModel(LLMModel):
 
         return train_paramas
 
-    def get_adapter_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         # return the lora weight and target_module's name
         lora_weight_dict = {}
         target_modules = []
@@ -473,7 +473,7 @@ class LlamaModel(LLMModel):
             if not os.path.exists(lora_output_dir):
                 os.makedirs(lora_output_dir)
 
-            lora_weight_dict, target_modules = self.get_adapter_weight_dict(
+            lora_weight_dict, target_modules = self.get_lora_weight_dict(
                 lora_name)
 
             if self.adapter_type_ == "lora":

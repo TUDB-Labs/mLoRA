@@ -146,14 +146,16 @@ class SwitchMoe(torch.nn.Module):
         return hidden_states, (router_logits, expert_index)
 
 
-class MixMLP(torch.nn.Module):
-    def __init__(self) -> None:
+class MLP(torch.nn.Module):
+    def __init__(self, w1: Linear, w2: Linear, w3: Linear, device: str) -> None:
         super().__init__()
 
         # feed forward
-        self.w1_: Linear = None  # also gate FNN * dim
-        self.w2_: Linear = None  # also down dim * FNN
-        self.w3_: Linear = None  # also up   FNN * dim
+        self.w1_: Linear = w1  # also gate FNN * dim
+        self.w2_: Linear = w2  # also down dim * FNN
+        self.w3_: Linear = w3  # also up   FNN * dim
+        # device
+        self.device_ = device
         # mix of experts
         self.enable_moe_: bool = False
         self.moes_: torch.ModuleDict = {}
