@@ -83,36 +83,10 @@ class Transformer(torch.nn.Module):
             raise f"unkown adapter type {adapter_type}"
         adapter_name = kwargs["adapter_name"]
         target = kwargs["target"]
-        if adapter_type == "lora":
-            linear_layer_list = [self.wk_, self.wq_, self.wv_,
-                                 self.wo_, self.ffn_.w1_, self.ffn_.w2_, self.ffn_.w3_]
-            linear_layer_name_list = [
-                "k_proj", "q_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
-        elif adapter_type == "mixlora":
-            linear_layer_list = [self.wk_, self.wq_, self.wv_, self.wo_]
-            linear_layer_name_list = ["k_proj", "q_proj", "v_proj", "o_proj"]
-
-        for idx, layer_name in enumerate(linear_layer_name_list):
-            if layer_name in target and target[layer_name]:
-                lora_a = None
-                lora_b = None
-                if weight is not None:
-                    if adapter_type == "lora":
-                        lora_a_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
-                        lora_b_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
-                    elif adapter_type == "mixlora":
-                        lora_a_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
-                        lora_b_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
-
-                    if lora_a_name not in weight:
-                        raise f"can not found the layer {lora_a_name} in model"
-                    if lora_b_name not in weight:
-                        raise f"can not found the layer {lora_b_name} in model"
-                    lora_a = weight[lora_a_name]
-                    lora_b = weight[lora_b_name]
-
-                linear_layer_list[idx].init_lora_weight(
-                    adapter_name, kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], lora_a, lora_b)
+        linear_layer_list = [self.wk_, self.wq_, self.wv_,
+                             self.wo_, self.ffn_.w1_, self.ffn_.w2_, self.ffn_.w3_]
+        linear_layer_name_list = [
+            "k_proj", "q_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
 
         if adapter_type == "mixlora":
             # Inject LoRA configs into FFN layer
@@ -123,10 +97,13 @@ class Transformer(torch.nn.Module):
                 self.ffn_.init_moe_weight(
                     adapter_name, self.n_heads_ * self.head_dim_, kwargs["moe_experts"], kwargs["moe_topk"], None)
 
-            ffn_layer_list = [self.ffn_.w1_, self.ffn_.w2_, self.ffn_.w3_]
-            ffn_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
-            for idx, layer_name in enumerate(ffn_layer_name_list):
-                if layer_name in target and target[layer_name]:
+            moe_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
+        else:
+            moe_layer_name_list = []
+
+        for idx, layer_name in enumerate(linear_layer_name_list):
+            if layer_name in target and target[layer_name]:
+                if layer_name in moe_layer_name_list:
                     for expert_idx in range(self.ffn_.moes_[adapter_name].experts_):
                         lora_a = None
                         lora_b = None
@@ -140,14 +117,29 @@ class Transformer(torch.nn.Module):
                             lora_a = weight[lora_a_name]
                             lora_b = weight[lora_b_name]
 
-                        ffn_layer_list[idx].init_lora_weight(
+                        linear_layer_list[idx].init_lora_weight(
                             f"moe.{adapter_name}.experts.{expert_idx}",
-                            kwargs["lora_r"],
-                            kwargs["lora_alpha"],
-                            kwargs["lora_dropout"],
-                            lora_a,
-                            lora_b,
-                        )
+                            kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], lora_a, lora_b)
+                else:
+                    lora_a = None
+                    lora_b = None
+                    if weight is not None:
+                        if adapter_type == "lora":
+                            lora_a_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
+                            lora_b_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
+                        elif adapter_type == "mixlora":
+                            lora_a_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
+                            lora_b_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
+
+                        if lora_a_name not in weight:
+                            raise f"can not found the layer {lora_a_name} in model"
+                        if lora_b_name not in weight:
+                            raise f"can not found the layer {lora_b_name} in model"
+                        lora_a = weight[lora_a_name]
+                        lora_b = weight[lora_b_name]
+
+                    linear_layer_list[idx].init_lora_weight(
+                        adapter_name, kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], lora_a, lora_b)
 
     # @torch.compile
     def forward(self,
