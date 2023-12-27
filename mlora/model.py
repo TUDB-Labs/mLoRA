@@ -100,6 +100,29 @@ class RMSNorm(torch.nn.Module):
         return (self.weight_ * data).to(input_dtype)
 
 
+class KVCache:
+    def __init__(self) -> None:
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if len(self.key_cache) <= layer_idx:
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
+        else:
+            self.key_cache[layer_idx] = torch.cat(
+                [self.key_cache[layer_idx], key_states], dim=1)
+            self.value_cache[layer_idx] = torch.cat(
+                [self.value_cache[layer_idx], value_states], dim=1)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+
 class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
     def forward(self, input: MultiLoraBatchData):

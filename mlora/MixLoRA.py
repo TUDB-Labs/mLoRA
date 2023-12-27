@@ -208,7 +208,7 @@ class MLP(torch.nn.Module):
             current_hidden_states, current_router_outputs = self.moes_[
                 moe_name].forward(self._expert_forward, score_norm_data[start_idx:end_idx])
 
-            if current_router_outputs is not None:
+            if router_outputs is not None and current_router_outputs is not None:
                 router_outputs[idx].append(current_router_outputs)
 
             if final_hidden_states is None:
