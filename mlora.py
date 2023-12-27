@@ -281,9 +281,24 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
     llm_model.save_adapter_weight(config)
 
 
+def sample_top_p(probs, p):
+    probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
+    probs_sum = torch.cumsum(probs_sort, dim=-1)
+    mask = probs_sum - probs_sort > p
+    probs_sort[mask] = 0.0
+    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+    next_token = torch.multinomial(probs_sort, num_samples=1)
+    next_token = torch.gather(probs_idx, -1, next_token)
+    return next_token
+
+
 def inference(config: Dict[str, any],
               llm_model: mlora.LLMModel,
-              tokenizer: mlora.Tokenizer):
+              tokenizer: mlora.Tokenizer,
+              temperature: float = 0.6,
+              top_p: float = 0.9,
+              inference_max_len=128,
+              ):
     lora_adapter_num = len(config["lora"])
     batch_data_config: List[mlora.LoraBatchDataConfig] = []
 
@@ -292,8 +307,6 @@ def inference(config: Dict[str, any],
         batch_data_config.append(mlora.LoraBatchDataConfig(
             adapter_name, idx, idx + 1))
 
-    inference_max_len = 128
-
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
@@ -301,37 +314,47 @@ def inference(config: Dict[str, any],
 
         tokens = tokenizer.encode(input_raw, True, False)
         token_len = len(tokens)
-        # while len(tokens) < inference_max_len:
-        #    tokens.append(tokenizer.pad_id_)
-
-        kv_cache = mlora.KVCache()
+        while len(tokens) < inference_max_len:
+            tokens.append(tokenizer.pad_id_)
 
         input_data = mlora.MultiLoraBatchData(
             prompts_=[input_raw] * lora_adapter_num,
             lora_batch_data_config_=batch_data_config,
-            batch_tokens_=[tokens.copy()] * lora_adapter_num,
+            batch_tokens_=[None] * lora_adapter_num,
             tokens_len_without_pad_=[token_len] * lora_adapter_num,
             batch_seq_len_=token_len,
             expand_side_=["right"] * lora_adapter_num,
             inference_model_=True)
 
+        prev_pos = 0
+        kv_cache = mlora.KVCache()
+        input_token = [tokens.copy()] * lora_adapter_num
         eos_flag: List[bool] = [False] * lora_adapter_num
-        outputs: List[List[int]] = [[tokenizer.bos_id_].copy(),] * \
-            lora_adapter_num
-        for _ in range(token_len, inference_max_len):
+        for cur_pos in range(token_len, inference_max_len):
             with torch.no_grad():
+                kv_cache.seq_pos = prev_pos
+                for idx in range(lora_adapter_num):
+                    input_data.batch_tokens_[
+                        idx] = input_token[idx][prev_pos:cur_pos]
                 # batch_size, seq_len, voc_logs
                 logits = llm_model.forward(input_data, kv_cache)[0]
-                out_tokens = torch.argmax(logits[:, -1, :], dim=-1)
-                for idx in range(len(input_data.batch_tokens_)):
-                    out_token = out_tokens[idx].item()
-                    input_data.batch_tokens_[idx] = [out_token]
-                    outputs[idx].append(out_token)
+                logits = logits[:, -1, :]
+                for idx in range(lora_adapter_num):
+                    if temperature > 0:
+                        probs = torch.softmax(
+                            logits[idx] / temperature, dim=-1)
+                        next_token = sample_top_p(probs, top_p)
+                    else:
+                        next_token = torch.argmax(logits[idx], dim=-1)
+                    next_token = next_token.item()
+                    input_token[idx][cur_pos] = next_token
+                    # print output
                     print(f"# LORA{idx} OUTPUT: " +
-                          tokenizer.decode(outputs[idx]))
+                          tokenizer.decode(input_token[idx]))
                     # end of the sentence
-                    if out_token == tokenizer.eos_id_:
+                    if next_token == tokenizer.eos_id_:
                         eos_flag[idx] = True
+                    prev_pos = cur_pos
                     input_data.tokens_len_without_pad_[idx] = 1
                 input_data.batch_seq_len_ = 1
             # check if the all sentence end
@@ -339,9 +362,9 @@ def inference(config: Dict[str, any],
             if have_all_done:
                 break
 
-        # for idx, output in enumerate(input_data.batch_tokens_):
-        #    print(f"# LORA{idx} OUTPUT IS:")
-        #    print(tokenizer.decode(output))
+        for idx, output in enumerate(input_token):
+            print(f"# LORA{idx} OUTPUT IS:")
+            print(tokenizer.decode(output))
 
 
 # Main Function
