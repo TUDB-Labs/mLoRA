@@ -172,7 +172,8 @@ class Transformer(torch.nn.Module):
 
         # apply kv cache
         if isinstance(aux_data, KVCache):
-            xk, xv = aux_data.update(xk, xv, self.layer_id_)
+            xk, xv = aux_data.update(
+                xk, xv, self.layer_id_, batch_size, max_seq_len)
 
         # for llama2 need to repeat the heads
         # before dim: batch_size, seq_len, n_kv_head, head_dim
@@ -180,19 +181,22 @@ class Transformer(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
+        # use normal attention instead of xformers when inference
         if isinstance(aux_data, KVCache):
             xq = xq.transpose(1, 2)
             xk = xk.transpose(1, 2)
             xv = xv.transpose(1, 2)
-            attn_weights = torch.matmul(xq, xk.transpose(2, 3)
-                                        ) / math.sqrt(self.head_dim_)
-            attn_weights = attn_weights + mask
-            attn_weights = F.softmax(attn_weights, dim=-1).to(xq.dtype)
-            attention_score = torch.matmul(attn_weights, xv)
+            attention_score = torch.matmul(xq, xk.transpose(2, 3)
+                                           ) / math.sqrt(self.head_dim_)
+            attention_score = attention_score + mask
+            attention_score = F.softmax(
+                attention_score.float(), dim=-1).type_as(xq)
+            attention_score = torch.matmul(attention_score, xv)
             attention_score = attention_score.transpose(1, 2).contiguous()
         else:
             attention_score = xformers.ops.memory_efficient_attention(
                 xq, xk, xv, mask)
+
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
         # get output attention score
