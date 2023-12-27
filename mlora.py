@@ -301,40 +301,47 @@ def inference(config: Dict[str, any],
 
         tokens = tokenizer.encode(input_raw, True, False)
         token_len = len(tokens)
-        while len(tokens) < inference_max_len:
-            tokens.append(tokenizer.pad_id_)
+        # while len(tokens) < inference_max_len:
+        #    tokens.append(tokenizer.pad_id_)
+
+        kv_cache = mlora.KVCache()
 
         input_data = mlora.MultiLoraBatchData(
             prompts_=[input_raw] * lora_adapter_num,
             lora_batch_data_config_=batch_data_config,
-            batch_tokens_=[tokens] * lora_adapter_num,
+            batch_tokens_=[tokens.copy()] * lora_adapter_num,
             tokens_len_without_pad_=[token_len] * lora_adapter_num,
-            batch_seq_len_=inference_max_len,
+            batch_seq_len_=token_len,
             expand_side_=["right"] * lora_adapter_num,
             inference_model_=True)
 
         eos_flag: List[bool] = [False] * lora_adapter_num
-        for pos in range(token_len, inference_max_len):
+        outputs: List[List[int]] = [[tokenizer.bos_id_].copy(),] * \
+            lora_adapter_num
+        for _ in range(token_len, inference_max_len):
             with torch.no_grad():
                 # batch_size, seq_len, voc_logs
-                outputs = llm_model.forward(input_data)[0]
-                next_token = outputs[:, pos - 1, :]
-                next_token = torch.argmax(next_token, dim=-1)
+                logits = llm_model.forward(input_data, kv_cache)[0]
+                out_tokens = torch.argmax(logits[:, -1, :], dim=-1)
                 for idx in range(len(input_data.batch_tokens_)):
-                    input_data.batch_tokens_[idx][pos] = next_token[idx].item()
+                    out_token = out_tokens[idx].item()
+                    input_data.batch_tokens_[idx] = [out_token]
+                    outputs[idx].append(out_token)
+                    print(f"# LORA{idx} OUTPUT: " +
+                          tokenizer.decode(outputs[idx]))
                     # end of the sentence
-                    if next_token[idx].item() == tokenizer.eos_id_:
+                    if out_token == tokenizer.eos_id_:
                         eos_flag[idx] = True
-                    input_data.tokens_len_without_pad_[
-                        idx] = input_data.tokens_len_without_pad_[idx] + 1
+                    input_data.tokens_len_without_pad_[idx] = 1
+                input_data.batch_seq_len_ = 1
             # check if the all sentence end
             have_all_done = all(flag for flag in eos_flag)
             if have_all_done:
                 break
 
-        for idx, output in enumerate(input_data.batch_tokens_):
-            print(f"# LORA{idx} OUTPUT IS:")
-            print(tokenizer.decode(output))
+        # for idx, output in enumerate(input_data.batch_tokens_):
+        #    print(f"# LORA{idx} OUTPUT IS:")
+        #    print(tokenizer.decode(output))
 
 
 # Main Function
