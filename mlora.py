@@ -328,7 +328,7 @@ def inference(config: Dict[str, any],
 
         prev_pos = 0
         kv_cache = mlora.KVCache()
-        input_token = [tokens.copy()] * lora_adapter_num
+        input_token = [tokens.copy() for _ in range(lora_adapter_num)]
         eos_flag: List[bool] = [False] * lora_adapter_num
         for cur_pos in range(token_len, inference_max_len):
             with torch.no_grad():
