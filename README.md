@@ -162,6 +162,11 @@ Fork the repository.
 Create a new branch for your feature or fix.
 Submit a pull request with a detailed explanation of your changes.
 
+You can use the pre-commit to check your code.
+```bash
+ln -s ../../.github/workflows/pre-commit .git/hooks/pre-commit
+```
+
 ## Citation
 Please cite the repo if you use the code in this repo.
 ```bibtex
