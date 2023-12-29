@@ -123,7 +123,9 @@ class KVCache:
 
 class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData):
+    def forward(self, input: MultiLoraBatchData,
+                output_router_logits: bool = False,
+                kv_cache: KVCache = None) -> torch.Tensor:
         pass
 
     @abstractclassmethod
