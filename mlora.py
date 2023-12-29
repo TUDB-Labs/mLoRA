@@ -212,6 +212,27 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
     return ret_accumulation_step
 
 
+def get_router_loss_function(config:  Dict[str, any]) -> Dict[str, torch.nn.Module]:
+    loss_functions: Dict[str, torch.nn.Module] = {}
+    if not args.mixlora:
+        return loss_functions
+    for lora_config in config["lora"]:
+        routing_strategy = lora_config.get("routing_strategy", "basic")
+        if routing_strategy == "basic":
+            loss_functions[lora_config["name"]] = mlora.BasicRouterLoss(
+                lora_config.get("router_aux_loss_coef", 0.001),
+                lora_config["experts"],
+                lora_config["topk"])
+        elif routing_strategy == "switch":
+            loss_functions[lora_config["name"]] = mlora.SwitchRouterLoss(
+                lora_config.get("router_z_loss_coef", 0.001),
+                lora_config.get("router_aux_loss_coef", 0.001))
+        else:
+            raise f"unkown routing strategy {routing_strategy}"
+
+    return loss_functions
+
+
 # to get test result and want early stop it
 def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
     # the train paramas per lora model
@@ -222,6 +243,7 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
     accumulation_step: Dict[str, int] = get_accumulation_steps(config)
 
     loss_fn = torch.nn.CrossEntropyLoss()
+    router_loss_fn = get_router_loss_function(config)
 
     step_cnt = 0
     while not dispatcher.check_task_done():
@@ -231,7 +253,8 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
 
         step_cnt += 1
 
-        output, router_outputs = llm_model.forward(input)
+        output, router_outputs = llm_model.forward(
+            input, output_router_logits=args.mixlora)
 
         labels = torch.tensor(input.batch_tokens_,
                               dtype=torch.long).to(args.device)
@@ -246,25 +269,15 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                                                     1:].contiguous().view(-1)
             loss = loss_fn(loss_input, loss_target) / \
                 accumulation_step[lora_config.adapter_name_]
-            if len(router_outputs[idx]) > 0:
-                for ilora_config in config["lora"]:
-                    if ilora_config["name"] == lora_config.adapter_name_:
-                        z_loss_coef = ilora_config.get(
-                            "router_z_loss_coef", 0.001)
-                        aux_loss_coef = ilora_config.get(
-                            "router_aux_loss_coef", 0.001)
-                        router_loss = mlora.switch_router_loss(
-                            z_loss_coef, aux_loss_coef, router_outputs[idx]) / \
-                            accumulation_step[lora_config.adapter_name_]
-                        loss += router_loss
-                        print(
-                            f"    adapter: {lora_config.adapter_name_} loss: {loss}")
-                        print(
-                            f"{' '*(6 + len(lora_config.adapter_name_))} router loss: {router_loss}")
-                        break
-            else:
+            if router_outputs is not None and len(router_outputs[idx]) > 0:
+                router_loss = router_loss_fn[lora_config.adapter_name_](
+                    router_outputs[idx])
+                loss += router_loss
+                print(f"    adapter: {lora_config.adapter_name_} loss: {loss}")
                 print(
-                    f"    adapter: {lora_config.adapter_name_} loss: {loss}")
+                    f"{' '*(6 + len(lora_config.adapter_name_))} router loss: {router_loss}")
+            else:
+                print(f"    adapter: {lora_config.adapter_name_} loss: {loss}")
             if total_loss is None:
                 total_loss = loss
             else:
@@ -337,7 +350,7 @@ def inference(config: Dict[str, any],
                     input_data.batch_tokens_[
                         idx] = input_token[idx][prev_pos:cur_pos]
                 # batch_size, seq_len, voc_logs
-                logits = llm_model.forward(input_data, kv_cache)[0]
+                logits = llm_model.forward(input_data, kv_cache=kv_cache)[0]
                 logits = logits[:, -1, :]
                 for idx in range(lora_adapter_num):
                     if temperature > 0:
@@ -349,7 +362,7 @@ def inference(config: Dict[str, any],
                     next_token = next_token.item()
                     input_token[idx][cur_pos] = next_token
                     # print output
-                    print(f"# LORA{idx} OUTPUT: " +
+                    print(f"# {input_data.lora_batch_data_config_[idx].adapter_name_} OUTPUT: " +
                           tokenizer.decode(input_token[idx]))
                     # end of the sentence
                     if next_token == tokenizer.eos_id_:
@@ -363,7 +376,7 @@ def inference(config: Dict[str, any],
                 break
 
         for idx, output in enumerate(input_token):
-            print(f"# LORA{idx} OUTPUT IS:")
+            print(f"# {input_data.lora_batch_data_config_[idx].adapter_name_} OUTPUT IS:")
             print(tokenizer.decode(output))
 
 

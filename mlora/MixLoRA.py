@@ -3,17 +3,120 @@ from mlora.LoraLiner import Linear
 
 import torch
 import torch.nn.functional as F
-from typing import Tuple, Optional
+from typing import List, Tuple, Optional
 
 
-def router_z_loss_func(router_logits: torch.Tensor) -> float:
+def _basic_load_balancing_loss_func(gate_logits: List[torch.Tensor], num_experts: int, top_k: int) -> float:
+    gate_logits = torch.cat(gate_logits, dim=0)
+
+    routing_weights, selected_experts = torch.topk(
+        gate_logits, top_k, dim=-1)
+    routing_weights = routing_weights.softmax(dim=-1)
+
+    # cast the expert indices to int64, otherwise one-hot encoding will fail
+    if selected_experts.dtype != torch.int64:
+        selected_experts = selected_experts.to(torch.int64)
+
+    if len(selected_experts.shape) == 2:
+        selected_experts = selected_experts.unsqueeze(2)
+
+    expert_mask = torch.nn.functional.one_hot(
+        selected_experts, num_experts)
+
+    # For a given token, determine if it was routed to a given expert.
+    expert_mask = torch.max(expert_mask, axis=-2).values
+
+    # cast to float32 otherwise mean will fail
+    expert_mask = expert_mask.to(torch.float32)
+    tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
+
+    router_prob_per_group_and_expert = torch.mean(routing_weights, axis=-1)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert.unsqueeze(-1)) * (num_experts**2)
+
+
+class BasicRouterLoss(torch.nn.Module):
+    def __init__(self, moe_aux_loss_coef, moe_experts, moe_topk) -> None:
+        super().__init__()
+        self.aux_loss_coef = moe_aux_loss_coef
+        self.experts = moe_experts
+        self.topk = moe_topk
+
+    def forward(self, gate_logits) -> torch.Tensor:
+        return self.aux_loss_coef * _basic_load_balancing_loss_func(gate_logits, self.experts, self.topk)
+
+
+class BasicMoe(torch.nn.Module):
+    def __init__(self, adapter_name: str, moe_in_features: int, moe_experts: int, moe_topk: int, device: str, **kwargs) -> None:
+        super().__init__()
+
+        self.adapter_name_: str = adapter_name
+        self.gate_ = torch.nn.Linear(
+            moe_in_features, moe_experts, bias=False, device=device)
+        self.experts_ = moe_experts
+        self.topk_ = moe_topk
+
+    def forward(self, expert_fn, hidden_states: torch.Tensor) -> Tuple:
+        """ """
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate_(hidden_states)
+
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(
+            routing_weights, self.topk_, dim=-1)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        # we cast back to the input dtype
+        routing_weights = routing_weights.to(hidden_states.dtype)
+
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
+
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
+        expert_mask = torch.nn.functional.one_hot(
+            selected_experts, num_classes=self.experts_).permute(2, 1, 0)
+
+        # Loop over all available experts in the model and perform the computation on each expert
+        for expert_idx in range(self.experts_):
+            idx, top_x = torch.where(expert_mask[expert_idx])
+
+            if top_x.shape[0] == 0:
+                continue
+
+            # in torch it is faster to index using lists than torch tensors
+            top_x_list = top_x.tolist()
+            idx_list = idx.tolist()
+
+            # Index the correct hidden states and compute the expert hidden state for
+            # the current expert. We need to make sure to multiply the output hidden
+            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+            current_state = hidden_states[None,
+                                          top_x_list].reshape(-1, hidden_dim)
+            current_routing_weights = routing_weights[top_x_list,
+                                                      idx_list, None]
+            current_hidden_states = expert_fn(
+                self.adapter_name_, expert_idx, current_state)
+            current_hidden_states = current_routing_weights * current_hidden_states
+
+            # However `index_add_` only support torch tensors for indexing so we'll use
+            # the `top_x` tensor here.
+            final_hidden_states.index_add_(
+                0, top_x, current_hidden_states.to(hidden_states.dtype))
+        final_hidden_states = final_hidden_states.reshape(
+            batch_size, sequence_length, hidden_dim)
+        return final_hidden_states, router_logits
+
+
+def _switch_router_z_loss_func(router_logits: torch.Tensor) -> float:
     num_groups, tokens_per_group, _ = router_logits.shape
     log_z = torch.logsumexp(router_logits, dim=-1)
     z_loss = log_z**2
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
-def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
+def _switch_load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     num_experts = router_probs.shape[-1]
 
     # cast the expert indices to int64, otherwise one-hot encoding will fail
@@ -36,7 +139,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
-def unpack_router_logits(router_outputs):
+def _switch_unpack_router_logits(router_outputs):
     total_router_logits = []
     total_expert_indexes = []
     for router_output in router_outputs:
@@ -47,50 +150,20 @@ def unpack_router_logits(router_outputs):
     return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
 
 
-def switch_router_loss(z_loss_coef, aux_loss_coef, router_outputs):
-    router_logits, expert_indexes = unpack_router_logits(router_outputs)
-    z_loss = router_z_loss_func(router_logits)
-    router_probs = F.softmax(router_logits, dim=-1)
-    aux_loss = load_balancing_loss_func(router_probs, expert_indexes)
-    return z_loss_coef * z_loss + aux_loss_coef * aux_loss
-
-
-class BasicMoe(torch.nn.Module):
-    def __init__(self, adapter_name: str, moe_in_features: int, moe_experts: int, moe_topk: int, device: str, **kwargs) -> None:
+class SwitchRouterLoss(torch.nn.Module):
+    def __init__(self, moe_z_loss_coef, moe_aux_loss_coef) -> None:
         super().__init__()
+        self.z_loss_coef = moe_z_loss_coef
+        self.aux_loss_coef = moe_aux_loss_coef
 
-        self.adapter_name_: str = adapter_name
-        self.gate_ = torch.nn.Linear(
-            moe_in_features, moe_experts, bias=False, device=device)
-        self.experts_ = moe_experts
-        self.topk_ = moe_topk
-
-    def forward(self, expert_fn, norm_data: torch.Tensor) -> torch.Tensor:
-        # routing to experts based on softmax and top-k selection
-        router_logits = self.gate_(norm_data)
-        routing_weights = F.softmax(
-            router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(
-            routing_weights, self.topk_, dim=-1
-        )
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-
-        # Routing to experts
-        final_hidden_states = None
-        for expert_idx in range(self.experts_):
-            hidden_state = expert_fn(self.adapter_name_, expert_idx, norm_data)
-            # do routing by masking the unselected experts
-            expert_mask = selected_experts == expert_idx
-            expert_weights = (routing_weights * expert_mask).sum(
-                dim=-1, keepdim=True
-            )
-            current_hidden_states = hidden_state.mul_(expert_weights)
-            if final_hidden_states is None:
-                final_hidden_states = current_hidden_states
-            else:
-                final_hidden_states.add_(current_hidden_states)
-
-        return final_hidden_states, None
+    def forward(self, router_outputs) -> torch.Tensor:
+        router_logits, expert_indexes = _switch_unpack_router_logits(
+            router_outputs)
+        z_loss = _switch_router_z_loss_func(router_logits)
+        router_probs = F.softmax(router_logits, dim=-1)
+        aux_loss = _switch_load_balancing_loss_func(
+            router_probs, expert_indexes)
+        return self.z_loss_coef * z_loss + self.aux_loss_coef * aux_loss
 
 
 class SwitchMoe(torch.nn.Module):

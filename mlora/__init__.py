@@ -1,5 +1,5 @@
 from mlora.utils import convert_hf_to_pth
-from mlora.MixLoRA import switch_router_loss
+from mlora.MixLoRA import BasicRouterLoss, SwitchRouterLoss
 from mlora.tokenizer import Tokenizer
 from mlora.model import KVCache, LLMModel
 from mlora.model_llama import LlamaModel
@@ -9,7 +9,8 @@ from mlora.dispatcher import TrainTask, Dispatcher
 
 __all__ = [
     "convert_hf_to_pth",
-    "switch_router_loss",
+    "BasicRouterLoss",
+    "SwitchRouterLoss",
     "Tokenizer",
     "KVCache",
     "LLMModel",
