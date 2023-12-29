@@ -11,11 +11,11 @@ import torch.utils.checkpoint
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
-from typing import List, Dict, Tuple, Optional, Union
+from flash_attn import flash_attn_func
+from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
 import os
 import json
-import math
 
 
 class Embedding(torch.nn.Module):
@@ -152,8 +152,9 @@ class Transformer(torch.nn.Module):
                 data: torch.Tensor,
                 mask: torch.Tensor,
                 rope_angle: Tuple[torch.Tensor, torch.Tensor],
-                aux_data: Union[KVCache, Tuple[List]],
-                input_args: MultiLoraBatchData):
+                input_args: MultiLoraBatchData,
+                router_logits: Tuple[List] = None,
+                kv_cache: KVCache = None):
         batch_size, max_seq_len, _ = data.shape
 
         attention_norm_data = self.attention_norm_.forward(data)
@@ -170,32 +171,22 @@ class Transformer(torch.nn.Module):
         # apply rotary embedding
         xq, xk = apply_rotary_emb(xq, xk, rope_angle)
 
-        # apply kv cache
-        if isinstance(aux_data, KVCache):
-            xk, xv = aux_data.update(
-                xk, xv, self.layer_id_, batch_size, max_seq_len)
-
-        # for llama2 need to repeat the heads
-        # before dim: batch_size, seq_len, n_kv_head, head_dim
-        # after dim: batch_size, seq_len, n_head, head_dim
-        xk = repeat_kv(xk, self.n_rep_)
-        xv = repeat_kv(xv, self.n_rep_)
-
-        # use normal attention instead of xformers when inference
-        if isinstance(aux_data, KVCache):
-            xq = xq.transpose(1, 2)
-            xk = xk.transpose(1, 2)
-            xv = xv.transpose(1, 2)
-            attention_score = torch.matmul(xq, xk.transpose(2, 3)
-                                           ) / math.sqrt(self.head_dim_)
-            attention_score = attention_score + mask
-            attention_score = F.softmax(
-                attention_score.float(), dim=-1).type_as(xq)
-            attention_score = torch.matmul(attention_score, xv)
-            attention_score = attention_score.transpose(1, 2).contiguous()
-        else:
+        if kv_cache is None:
+            # for llama2 need to repeat the heads
+            # before dim: batch_size, seq_len, n_kv_head, head_dim
+            # after dim: batch_size, seq_len, n_head, head_dim
+            xk = repeat_kv(xk, self.n_rep_)
+            xv = repeat_kv(xv, self.n_rep_)
             attention_score = xformers.ops.memory_efficient_attention(
                 xq, xk, xv, mask)
+        else:
+            # apply kv cache
+            xk, xv = kv_cache.update(
+                xk, xv, self.layer_id_, batch_size, max_seq_len)
+            # use flash attention instead of xformers when inference
+            target_dtype = torch.float16
+            attention_score = flash_attn_func(
+                xq.to(target_dtype), xk.to(target_dtype), xv.to(target_dtype)).to(xq.dtype)
 
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
@@ -205,9 +196,7 @@ class Transformer(torch.nn.Module):
         # feed forward fully connected
         score_norm_data = self.ffn_norm_.forward(data)
         data = data + \
-            self.ffn_.forward(score_norm_data,
-                              None if isinstance(aux_data, KVCache)
-                              else aux_data, input_args)
+            self.ffn_.forward(score_norm_data, router_logits, input_args)
 
         return data
 
@@ -268,35 +257,31 @@ class LlamaModel(LLMModel):
         self.adapter_type_ = None
 
     # train model or inference model: output is probs
-    def forward(self, input: MultiLoraBatchData, kv_cache: KVCache = None) -> torch.Tensor:
+    def forward(self, input: MultiLoraBatchData,
+                output_router_logits: bool = False,
+                kv_cache: KVCache = None) -> torch.Tensor:
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int64).to(self.device_)
-
-        # only for train
-        mask = precompute_mask(input, self.n_heads_, self.device_)
-
-        # aux data
-        if input.inference_model_:
-            # store kv cache when inference
-            aux_data = kv_cache
-        else:
-            # store routing data when training
-            aux_data: Tuple[List] = tuple([] for _ in range(
-                len(input.lora_batch_data_config_)))
 
         seq_module = self.sequential_module()
 
         if input.inference_model_:
-            data = (tokens, mask, self.rope_angle_,
-                    aux_data, input, False)
+            data = (tokens, None, self.rope_angle_,
+                    input, None, kv_cache, False)
+            router_logits = None
         else:
+            # prepare mask
+            mask = precompute_mask(input, self.n_heads_, self.device_)
+            # store routing data when training
+            router_logits: Tuple[List] = tuple([] for _ in range(
+                len(input.lora_batch_data_config_))) if output_router_logits else None
             data = (tokens, mask, self.rope_angle_,
-                    aux_data, input, True)
+                    input, router_logits, None, True)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
 
-        return data[0], aux_data
+        return data[0], router_logits
 
     def init_lora_layer_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
         self.adapter_type_ = kwargs.get("adapter_type", "lora")
