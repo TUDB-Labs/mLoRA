@@ -1,4 +1,4 @@
-from mlora.modelargs import MultiLoraBatchData
+from mlora.modelargs import LoraConfig, MultiLoraBatchData
 
 import torch
 import einops
@@ -123,27 +123,31 @@ class KVCache:
 
 class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData,
-                output_router_logits: bool = False,
-                kv_cache: KVCache = None) -> torch.Tensor:
+    def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         pass
 
-    @abstractclassmethod
-    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
-        pass
-
-    @abstractclassmethod
-    def init_lora_layer_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
-        pass
+    # @abstractclassmethod
+    # def load_adapter_weight(self, path: str):
+    #     pass
 
     @abstractclassmethod
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         pass
 
     @abstractclassmethod
-    def save_adapter_weight(config: Dict[str, str], dir_suffix=""):
+    def save_adapter_weight(self, path: str, dir_suffix=""):
         pass
 
     @abstractclassmethod
     def sequential_module(self) -> torch.nn.Sequential:
+        pass
+
+    @abstractclassmethod
+    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
+        pass
+
+    @abstractclassmethod
+    def forward(self, input: MultiLoraBatchData,
+                output_router_logits: bool = False,
+                kv_cache: KVCache = None) -> torch.Tensor:
         pass

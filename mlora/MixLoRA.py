@@ -1,4 +1,4 @@
-from mlora.modelargs import MultiLoraBatchData
+from mlora.modelargs import MixConfig, MultiLoraBatchData
 from mlora.LoraLiner import Linear
 
 import torch
@@ -46,14 +46,14 @@ class BasicRouterLoss(torch.nn.Module):
 
 
 class BasicMoe(torch.nn.Module):
-    def __init__(self, adapter_name: str, moe_in_features: int, moe_experts: int, moe_topk: int, device: str, **kwargs) -> None:
+    def __init__(self, in_features: int, config: MixConfig) -> None:
         super().__init__()
 
-        self.adapter_name_: str = adapter_name
+        self.adapter_name_: str = config.adapter_name_
         self.gate_ = torch.nn.Linear(
-            moe_in_features, moe_experts, bias=False, device=device)
-        self.experts_ = moe_experts
-        self.topk_ = moe_topk
+            in_features, config.num_experts_, bias=False, device=config.device_)
+        self.experts_ = config.num_experts_
+        self.topk_ = config.top_k_
 
     def forward(self, expert_fn, hidden_states: torch.Tensor) -> Tuple:
         """ """
@@ -167,19 +167,18 @@ class SwitchRouterLoss(torch.nn.Module):
 
 
 class SwitchMoe(torch.nn.Module):
-    def __init__(self, adapter_name: str, moe_in_features: int, moe_expert_capacity: int,
-                 moe_jitter_noise: float, moe_experts: int, device: str, **kwargs) -> None:
+    def __init__(self,  in_features: int, config: MixConfig) -> None:
         super().__init__()
 
-        self.adapter_name_: str = adapter_name
+        self.adapter_name_: str = config.adapter_name_
         self.gate_ = torch.nn.Linear(
-            moe_in_features, moe_experts, bias=False, device=device)
+            in_features, config.num_experts_, bias=False, device=config.device_)
         self.router_z_loss_coef_: float = 0.001
         self.router_aux_loss_coef_: float = 0.001
         # expert_capacity = (tokens_per_batch / num_experts) * capacity_factor
-        self.expert_capacity_: int = moe_expert_capacity
-        self.jitter_noise_: float = moe_jitter_noise
-        self.experts_: int = moe_experts
+        self.expert_capacity_: int = config.expert_capacity_
+        self.jitter_noise_: float = config.jitter_noise_
+        self.experts_: int = config.num_experts_
 
     def route(self, norm_data: torch.Tensor) -> Tuple:
         if self.jitter_noise_ > 0:
@@ -233,16 +232,19 @@ class MLP(torch.nn.Module):
         self.enable_moe_: bool = False
         self.moes_: torch.ModuleDict = {}
 
-    def init_moe_weight(self, adapter_name: str,
-                        moe_layer: torch.nn.Module, gate: Optional[torch.Tensor] = None):
-        self.moes_[adapter_name] = moe_layer
+    def init_moe_weight(self, in_features: int, config: MixConfig, gate: Optional[torch.Tensor] = None):
+        moe_layer_dict = {
+            "basic": BasicMoe,
+            "switch": SwitchMoe
+        }
+        self.moes_[config.adapter_name_] = moe_layer_dict[config.routing_strategy_](
+            in_features, config)
         if gate is not None:
             with torch.no_grad():
-                self.moes_[adapter_name].gate_.weight.copy_(gate)
+                self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
         self.enable_moe_ = True
 
-    def _expert_forward(self, moe_name, expert_idx, norm_data):
-        lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+    def _lora_forward(self, lora_name, norm_data):
         # Applying LoRA weights to FFN weights
         if lora_name in self.w1_.loras_:
             w1 = self.w1_.weight_.forward(norm_data) + \
@@ -263,6 +265,10 @@ class MLP(torch.nn.Module):
         else:
             return self.w2_.weight_.forward(silu_result)
 
+    def _expert_forward(self, moe_name, expert_idx, norm_data):
+        lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+        return self._lora_forward(lora_name, norm_data)
+
     def forward(self, score_norm_data: torch.Tensor, router_outputs: Tuple, input_args: MultiLoraBatchData) -> torch.Tensor:
         if not self.enable_moe_:
             w1 = self.w1_.forward(score_norm_data, input_args)
@@ -275,14 +281,15 @@ class MLP(torch.nn.Module):
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
 
-            if moe_name == "" or moe_name not in self.moes_:
-                continue
+            if moe_name in self.moes_:
+                current_hidden_states, current_router_outputs = self.moes_[
+                    moe_name].forward(self._expert_forward, score_norm_data[start_idx:end_idx])
 
-            current_hidden_states, current_router_outputs = self.moes_[
-                moe_name].forward(self._expert_forward, score_norm_data[start_idx:end_idx])
-
-            if router_outputs is not None and current_router_outputs is not None:
-                router_outputs[idx].append(current_router_outputs)
+                if router_outputs is not None and current_router_outputs is not None:
+                    router_outputs[idx].append(current_router_outputs)
+            else:
+                current_hidden_states = self._lora_forward(
+                    moe_name, score_norm_data[start_idx:end_idx])
 
             if final_hidden_states is None:
                 final_hidden_states = current_hidden_states

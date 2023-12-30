@@ -49,3 +49,27 @@ class MultiLoraBatchData:
     tokens_len_without_pad_: Tokens = None
 
     inference_model_: bool = False
+
+
+@dataclass
+class LoraConfig:
+    adapter_name_: str = ""
+    device_: str = "cuda:0"
+    lora_r_: int = 8
+    lora_alpha_: int = 16
+    lora_dropout_: float = 0.05
+    target_modules_: dict = None
+
+
+@dataclass
+class MixConfig(LoraConfig):
+    # router config
+    router_aux_loss_coef_: float = 0.001
+    routing_strategy_: str = "basic"
+    num_experts_: int = 8
+    # for top-k moes
+    top_k_: int = 2
+    # for switch transformers
+    router_z_loss_coef_: float = 0.001
+    expert_capacity_: int = 64
+    jitter_noise_: float = 0.1

@@ -1,9 +1,9 @@
-from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.modelargs import LoraConfig, MixConfig, LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
 from mlora.model import KVCache, LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
-from mlora.MixLoRA import MLP, BasicMoe, SwitchMoe
+from mlora.MixLoRA import MLP
 
 import torch
 import torch.nn.functional as F
@@ -78,37 +78,30 @@ class Transformer(torch.nn.Module):
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
 
-    def init_lora_layer_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
-        adapter_type = kwargs.get("adapter_type", "lora")
-        if adapter_type not in ["lora", "mixlora"]:
-            raise f"unkown adapter type {adapter_type}"
-        adapter_name = kwargs["adapter_name"]
-        target = kwargs["target"]
+    def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
+        adapter_name = config.adapter_name_
+        target = config.target_modules_
         linear_layer_list = [self.wk_, self.wq_, self.wv_,
                              self.wo_, self.ffn_.w1_, self.ffn_.w2_, self.ffn_.w3_]
         linear_layer_name_list = [
             "k_proj", "q_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
 
-        if adapter_type == "mixlora":
+        if isinstance(config, MixConfig):
             # Inject LoRA configs into FFN layer
-            routing_strategy = kwargs.get("routing_strategy", "basic")
-            if routing_strategy == "basic":
-                self.ffn_.init_moe_weight(adapter_name, BasicMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.device_, **kwargs),
-                                          weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
-            elif routing_strategy == "switch":
-                self.ffn_.init_moe_weight(adapter_name, SwitchMoe(moe_in_features=self.n_heads_ * self.head_dim_, device=self.ffn_.device_, **kwargs),
-                                          weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
-            else:
-                raise f"unkown routing strategy {routing_strategy}"
+            self.ffn_.init_moe_weight(in_features=self.n_heads_ * self.head_dim_,
+                                      config=config,
+                                      gate=weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
 
             moe_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
+            init_moe = True
         else:
             moe_layer_name_list = []
+            init_moe = False
 
         for idx, layer_name in enumerate(linear_layer_name_list):
             if layer_name in target and target[layer_name]:
-                if layer_name in moe_layer_name_list:
-                    for expert_idx in range(self.ffn_.moes_[adapter_name].experts_):
+                if init_moe and layer_name in moe_layer_name_list:
+                    for expert_idx in range(config.num_experts_):
                         lora_a = None
                         lora_b = None
                         if weight is not None:
@@ -123,19 +116,14 @@ class Transformer(torch.nn.Module):
 
                         linear_layer_list[idx].init_lora_weight(
                             f"moe.{adapter_name}.experts.{expert_idx}",
-                            kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], lora_a, lora_b)
+                            config.lora_r_, config.lora_alpha_, config.lora_dropout_, lora_a, lora_b)
                 else:
                     lora_a = None
                     lora_b = None
                     if weight is not None:
-                        if adapter_type == "lora":
-                            lora_a_name = "base_model.model.model.layers." + \
-                                f"{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
-                            lora_b_name = "base_model.model.model.layers." + \
-                                f"{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
-                        elif adapter_type == "mixlora":
-                            lora_a_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
-                            lora_b_name = f"mixlora.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
+                        name_prefix = "mixlora.layers" if init_moe else "base_model.model.model.layers"
+                        lora_a_name = f"{name_prefix}.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
+                        lora_b_name = f"{name_prefix}.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
 
                         if lora_a_name not in weight:
                             raise f"can not found the layer {lora_a_name} in model"
@@ -145,7 +133,7 @@ class Transformer(torch.nn.Module):
                         lora_b = weight[lora_b_name]
 
                     linear_layer_list[idx].init_lora_weight(
-                        adapter_name, kwargs["lora_r"], kwargs["lora_alpha"], kwargs["lora_dropout"], lora_a, lora_b)
+                        adapter_name, config.lora_r_, config.lora_alpha_, config.lora_dropout_, lora_a, lora_b)
 
     # @torch.compile
     def forward(self,
@@ -254,14 +242,17 @@ class LlamaModel(LLMModel):
         self.eos_token_id_ = -1
 
         # adapter type
-        self.adapter_type_ = None
+        self.adapter_configs_: Dict[str, LoraConfig] = {}
 
     # train model or inference model: output is probs
     def forward(self, input: MultiLoraBatchData,
                 output_router_logits: bool = False,
                 kv_cache: KVCache = None) -> torch.Tensor:
-        tokens = torch.tensor(input.batch_tokens_,
-                              dtype=torch.int64).to(self.device_)
+        if isinstance(input.batch_tokens_, torch.Tensor):
+            tokens = input.batch_tokens_.to(self.device_)
+        else:
+            tokens = torch.tensor(input.batch_tokens_,
+                                  dtype=torch.int64).to(self.device_)
 
         seq_module = self.sequential_module()
 
@@ -283,10 +274,10 @@ class LlamaModel(LLMModel):
 
         return data[0], router_logits
 
-    def init_lora_layer_weight(self, weight: Optional[Dict[str, torch.Tensor]], **kwargs):
-        self.adapter_type_ = kwargs.get("adapter_type", "lora")
+    def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
+        self.adapter_configs_[config.adapter_name_] = config
         for transformer_layer in self.layers_:
-            transformer_layer.init_lora_layer_weight(weight, **kwargs)
+            transformer_layer.init_lora_layer_weight(config, weight)
 
     def from_pretrained(path: str,
                         device: str,
@@ -373,12 +364,11 @@ class LlamaModel(LLMModel):
 
         return model
 
-    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}
 
         for transformer_layer in self.layers_:
-            for lora_config in config["lora"]:
-                adapter_name = lora_config["name"]
+            for adapter_name, lora_config in self.adapter_configs_.items():
                 if adapter_name not in train_paramas:
                     train_paramas[adapter_name] = []
 
@@ -393,8 +383,8 @@ class LlamaModel(LLMModel):
                             lora_layer[adapter_name].lora_a_)
                         train_paramas[adapter_name].append(
                             lora_layer[adapter_name].lora_b_)
-                    elif transformer_layer.ffn_.enable_moe_:
-                        for expert_idx in range(lora_config["experts"]):
+                    elif adapter_name in transformer_layer.ffn_.moes_:
+                        for expert_idx in range(lora_config.num_experts_):
                             lora_name = f"moe.{adapter_name}.experts.{expert_idx}"
                             if lora_name in lora_layer:
                                 train_paramas[adapter_name].append(
@@ -409,12 +399,10 @@ class LlamaModel(LLMModel):
         lora_weight_dict = {}
         target_modules = []
         for idx, transformer_layer in enumerate(self.layers_):
-            if self.adapter_type_ == "lora":
-                layer_prefix_name = f"base_model.model.model.layers.{idx}.self_attn."
-            elif self.adapter_type_ == "mixlora":
+            if isinstance(self.adapter_configs_[lora_name], MixConfig):
                 layer_prefix_name = f"mixlora.layers.{idx}.self_attn."
             else:
-                raise f"unkown adapter type {self.adapter_type_}"
+                layer_prefix_name = f"base_model.model.model.layers.{idx}.self_attn."
 
             lora_layer_list = [transformer_layer.wq_, transformer_layer.wk_,
                                transformer_layer.wv_, transformer_layer.wo_,
@@ -430,7 +418,7 @@ class LlamaModel(LLMModel):
                                      f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
                     lora_weight_dict[layer_prefix_name +
                                      f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
-                elif transformer_layer.ffn_.enable_moe_:
+                elif lora_name in transformer_layer.ffn_.moes_:
                     moe_layer_prefix_name = f"mixlora.layers.{transformer_layer.layer_id_}."
                     for expert_idx in range(transformer_layer.ffn_.moes_[lora_name].experts_):
                         moe_lora_name = f"moe.{lora_name}.experts.{expert_idx}"
@@ -475,13 +463,12 @@ class LlamaModel(LLMModel):
 
         return torch.nn.Sequential(seq_module)
 
-    def save_adapter_weight(self, config: Dict[str, str], dir_suffix=""):
-        for lora_config in config["lora"]:
-            lora_name = lora_config["name"]
-            lora_output_dir = lora_config["output"]
+    def save_adapter_weight(self, path: str, dir_suffix=""):
+        for lora_name, lora_config in self.adapter_configs_.items():
+            lora_output_dir = path + os.sep + lora_name
             if dir_suffix != "":
                 lora_output_dir += os.sep + \
-                    lora_config["output"] + "_" + dir_suffix
+                    lora_name + "_" + dir_suffix
 
             if not os.path.exists(lora_output_dir):
                 os.makedirs(lora_output_dir)
@@ -489,14 +476,36 @@ class LlamaModel(LLMModel):
             lora_weight_dict, target_modules = self.get_lora_weight_dict(
                 lora_name)
 
-            if self.adapter_type_ == "lora":
+            if isinstance(lora_config, MixConfig):
+                torch.save(lora_weight_dict, lora_output_dir +
+                           os.sep + "mixlora_model.bin")
+
+                mixlora_config = {}
+                mixlora_config["r"] = lora_config.lora_r_
+                mixlora_config["bias"] = "none"
+                mixlora_config["lora_alpha"] = lora_config.lora_alpha_
+                mixlora_config["lora_dropout"] = lora_config.lora_dropout_
+                mixlora_config["target_modules"] = target_modules
+                mixlora_config["routing_strategy"] = lora_config.routing_strategy_
+                mixlora_config["router_aux_loss_coef"] = lora_config.router_aux_loss_coef_
+                mixlora_config["experts"] = lora_config.num_experts_
+                if lora_config.routing_strategy_ == "basic":
+                    mixlora_config["topk"] = lora_config.top_k_
+                elif lora_config.routing_strategy_ == "switch":
+                    mixlora_config["router_z_loss_coef"] = lora_config.router_z_loss_coef_
+                    mixlora_config["expert_capacity"] = lora_config.expert_capacity_
+                    mixlora_config["jitter_noise"] = lora_config.jitter_noise_
+
+                with open(lora_output_dir + os.sep + "mixlora_config.json", "w") as f:
+                    json.dump(mixlora_config, f, indent=4)
+            else:
                 torch.save(lora_weight_dict, lora_output_dir +
                            os.sep + "adapter_model.bin")
 
                 adapter_config = {}
-                adapter_config["lora_alpha"] = lora_config["alpha"]
-                adapter_config["lora_dropout"] = lora_config["dropout"]
-                adapter_config["r"] = lora_config["r"]
+                adapter_config["lora_alpha"] = lora_config.lora_alpha_
+                adapter_config["lora_dropout"] = lora_config.lora_dropout_
+                adapter_config["r"] = lora_config.lora_r_
                 adapter_config["peft_type"] = "LORA"
                 adapter_config["task_type"] = "CAUSAL_LM"
                 adapter_config["bias"] = "none"
@@ -504,27 +513,3 @@ class LlamaModel(LLMModel):
 
                 with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
                     json.dump(adapter_config, f, indent=4)
-            elif self.adapter_type_ == "mixlora":
-                torch.save(lora_weight_dict, lora_output_dir +
-                           os.sep + "mixlora_model.bin")
-
-                mixlora_config = {}
-                mixlora_config["lora_alpha"] = lora_config["alpha"]
-                mixlora_config["lora_dropout"] = lora_config["dropout"]
-                mixlora_config["r"] = lora_config["r"]
-                mixlora_config["bias"] = "none"
-                mixlora_config["target_modules"] = target_modules
-                routing_strategy = lora_config.get("routing_strategy", "basic")
-                mixlora_config["routing_strategy"] = routing_strategy
-                if routing_strategy == "basic":
-                    mixlora_config["experts"] = lora_config["experts"]
-                    mixlora_config["topk"] = lora_config["topk"]
-                elif routing_strategy == "switch":
-                    mixlora_config["routing_strategy"] = lora_config["routing_strategy"]
-                    mixlora_config["expert_capacity"] = lora_config["expert_capacity"]
-                    mixlora_config["experts"] = lora_config["experts"]
-
-                with open(lora_output_dir + os.sep + "mixlora_config.json", "w") as f:
-                    json.dump(mixlora_config, f, indent=4)
-            else:
-                raise f"unkown adapter type {self.adapter_type_}"
