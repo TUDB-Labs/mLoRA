@@ -16,6 +16,7 @@
 #
 # Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
 
+import os
 import json
 import torch
 import mlora
@@ -32,8 +33,6 @@ parser.add_argument('--model_type', type=str, default="llama",
                     help='The model type, support: llama, chatglm')
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
-parser.add_argument('--mixlora', action="store_true",
-                    help='Load lora with mix-of-experts architecture')
 parser.add_argument('--load_lora', action="store_true",
                     help="[Legacy] Load lora from file instead of init randomly")
 parser.add_argument('--load_adapter', action="store_true",
@@ -52,6 +51,8 @@ parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
 parser.add_argument('--config', type=str,
                     help='Path to finetune configuration')
+parser.add_argument('--output', type=str, default=".",
+                    help='Path to output checkpoints')
 parser.add_argument('--seed', type=int, default=42,
                     help='Random seed in integer, default is 42')
 parser.add_argument('--log', type=bool, default=True,
@@ -59,6 +60,8 @@ parser.add_argument('--log', type=bool, default=True,
 
 args = parser.parse_args()
 
+if args.inference:
+    args.load_adapter = True
 
 # Processing legacy arguments
 if args.load_lora:
@@ -129,52 +132,52 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     return tokenizer, model
 
 
-def get_kwargs(**kwargs):
-    return kwargs
-
-
-def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel):
+def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel) -> Dict[str, mlora.LoraConfig]:
     if args.disable_adapter:
-        return
+        return {"DEFAULT": mlora.LoraConfig(adapter_name_="DEFAULT")}
+
+    config_dict = {}
 
     for lora_config in config["lora"]:
         lora_weight = None
-        if args.load_adapter:
-            if args.mixlora:
-                moe_file_path = lora_config["output"] + "/mixlora_model.bin"
-                log(f"Load MixLoRA adapter: {moe_file_path}")
-                lora_weight = torch.load(moe_file_path)
-            else:
-                adapter_file_path = lora_config["output"] + \
-                    "/adapter_model.bin"
-                log(f"Load LoRA adapter: {adapter_file_path}")
-                lora_weight = torch.load(adapter_file_path)
+        if "routing_strategy" in lora_config:
+            config_class = mlora.MixConfig()
+            config_class.routing_strategy_ = lora_config["routing_strategy"]
+            config_class.router_aux_loss_coef_ = lora_config.get(
+                "router_aux_loss_coef", 0.001)
+            config_class.num_experts_ = lora_config.get("experts", 8)
+            if config_class.routing_strategy_ == "basic":
+                config_class.top_k_ = lora_config.get("topk", 2)
+            elif config_class.routing_strategy_ == "switch":
+                config_class.router_z_loss_coef_ = lora_config.get(
+                    "router_z_loss_coef", 0.001)
+                config_class.expert_capacity_ = lora_config.get(
+                    "expert_capacity", 64)
+                config_class.jitter_noise_ = lora_config.get(
+                    "jitter_noise", 0.01)
 
-        if args.mixlora:
-            kwargs = get_kwargs(adapter_type="mixlora",
-                                lora_r=lora_config["r"],
-                                lora_alpha=lora_config["alpha"],
-                                lora_dropout=lora_config["dropout"],
-                                target=lora_config["target_modules"],
-                                routing_strategy=lora_config.get("routing_strategy", "basic"))
-            if kwargs["routing_strategy"] == "basic":
-                kwargs.update(get_kwargs(moe_experts=lora_config["experts"],
-                                         moe_topk=lora_config["topk"]))
-            elif kwargs["routing_strategy"] == "switch":
-                kwargs.update(get_kwargs(moe_expert_capacity=lora_config["expert_capacity"],
-                                         moe_jitter_noise=lora_config["jitter_noise"],
-                                         moe_experts=lora_config["experts"],))
-            else:
-                raise f"unkown routing strategy {kwargs['routing_strategy']}"
+            lora_file_name = "mixlora_model.bin"
         else:
-            kwargs = get_kwargs(adapter_type="lora",
-                                lora_r=lora_config["r"],
-                                lora_alpha=lora_config["alpha"],
-                                lora_dropout=lora_config["dropout"],
-                                target=lora_config["target_modules"],)
+            config_class = mlora.LoraConfig()
+            lora_file_name = "adapter_model.bin"
 
-        llm_model.init_lora_layer_weight(
-            weight=lora_weight, adapter_name=lora_config["name"], **kwargs)
+        config_class.adapter_name_ = lora_config["name"]
+        config_class.device_ = args.device
+        config_class.lora_r_ = lora_config["r"]
+        config_class.lora_alpha_ = lora_config["alpha"]
+        config_class.lora_dropout_ = lora_config["dropout"]
+        config_class.target_modules_ = lora_config["target_modules"]
+
+        config_dict[config_class.adapter_name_] = config_class
+
+        if args.load_adapter:
+            adapter_file_path = lora_config["output"] + os.sep + lora_file_name
+            log(f"Load adapter: {adapter_file_path}")
+            lora_weight = torch.load(adapter_file_path)
+
+        llm_model.init_lora_layer_weight(config_class, lora_weight)
+
+    return config_dict
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
@@ -214,21 +217,17 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 
 def get_router_loss_function(config:  Dict[str, any]) -> Dict[str, torch.nn.Module]:
     loss_functions: Dict[str, torch.nn.Module] = {}
-    if not args.mixlora:
-        return loss_functions
     for lora_config in config["lora"]:
-        routing_strategy = lora_config.get("routing_strategy", "basic")
+        routing_strategy = lora_config.get("routing_strategy", "none")
         if routing_strategy == "basic":
             loss_functions[lora_config["name"]] = mlora.BasicRouterLoss(
                 lora_config.get("router_aux_loss_coef", 0.001),
                 lora_config["experts"],
-                lora_config["topk"])
+                lora_config.get("topk", 2))
         elif routing_strategy == "switch":
             loss_functions[lora_config["name"]] = mlora.SwitchRouterLoss(
                 lora_config.get("router_z_loss_coef", 0.001),
                 lora_config.get("router_aux_loss_coef", 0.001))
-        else:
-            raise f"unkown routing strategy {routing_strategy}"
 
     return loss_functions
 
@@ -237,7 +236,7 @@ def get_router_loss_function(config:  Dict[str, any]) -> Dict[str, torch.nn.Modu
 def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
-                            ] = llm_model.get_train_paramas(config)
+                            ] = llm_model.get_train_paramas()
     all_optimizer: Dict[str, torch.optim.Optimizer] = get_optimizer(
         config, all_train_paramas)
     accumulation_step: Dict[str, int] = get_accumulation_steps(config)
@@ -254,7 +253,7 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
         step_cnt += 1
 
         output, router_outputs = llm_model.forward(
-            input, output_router_logits=args.mixlora)
+            input, output_router_logits=(len(router_loss_fn) > 0))
 
         labels = torch.tensor(input.batch_tokens_,
                               dtype=torch.long).to(args.device)
@@ -289,95 +288,36 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            llm_model.save_adapter_weight(config, f"{step_cnt}")
+            llm_model.save_adapter_weight(args.output, f"{step_cnt}")
 
-    llm_model.save_adapter_weight(config)
-
-
-def sample_top_p(probs, p):
-    probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
-    probs_sum = torch.cumsum(probs_sort, dim=-1)
-    mask = probs_sum - probs_sort > p
-    probs_sort[mask] = 0.0
-    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
-    next_token = torch.multinomial(probs_sort, num_samples=1)
-    next_token = torch.gather(probs_idx, -1, next_token)
-    return next_token
+    llm_model.save_adapter_weight(args.output)
 
 
-def inference(config: Dict[str, any],
+def inference_callback(cur_pos, outputs):
+    print(f"POSITION: {cur_pos}")
+    for adapter_name, output in outputs.items():
+        print(f"{adapter_name} OUTPUT: {output[0]}")
+
+
+def inference(config: Dict[str, mlora.LoraConfig],
               llm_model: mlora.LLMModel,
-              tokenizer: mlora.Tokenizer,
-              temperature: float = 0.6,
-              top_p: float = 0.9,
-              inference_max_len=128,
-              ):
-    lora_adapter_num = len(config["lora"])
-    batch_data_config: List[mlora.LoraBatchDataConfig] = []
-
-    for idx, lora_config in enumerate(config["lora"]):
-        adapter_name = lora_config["name"]
-        batch_data_config.append(mlora.LoraBatchDataConfig(
-            adapter_name, idx, idx + 1))
+              tokenizer: mlora.Tokenizer):
+    gen_configs: List[mlora.GenerateConfig] = []
+    for _, lora_config in config.items():
+        gen_configs.append(mlora.GenerateConfig(lora_config_=lora_config))
 
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
             return
-
-        tokens = tokenizer.encode(input_raw, True, False)
-        token_len = len(tokens)
-        while len(tokens) < inference_max_len:
-            tokens.append(tokenizer.pad_id_)
-
-        input_data = mlora.MultiLoraBatchData(
-            prompts_=[input_raw] * lora_adapter_num,
-            lora_batch_data_config_=batch_data_config,
-            batch_tokens_=[None] * lora_adapter_num,
-            tokens_len_without_pad_=[token_len] * lora_adapter_num,
-            batch_seq_len_=token_len,
-            expand_side_=["right"] * lora_adapter_num,
-            inference_model_=True)
-
-        prev_pos = 0
-        kv_cache = mlora.KVCache()
-        input_token = [tokens.copy() for _ in range(lora_adapter_num)]
-        eos_flag: List[bool] = [False] * lora_adapter_num
-        for cur_pos in range(token_len, inference_max_len):
-            with torch.no_grad():
-                kv_cache.seq_pos = prev_pos
-                for idx in range(lora_adapter_num):
-                    input_data.batch_tokens_[
-                        idx] = input_token[idx][prev_pos:cur_pos]
-                # batch_size, seq_len, voc_logs
-                logits = llm_model.forward(input_data, kv_cache=kv_cache)[0]
-                logits = logits[:, -1, :]
-                for idx in range(lora_adapter_num):
-                    if temperature > 0:
-                        probs = torch.softmax(
-                            logits[idx] / temperature, dim=-1)
-                        next_token = sample_top_p(probs, top_p)
-                    else:
-                        next_token = torch.argmax(logits[idx], dim=-1)
-                    next_token = next_token.item()
-                    input_token[idx][cur_pos] = next_token
-                    # print output
-                    print(f"# {input_data.lora_batch_data_config_[idx].adapter_name_} OUTPUT: " +
-                          tokenizer.decode(input_token[idx]))
-                    # end of the sentence
-                    if next_token == tokenizer.eos_id_:
-                        eos_flag[idx] = True
-                    prev_pos = cur_pos
-                    input_data.tokens_len_without_pad_[idx] = 1
-                input_data.batch_seq_len_ = 1
-            # check if the all sentence end
-            have_all_done = all(flag for flag in eos_flag)
-            if have_all_done:
-                break
-
-        for idx, output in enumerate(input_token):
-            print(f"# {input_data.lora_batch_data_config_[idx].adapter_name_} OUTPUT IS:")
-            print(tokenizer.decode(output))
+        for config in gen_configs:
+            config.prompts_ = [input_raw]
+        outputs = mlora.generate(llm_model, tokenizer, gen_configs,
+                                 device=args.device,
+                                 stream_callback=inference_callback)
+        for adapter_name, output in outputs.items():
+            print(f"{adapter_name} OUTPUT IS:")
+            print(output[0])
 
 
 # Main Function
@@ -388,12 +328,12 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     tokenizer, model = load_base_model(config)
-    init_lora_model(config, model)
+    adapters = init_lora_model(config, model)
 
     torch.cuda.empty_cache()
 
     if args.inference:
-        inference(config, model, tokenizer)
+        inference(adapters, model, tokenizer)
     else:
         dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)
