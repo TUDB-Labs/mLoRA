@@ -48,6 +48,7 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
     return packed_outputs
 
 
+@torch.inference_mode()
 def generate(llm_model: LLMModel,
              tokenizer: Tokenizer,
              configs: List[GenerateConfig],
@@ -84,8 +85,10 @@ def generate(llm_model: LLMModel,
     for cur_pos in range(min_tokens_len, total_len):
         input_data = MultiLoraBatchData(
             lora_batch_data_config_=batch_data_config,
+            batch_seq_len_=(cur_pos - prev_pos),
             batch_tokens_=tokens[:, prev_pos:cur_pos],
             inference_model_=True)
+        kv_cache.seq_pos = prev_pos
         logits, _ = llm_model.forward(input=input_data, kv_cache=kv_cache)
         if temperature > 0:
             probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
