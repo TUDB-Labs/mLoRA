@@ -173,7 +173,8 @@ def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel) -> Dict[s
         if args.load_adapter:
             adapter_file_path = lora_config["output"] + os.sep + lora_file_name
             log(f"Load adapter: {adapter_file_path}")
-            lora_weight = torch.load(adapter_file_path)
+            lora_weight = torch.load(
+                adapter_file_path, map_location=args.device)
 
         llm_model.init_lora_layer_weight(config_class, lora_weight)
 
