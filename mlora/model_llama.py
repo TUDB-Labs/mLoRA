@@ -179,7 +179,6 @@ class Transformer(torch.nn.Module):
             attention_score = torch.matmul(xq, xk.transpose(2, 3)
                                            ) / math.sqrt(self.head_dim_)
             if mask is not None:
-                print(f"mask: shape = {mask.shape}, data = {mask}")
                 attention_score = attention_score + mask
             attention_score = F.softmax(
                 attention_score.float(), dim=-1).type_as(xq)
