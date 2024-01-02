@@ -1,6 +1,6 @@
 from mlora.modelargs import LoraConfig, MixConfig, LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
-from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
+from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask, precompute_mask_for_inference
 from mlora.model import KVCache, LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
 from mlora.MixLoRA import MLP
@@ -11,11 +11,11 @@ import torch.utils.checkpoint
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
-from flash_attn import flash_attn_func
 from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
 import os
 import json
+import math
 
 
 class Embedding(torch.nn.Module):
@@ -159,22 +159,36 @@ class Transformer(torch.nn.Module):
         # apply rotary embedding
         xq, xk = apply_rotary_emb(xq, xk, rope_angle)
 
-        if kv_cache is None:
-            # for llama2 need to repeat the heads
-            # before dim: batch_size, seq_len, n_kv_head, head_dim
-            # after dim: batch_size, seq_len, n_head, head_dim
-            xk = repeat_kv(xk, self.n_rep_)
-            xv = repeat_kv(xv, self.n_rep_)
-            attention_score = xformers.ops.memory_efficient_attention(
-                xq, xk, xv, mask)
-        else:
+        # for llama2 need to repeat the heads
+        # before dim: batch_size, seq_len, n_kv_head, head_dim
+        # after dim: batch_size, seq_len, n_head, head_dim
+        xk = repeat_kv(xk, self.n_rep_)
+        xv = repeat_kv(xv, self.n_rep_)
+
+        if kv_cache is not None:
             # apply kv cache
             xk, xv = kv_cache.update(
                 xk, xv, self.layer_id_, batch_size, max_seq_len)
-            # use flash attention instead of xformers when inference
-            target_dtype = torch.float16
-            attention_score = flash_attn_func(
-                xq.to(target_dtype), xk.to(target_dtype), xv.to(target_dtype)).to(xq.dtype)
+
+            xk = repeat_kv(xk, self.n_rep_)
+            xv = repeat_kv(xv, self.n_rep_)
+
+            xq = xq.transpose(1, 2)
+            xk = xk.transpose(1, 2)
+            xv = xv.transpose(1, 2)
+            attention_score = torch.matmul(xq, xk.transpose(2, 3)
+                                           ) / math.sqrt(self.head_dim_)
+            if mask is not None:
+                print(f"mask: shape = {mask.shape}, data = {mask}")
+                attention_score = attention_score + mask
+            attention_score = F.softmax(
+                attention_score.float(), dim=-1).type_as(xq)
+            attention_score = torch.matmul(attention_score, xv)
+            attention_score = attention_score.transpose(1, 2).contiguous()
+        else:
+            # Use xformers when training
+            attention_score = xformers.ops.memory_efficient_attention(
+                xq, xk, xv, mask)
 
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
@@ -257,7 +271,14 @@ class LlamaModel(LLMModel):
         seq_module = self.sequential_module()
 
         if input.inference_model_:
-            data = (tokens, None, self.rope_angle_,
+            assert kv_cache is not None
+            if input.batch_seq_len_ > 1:
+                # prepare mask
+                mask = precompute_mask_for_inference(
+                    input, kv_cache.seq_pos, self.device_)
+            else:
+                mask = None
+            data = (tokens, mask, self.rope_angle_,
                     input, None, kv_cache, False)
             router_logits = None
         else:
