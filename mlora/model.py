@@ -31,6 +31,16 @@ def precompute_mask(input: MultiLoraBatchData,
     return mask.to(dtype)
 
 
+def precompute_mask_for_inference(input: MultiLoraBatchData,
+                                  seq_pos: int,
+                                  device: str,
+                                  dtype: torch.dtype = torch.float32) -> torch.Tensor:
+    mask = torch.full((1, 1, input.batch_seq_len_,
+                      input.batch_seq_len_), float("-inf"), device=device)
+    mask = mask.to(torch.float32).triu(diagonal=seq_pos+1)
+    return mask.to(dtype)
+
+
 def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:
     angles = 1.0 / (theta ** (torch.arange(0, dim, 2).to(device)
                               [: (dim // 2)].to(torch.float) / dim))
