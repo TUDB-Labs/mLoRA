@@ -181,15 +181,19 @@ class SwitchMoe(torch.nn.Module):
         self.experts_: int = config.num_experts_
 
     def route(self, norm_data: torch.Tensor) -> Tuple:
+        input_dtype = norm_data.dtype
+        norm_data = norm_data.to(torch.float32)
+
         if self.jitter_noise_ > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
-            norm_data = norm_data * torch.empty_like(norm_data).uniform_(
+            norm_data *= torch.empty_like(norm_data).uniform_(
                 1.0 - self.jitter_noise_, 1.0 + self.jitter_noise_)
 
         # Apply Softmax
+        self.gate_ = self.gate_.to(torch.float32)
         router_logits = self.gate_(norm_data)
         router_probs = F.softmax(
-            router_logits, dim=1, dtype=torch.float)
+            router_logits, dim=-1, dtype=torch.float32).to(input_dtype)
 
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(
