@@ -3,7 +3,9 @@ from mlora.LoraLiner import Linear
 
 import torch
 import torch.nn.functional as F
+
 from typing import List, Tuple, Optional
+from transformers.activations import ACT2FN
 
 
 def _basic_load_balancing_loss_func(gate_logits: List[torch.Tensor], num_experts: int, top_k: int) -> float:
@@ -52,11 +54,13 @@ class BasicMoe(torch.nn.Module):
         self.adapter_name_: str = config.adapter_name_
         self.gate_ = torch.nn.Linear(
             in_features, config.num_experts_, bias=False, device=config.device_)
+        self.act_ = ACT2FN["silu" if config.act_fn_ ==
+                           "default" else config.act_fn_]
         self.experts_ = config.num_experts_
+
         self.topk_ = config.top_k_
 
     def forward(self, expert_fn, hidden_states: torch.Tensor) -> Tuple:
-        """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
@@ -97,7 +101,7 @@ class BasicMoe(torch.nn.Module):
             current_routing_weights = routing_weights[top_x_list,
                                                       idx_list, None]
             current_hidden_states = expert_fn(
-                self.adapter_name_, expert_idx, current_state)
+                self.adapter_name_, self.act_, expert_idx, current_state)
             current_hidden_states = current_routing_weights * current_hidden_states
 
             # However `index_add_` only support torch tensors for indexing so we'll use
@@ -173,12 +177,13 @@ class SwitchMoe(torch.nn.Module):
         self.adapter_name_: str = config.adapter_name_
         self.gate_ = torch.nn.Linear(
             in_features, config.num_experts_, bias=False, device=config.device_)
-        self.router_z_loss_coef_: float = 0.001
-        self.router_aux_loss_coef_: float = 0.001
+        self.act_ = ACT2FN["gelu_new" if config.act_fn_ ==
+                           "default" else config.act_fn_]
+        self.experts_: int = config.num_experts_
+
         # expert_capacity = (tokens_per_batch / num_experts) * capacity_factor
         self.expert_capacity_: int = config.expert_capacity_
         self.jitter_noise_: float = config.jitter_noise_
-        self.experts_: int = config.num_experts_
         self.dtype_: torch.dtype = torch.float32
 
     def route(self, norm_data: torch.Tensor) -> Tuple:
@@ -217,7 +222,7 @@ class SwitchMoe(torch.nn.Module):
         for idx in range(self.experts_):
             token_indices = router_mask[:, :, idx].bool()
             next_states[token_indices] = expert_fn(
-                self.adapter_name_, idx, norm_data[token_indices]).to(next_states.dtype)
+                self.adapter_name_, self.act_, idx, norm_data[token_indices]).to(next_states.dtype)
 
         hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
@@ -231,6 +236,7 @@ class MLP(torch.nn.Module):
         self.w1_: Linear = w1  # also gate FNN * dim
         self.w2_: Linear = w2  # also down dim * FNN
         self.w3_: Linear = w3  # also up   FNN * dim
+        self.act_ = ACT2FN["silu"]
         # device
         self.device_ = device
         # mix of experts
@@ -252,7 +258,7 @@ class MLP(torch.nn.Module):
                 mean=0.0, std=config.initializer_factor_ * 1)
         self.enable_moe_ = True
 
-    def _lora_forward(self, lora_name, norm_data):
+    def _lora_forward(self, lora_name, act_fn, norm_data):
         # Applying LoRA weights to FFN weights
         if lora_name in self.w1_.loras_:
             w1 = self.w1_.weight_.forward(norm_data) + \
@@ -266,22 +272,22 @@ class MLP(torch.nn.Module):
         else:
             w3 = self.w3_.weight_.forward(norm_data)
 
-        silu_result = F.silu(w1) * w3
+        act_result = act_fn(w1) * w3
         if lora_name in self.w2_.loras_:
-            return self.w2_.weight_.forward(silu_result) + \
-                self.w2_.loras_[lora_name].forward(silu_result)
+            return self.w2_.weight_.forward(act_result) + \
+                self.w2_.loras_[lora_name].forward(act_result)
         else:
-            return self.w2_.weight_.forward(silu_result)
+            return self.w2_.weight_.forward(act_result)
 
-    def _expert_forward(self, moe_name, expert_idx, norm_data):
+    def _expert_forward(self, moe_name, act_fn, expert_idx, norm_data):
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
-        return self._lora_forward(lora_name, norm_data)
+        return self._lora_forward(lora_name, act_fn, norm_data)
 
     def forward(self, score_norm_data: torch.Tensor, router_outputs: Tuple, input_args: MultiLoraBatchData) -> torch.Tensor:
         if not self.enable_moe_:
             w1 = self.w1_.forward(score_norm_data, input_args)
             w3 = self.w3_.forward(score_norm_data, input_args)
-            return self.w2_.forward(F.silu(w1) * w3, input_args)
+            return self.w2_.forward(self.act_(w1) * w3, input_args)
 
         final_hidden_states = None
         for idx, lora_config in enumerate(input_args.lora_batch_data_config_):
@@ -297,7 +303,7 @@ class MLP(torch.nn.Module):
                     router_outputs[idx].append(current_router_outputs)
             else:
                 current_hidden_states = self._lora_forward(
-                    moe_name, score_norm_data[start_idx:end_idx])
+                    moe_name, self.act_, score_norm_data[start_idx:end_idx])
 
             if final_hidden_states is None:
                 final_hidden_states = current_hidden_states

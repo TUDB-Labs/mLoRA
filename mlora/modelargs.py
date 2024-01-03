@@ -68,6 +68,8 @@ class MixConfig(LoraConfig):
     initializer_factor_: float = 1.0
     routing_strategy_: str = "basic"
     num_experts_: int = 8
+    # default, silu or gelu_new
+    act_fn_: str = "default"
     # for top-k moes
     top_k_: int = 2
     # for switch transformers
