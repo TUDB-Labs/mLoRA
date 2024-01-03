@@ -53,8 +53,7 @@ class Linear(torch.nn.Module):
         else:
             weight.requires_grad_(False)
 
-        self.weight_ = weight
-        self.weight_.to(device)
+        self.weight_ = weight.to(device)
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
