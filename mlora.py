@@ -302,7 +302,8 @@ def inference_callback(cur_pos, outputs):
 
 def inference(config: Dict[str, mlora.LoraConfig],
               llm_model: mlora.LLMModel,
-              tokenizer: mlora.Tokenizer):
+              tokenizer: mlora.Tokenizer,
+              echo=False):
     gen_configs: List[mlora.GenerateConfig] = []
     for _, lora_config in config.items():
         gen_configs.append(mlora.GenerateConfig(lora_config_=lora_config))
@@ -314,10 +315,12 @@ def inference(config: Dict[str, mlora.LoraConfig],
         for config in gen_configs:
             config.prompts_ = [input_raw]
         outputs = mlora.generate(llm_model, tokenizer, gen_configs,
+                                 temperature=0.2,
                                  device=args.device,
-                                 stream_callback=inference_callback)
+                                 stream_callback=inference_callback if echo else None)
+        print(f"PROMPT: {input_raw}")
         for adapter_name, output in outputs.items():
-            print(f"{adapter_name} OUTPUT IS:")
+            print(f"{adapter_name} OUTPUT:")
             print(output[0])
 
 
@@ -334,7 +337,7 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     if args.inference:
-        inference(adapters, model, tokenizer)
+        inference(adapters, model, tokenizer, True)
     else:
         dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)
