@@ -327,6 +327,7 @@ def inference(config: Dict[str, mlora.LoraConfig],
 # Main Function
 if __name__ == "__main__":
     setup_seed(args.seed)
+    torch.set_default_device(args.device)
 
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
