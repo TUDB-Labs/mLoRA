@@ -96,4 +96,4 @@ jobs:
       - name: finetune llama-7b with mixlora
         run: |
           cd /workspace/multi-lora-fine-tune
-          python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune_mixlora.json --load_8bit --mixlora
+          python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune_mixlora.json --load_8bit

@@ -12,11 +12,10 @@ MixLoRA exists within m-LoRA in a specific adapter form. Consequently, m-LoRA is
 
 Basic command for creating a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
-python mlora.py \
+CUDA_VISIBLE_DEVICES=0 python mlora.py \
   --base_model yahma/llama-7b-hf \
   --config ./config/alpaca_mixlora.json \
-  --load_8bit \
-  --mixlora
+  --load_8bit
 ```
 Please note that once the MixLoRA model is created, the number of experts in the model cannot be changed.
 
@@ -25,25 +24,23 @@ Please note that once the MixLoRA model is created, the number of experts in the
 The MixLoRA model can also undergo further fine-tuning.
 Basic command for finetuning a model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
-python mlora.py \
+CUDA_VISIBLE_DEVICES=0 python mlora.py \
   --base_model yahma/llama-7b-hf \
   --config ./config/alpaca_mixlora.json \
   --load_adapter \
-  --load_8bit \
-  --mixlora
+  --load_8bit
 ```
 
 ## Evaluate MixLoRA model
 
 Currently, MixLoRA supports evaluation only through the m-LoRA framework.
 ```bash
-python mlora.py \
+CUDA_VISIBLE_DEVICES=0 python mlora.py \
   --base_model yahma/llama-7b-hf \
   --config ./config/alpaca_mixlora.json \
   --load_adapter \
   --load_8bit \
-  --inference \
-  --mixlora
+  --inference
 ```
 
 ## Citation
