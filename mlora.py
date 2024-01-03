@@ -125,7 +125,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     else:
         raise f"unkown model type {args.model_type}"
 
-    tokenizer = mlora.Tokenizer(args.base_model)
+    tokenizer = mlora.Tokenizer(args.base_model, device=args.device)
 
     model.pad_token_id_ = tokenizer.pad_id_
 
