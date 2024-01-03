@@ -179,7 +179,7 @@ class SwitchMoe(torch.nn.Module):
         self.expert_capacity_: int = config.expert_capacity_
         self.jitter_noise_: float = config.jitter_noise_
         self.experts_: int = config.num_experts_
-        self.dtype_: torch.dtype = torch.float
+        self.dtype_: torch.dtype = torch.float32
 
     def route(self, norm_data: torch.Tensor) -> Tuple:
         input_dtype = norm_data.dtype
@@ -247,6 +247,9 @@ class MLP(torch.nn.Module):
         if gate is not None:
             with torch.no_grad():
                 self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
+        else:
+            self.moes_[config.adapter_name_].gate_.weight.data.normal_(
+                mean=0.0, std=config.initializer_factor_ * 1)
         self.enable_moe_ = True
 
     def _lora_forward(self, lora_name, norm_data):

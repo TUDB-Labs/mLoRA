@@ -65,6 +65,7 @@ class LoraConfig:
 class MixConfig(LoraConfig):
     # router config
     router_aux_loss_coef_: float = 0.001
+    initializer_factor_: float = 1.0
     routing_strategy_: str = "basic"
     num_experts_: int = 8
     # for top-k moes
