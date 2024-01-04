@@ -414,7 +414,6 @@ class LlamaModel(LLMModel):
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         # return the lora weight and target_module's name
         lora_weight_dict = {}
-        target_modules = []
         for idx, transformer_layer in enumerate(self.layers_):
             if isinstance(self.adapter_configs_[lora_name], MixConfig):
                 layer_prefix_name = f"mixlora.layers.{idx}.self_attn."
@@ -429,8 +428,6 @@ class LlamaModel(LLMModel):
                 "q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
             for idx, lora_layer in enumerate(lora_layer_list):
                 if lora_name in lora_layer.loras_:
-                    if lora_layer_name_list[idx] not in target_modules:
-                        target_modules.append(lora_layer_name_list[idx])
                     lora_weight_dict[layer_prefix_name +
                                      f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
                     lora_weight_dict[layer_prefix_name +
@@ -440,9 +437,6 @@ class LlamaModel(LLMModel):
                     for expert_idx in range(transformer_layer.ffn_.moes_[lora_name].experts_):
                         moe_lora_name = f"moe.{lora_name}.experts.{expert_idx}"
                         if moe_lora_name in lora_layer.loras_:
-                            if lora_layer_name_list[idx] not in target_modules:
-                                target_modules.append(
-                                    lora_layer_name_list[idx])
                             lora_weight_dict[
                                 moe_layer_prefix_name
                                 + f"experts.{expert_idx}."
@@ -458,7 +452,7 @@ class LlamaModel(LLMModel):
                         moe_layer_prefix_name + "gate.weight"
                     ] = transformer_layer.ffn_.moes_[lora_name].gate_.weight
 
-        return lora_weight_dict, target_modules
+        return lora_weight_dict
 
     def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()
@@ -490,43 +484,20 @@ class LlamaModel(LLMModel):
             if not os.path.exists(lora_output_dir):
                 os.makedirs(lora_output_dir)
 
-            lora_weight_dict, target_modules = self.get_lora_weight_dict(
+            lora_weight_dict = self.get_lora_weight_dict(
                 lora_name)
+
+            lora_config_dict = lora_config.export()
 
             if isinstance(lora_config, MixConfig):
                 torch.save(lora_weight_dict, lora_output_dir +
                            os.sep + "mixlora_model.bin")
 
-                mixlora_config = {}
-                mixlora_config["r"] = lora_config.lora_r_
-                mixlora_config["bias"] = "none"
-                mixlora_config["lora_alpha"] = lora_config.lora_alpha_
-                mixlora_config["lora_dropout"] = lora_config.lora_dropout_
-                mixlora_config["target_modules"] = target_modules
-                mixlora_config["routing_strategy"] = lora_config.routing_strategy_
-                mixlora_config["router_aux_loss_coef"] = lora_config.router_aux_loss_coef_
-                mixlora_config["experts"] = lora_config.num_experts_
-                if lora_config.routing_strategy_ == "basic":
-                    mixlora_config["topk"] = lora_config.top_k_
-                elif lora_config.routing_strategy_ == "switch":
-                    mixlora_config["router_z_loss_coef"] = lora_config.router_z_loss_coef_
-                    mixlora_config["expert_capacity"] = lora_config.expert_capacity_
-                    mixlora_config["jitter_noise"] = lora_config.jitter_noise_
-
                 with open(lora_output_dir + os.sep + "mixlora_config.json", "w") as f:
-                    json.dump(mixlora_config, f, indent=4)
+                    json.dump(lora_config_dict, f, indent=4)
             else:
                 torch.save(lora_weight_dict, lora_output_dir +
                            os.sep + "adapter_model.bin")
 
-                adapter_config = {}
-                adapter_config["lora_alpha"] = lora_config.lora_alpha_
-                adapter_config["lora_dropout"] = lora_config.lora_dropout_
-                adapter_config["r"] = lora_config.lora_r_
-                adapter_config["peft_type"] = "LORA"
-                adapter_config["task_type"] = "CAUSAL_LM"
-                adapter_config["bias"] = "none"
-                adapter_config["target_modules"] = target_modules
-
                 with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
-                    json.dump(adapter_config, f, indent=4)
+                    json.dump(lora_config_dict, f, indent=4)

@@ -1,6 +1,7 @@
 from mlora.modelargs import LoraConfig, LoraBatchDataConfig, MultiLoraBatchData
 from mlora.tokenizer import Tokenizer, Tokens
 from mlora.model import LLMModel, KVCache
+from mlora.utils import Prompter
 
 from dataclasses import dataclass
 from typing import List
@@ -9,9 +10,13 @@ import torch
 
 @dataclass
 class GenerateConfig:
-    lora_config_: LoraConfig = None
+    # internal
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
+    prompter_: Prompter = None
+    # user settings
+    lora_config_: LoraConfig = None
+    prompt_template_: str = "template/demo.json"
     prompts_: List[str] = None
 
 
@@ -43,7 +48,8 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 
     packed_outputs = {}
     for config in configs:
-        packed_outputs[config.lora_config_.adapter_name_] = outputs[config.batch_start_idx_:config.batch_end_idx_]
+        packed_outputs[config.lora_config_.adapter_name_] = config.prompter_.get_response(
+            outputs[config.batch_start_idx_:config.batch_end_idx_])
 
     return packed_outputs
 
@@ -60,8 +66,9 @@ def generate(llm_model: LLMModel,
     raw_prompts: List[Tokens] = []
     batch_data_config: List[LoraBatchDataConfig] = []
     for config in configs:
+        config.prompter_ = Prompter(config.prompt_template_)
         tokens = [tokenizer.encode(prompt, True, False)
-                  for prompt in config.prompts_]
+                  for prompt in config.prompter_.generate_prompt(instruction=config.prompts_)]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
         batch_data_config.append(LoraBatchDataConfig(

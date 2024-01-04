@@ -219,10 +219,9 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 
 def get_router_loss_function(adapters: Dict[str, mlora.LoraConfig]) -> Dict[str, torch.nn.Module]:
     loss_functions: Dict[str, torch.nn.Module] = {}
-    for lora_config in adapters:
+    for lora_name, lora_config in adapters.items():
         if isinstance(lora_config, mlora.MixConfig):
-            loss_functions[lora_config.adapter_name_] = mlora.router_loss_factory(
-                lora_config)
+            loss_functions[lora_name] = mlora.router_loss_factory(lora_config)
 
     return loss_functions
 

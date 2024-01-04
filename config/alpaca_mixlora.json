@@ -28,7 +28,7 @@
                 "w3_proj": false
             },
             "data": "yahma/alpaca-cleaned",
-            "prompt": "template/template_demo.json",
+            "prompt": "template/alpaca.json",
             "group_by_length": false,
             "expand_side": "right"
         },
@@ -56,7 +56,7 @@
             "routing_strategy": "basic",
             "experts": 8,
             "data": "yahma/alpaca-cleaned",
-            "prompt": "template/template_demo.json",
+            "prompt": "template/alpaca.json",
             "group_by_length": false,
             "expand_side": "right"
         },
@@ -84,7 +84,7 @@
             "routing_strategy": "switch",
             "experts": 8,
             "data": "yahma/alpaca-cleaned",
-            "prompt": "template/template_demo.json",
+            "prompt": "template/alpaca.json",
             "group_by_length": false,
             "expand_side": "right"
         }

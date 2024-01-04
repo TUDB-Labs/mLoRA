@@ -60,6 +60,18 @@ class LoraConfig:
     lora_dropout_: float = 0.05
     target_modules_: dict = None
 
+    def export(self) -> dict:
+        config = {}
+        config["bias"] = "none"
+        config["peft_type"] = "LORA"
+        config["task_type"] = "CAUSAL_LM"
+        config["r"] = self.lora_r_
+        config["lora_alpha"] = self.lora_alpha_
+        config["lora_dropout"] = self.lora_dropout_
+        config["target_modules"] = self.target_modules_
+
+        return config
+
 
 @dataclass
 class MixConfig(LoraConfig):
@@ -79,3 +91,18 @@ class MixConfig(LoraConfig):
     expert_capacity_: int = 64
     jitter_noise_: float = 0.1
     dropout_rate_: float = 0.1
+
+    def export(self) -> dict:
+        config = super().export()
+        config["peft_type"] = "MIXLORA"
+        config["routing_strategy"] = self.routing_strategy_
+        config["experts"] = self.num_experts_
+        config["act"] = self.act_fn_
+        if self.routing_strategy_ == "basic":
+            config["topk"] = self.top_k_
+        elif self.routing_strategy_ == "switch":
+            config["expert_capacity"] = self.expert_capacity_
+            config["jitter_noise"] = self.jitter_noise_
+            config["dropout"] = self.dropout_rate_
+
+        return config
