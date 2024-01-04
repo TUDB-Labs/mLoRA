@@ -29,9 +29,6 @@ class FeedForward(torch.nn.Module):
         if gate is not None:
             with torch.no_grad():
                 self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
-        else:
-            self.moes_[config.adapter_name_].gate_.weight.data.normal_(
-                mean=0.0, std=config.initializer_factor_ * 1)
         self.enable_moe_ = True
 
     def _lora_forward(self, lora_name, act_fn, norm_data):

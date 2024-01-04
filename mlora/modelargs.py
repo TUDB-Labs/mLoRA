@@ -59,7 +59,6 @@ class LoraConfig:
     lora_alpha_: int = None
     lora_dropout_: float = None
     target_modules_: dict = None
-    prompt_template_: str = None
 
     def init(self, config: dict) -> "LoraConfig":
         self.lora_r_ = config["r"]
@@ -86,7 +85,6 @@ class LoraConfig:
 class MixConfig(LoraConfig):
     # router config
     router_aux_loss_coef_: float = None
-    initializer_factor_: float = None
     routing_strategy_: str = None
     num_experts_: int = None
     act_fn_: str = None
@@ -102,8 +100,6 @@ class MixConfig(LoraConfig):
         super().init(config)
         self.router_aux_loss_coef_ = config.get(
             "router_aux_loss_coef", 0.001)  # for training
-        self.initializer_factor_ = config.get(
-            "initializer_factor", 1.0)  # for training
         self.routing_strategy_ = config["routing_strategy"]
         self.num_experts_ = config["num_experts"]
         # silu for mixtral or gelu_new for switch transformers

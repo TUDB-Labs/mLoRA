@@ -303,10 +303,11 @@ class LlamaModel(LLMModel):
                         bf16: bool = True,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
-                        log_fn=None) -> LLMModel:
+                        verbose: bool = False,
+                        ) -> LLMModel:
         if bits in [4, 8]:
-            if log_fn is not None:
-                log_fn(f"Loading model with quantization, bits = {bits}.")
+            if verbose:
+                print(f"Loading model with quantization, bits = {bits}.")
             from transformers import BitsAndBytesConfig
             compute_dtype = (torch.float16 if fp16 else (
                 torch.bfloat16 if bf16 else torch.float32))
@@ -388,6 +389,10 @@ class LlamaModel(LLMModel):
             for adapter_name, lora_config in self.adapter_configs_.items():
                 if adapter_name not in train_paramas:
                     train_paramas[adapter_name] = []
+
+                if adapter_name in transformer_layer.ffn_.moes_:
+                    train_paramas[adapter_name].append(transformer_layer.ffn_.moes_[
+                                                       adapter_name].gate_.weight)
 
                 lora_layer_list = [transformer_layer.wq_.loras_, transformer_layer.wk_.loras_,
                                    transformer_layer.wv_.loras_, transformer_layer.wo_.loras_,

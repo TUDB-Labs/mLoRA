@@ -18,9 +18,18 @@ class GenerateConfig:
 
     def init(self, config: LoraConfig) -> "GenerateConfig":
         self.adapter_name_ = config.adapter_name_
-        self.prompter_ = Prompter(config.prompt_template_)
+        if config.prompt_template_ is not None:
+            self.prompter_ = Prompter(config.prompt_template_)
 
         return self
+
+    def generate_prompt(self, instruction: str, input: str = None):
+        if self.prompter_ is None:
+            if input is not None:
+                raise RuntimeWarning(f"Input must format with prompter.")
+            return instruction
+        else:
+            return self.prompter_(instruction=instruction, input=input)
 
 
 def sample_top_p(probs, p):
@@ -65,11 +74,12 @@ def generate(llm_model: LLMModel,
              max_gen_len=128,
              device="cuda:0",
              stream_callback=None):
+    device = torch.device(device)
     raw_prompts: List[Tokens] = []
     batch_data_config: List[LoraBatchDataConfig] = []
     for config in configs:
         tokens = [tokenizer.encode(prompt, True, False)
-                  for prompt in config.prompter_.generate_prompt(instruction=config.prompts_)]
+                  for prompt in config.generate_prompt(instruction=config.prompts_)]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
         batch_data_config.append(LoraBatchDataConfig(

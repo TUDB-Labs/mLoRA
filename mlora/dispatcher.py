@@ -100,8 +100,8 @@ class TrainTask():
         for data_point in data:
             ret_data_text.append(self.prompter_.generate_prompt(
                 data_point["instruction"],
-                data_point["input"],
-                data_point["output"],
+                data_point.get("input", None),
+                data_point.get("output", None),
             ))
 
         return ret_data_text
