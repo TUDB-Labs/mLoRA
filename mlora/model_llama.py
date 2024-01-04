@@ -160,6 +160,11 @@ class Transformer(torch.nn.Module):
         # apply rotary embedding
         xq, xk = apply_rotary_emb(xq, xk, rope_angle)
 
+        # apply kv cache
+        if kv_cache is not None:
+            xk, xv = kv_cache.update(
+                xk, xv, self.layer_id_, batch_size, max_seq_len)
+
         # for llama2 need to repeat the heads
         # before dim: batch_size, seq_len, n_kv_head, head_dim
         # after dim: batch_size, seq_len, n_head, head_dim
@@ -167,13 +172,6 @@ class Transformer(torch.nn.Module):
         xv = repeat_kv(xv, self.n_rep_)
 
         if kv_cache is not None:
-            # apply kv cache
-            xk, xv = kv_cache.update(
-                xk, xv, self.layer_id_, batch_size, max_seq_len)
-
-            xk = repeat_kv(xk, self.n_rep_)
-            xv = repeat_kv(xv, self.n_rep_)
-
             xq = xq.transpose(1, 2)
             xk = xk.transpose(1, 2)
             xv = xv.transpose(1, 2)
@@ -186,7 +184,7 @@ class Transformer(torch.nn.Module):
             attention_score = torch.matmul(attention_score, xv)
             attention_score = attention_score.transpose(1, 2).contiguous()
         else:
-            # Use xformers when training
+            # use xformers when training
             attention_score = xformers.ops.memory_efficient_attention(
                 xq, xk, xv, mask)
 
