@@ -9,7 +9,7 @@
         {
             "name": "lora_0",
             "optim": "adamw",
-            "lr": 1e-4,
+            "lr": 1e-5,
             "batch_size": 16,
             "micro_batch_size": 2,
             "test_batch_size": 64,
@@ -34,7 +34,7 @@
         {
             "name": "lora_1",
             "optim": "adamw",
-            "lr": 1e-4,
+            "lr": 1e-5,
             "batch_size": 16,
             "micro_batch_size": 2,
             "test_batch_size": 64,
@@ -63,7 +63,7 @@
             "name": "lora_2",
             "output": "lora_2",
             "optim": "adamw",
-            "lr": 1e-4,
+            "lr": 1e-5,
             "batch_size": 16,
             "micro_batch_size": 2,
             "test_batch_size": 64,
