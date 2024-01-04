@@ -74,5 +74,9 @@ class MixConfig(LoraConfig):
     top_k_: int = 2
     # for switch transformers
     router_z_loss_coef_: float = 0.001
+    # expert_capacity = (max_sequence_length / num_experts) * capacity_factor
+    # common values of capacity_factor: 1.0, 1.25, 2.0
     expert_capacity_: int = 64
+    sparse_layers_: int = 16
     jitter_noise_: float = 0.1
+    dropout_rate_: float = 0.1

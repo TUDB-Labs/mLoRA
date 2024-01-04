@@ -1,5 +1,6 @@
 from mlora.modelargs import MixConfig, MultiLoraBatchData
 from mlora.LoraLiner import Linear
+from mlora.model import RMSNorm
 
 import torch
 import torch.nn.functional as F
@@ -60,7 +61,8 @@ class BasicMoe(torch.nn.Module):
 
         self.topk_ = config.top_k_
 
-    def forward(self, expert_fn, hidden_states: torch.Tensor) -> Tuple:
+    def forward(self, norm_fn, expert_fn, hidden_states: torch.Tensor) -> Tuple:
+        hidden_states = norm_fn(hidden_states)
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
@@ -181,9 +183,9 @@ class SwitchMoe(torch.nn.Module):
                            "default" else config.act_fn_]
         self.experts_: int = config.num_experts_
 
-        # expert_capacity = (tokens_per_batch / num_experts) * capacity_factor
         self.expert_capacity_: int = config.expert_capacity_
         self.jitter_noise_: float = config.jitter_noise_
+        self.dropout_ = torch.nn.Dropout(config.dropout_rate_)
         self.dtype_: torch.dtype = torch.float32
 
     def route(self, norm_data: torch.Tensor) -> Tuple:
@@ -214,7 +216,8 @@ class SwitchMoe(torch.nn.Module):
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
         return expert_index, router_probs, router_logits
 
-    def forward(self, expert_fn, norm_data: torch.Tensor) -> Tuple:
+    def forward(self, norm_fn, expert_fn, data: torch.Tensor) -> Tuple:
+        norm_data = norm_fn(data)
         router_mask, router_probs, router_logits = self.route(norm_data)
         expert_index = torch.argmax(router_mask, dim=-1)
 
@@ -225,18 +228,20 @@ class SwitchMoe(torch.nn.Module):
                 self.adapter_name_, self.act_, idx, norm_data[token_indices]).to(next_states.dtype)
 
         hidden_states = router_probs * next_states
+        hidden_states = data + self.dropout_(hidden_states)
         return hidden_states, (router_logits, expert_index)
 
 
-class MLP(torch.nn.Module):
-    def __init__(self, w1: Linear, w2: Linear, w3: Linear, device: str) -> None:
+class FeedForward(torch.nn.Module):
+    def __init__(self, norm: RMSNorm, w1: Linear, w2: Linear, w3: Linear, device: str) -> None:
         super().__init__()
 
         # feed forward
-        self.w1_: Linear = w1  # also gate FNN * dim
-        self.w2_: Linear = w2  # also down dim * FNN
-        self.w3_: Linear = w3  # also up   FNN * dim
-        self.act_ = ACT2FN["silu"]
+        self.norm_: RMSNorm = norm  # dim
+        self.w1_: Linear = w1       # also gate FNN * dim
+        self.w2_: Linear = w2       # also down dim * FNN
+        self.w3_: Linear = w3       # also up   FNN * dim
+        self.act_ = torch.nn.SiLU()
         # device
         self.device_ = device
         # mix of experts
@@ -283,8 +288,9 @@ class MLP(torch.nn.Module):
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
         return self._lora_forward(lora_name, act_fn, norm_data)
 
-    def forward(self, score_norm_data: torch.Tensor, router_outputs: Tuple, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def forward(self, data: torch.Tensor, router_outputs: Tuple, input_args: MultiLoraBatchData) -> torch.Tensor:
         if not self.enable_moe_:
+            score_norm_data = self.norm_(data)
             w1 = self.w1_.forward(score_norm_data, input_args)
             w3 = self.w3_.forward(score_norm_data, input_args)
             return self.w2_.forward(self.act_(w1) * w3, input_args)
@@ -297,13 +303,14 @@ class MLP(torch.nn.Module):
 
             if moe_name in self.moes_:
                 current_hidden_states, current_router_outputs = self.moes_[
-                    moe_name].forward(self._expert_forward, score_norm_data[start_idx:end_idx])
+                    moe_name].forward(self.norm_, self._expert_forward, data[start_idx:end_idx])
 
                 if router_outputs is not None and current_router_outputs is not None:
                     router_outputs[idx].append(current_router_outputs)
             else:
+                score_norm_data = self.norm_(data[start_idx:end_idx])
                 current_hidden_states = self._lora_forward(
-                    moe_name, self.act_, score_norm_data[start_idx:end_idx])
+                    moe_name, self.act_, score_norm_data)
 
             if final_hidden_states is None:
                 final_hidden_states = current_hidden_states

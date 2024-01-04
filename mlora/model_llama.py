@@ -3,7 +3,7 @@ from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask, precompute_mask_for_inference
 from mlora.model import KVCache, LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
-from mlora.MixLoRA import MLP
+from mlora.MixLoRA import FeedForward
 
 import torch
 import torch.nn.functional as F
@@ -61,15 +61,14 @@ class Transformer(torch.nn.Module):
     def __init__(self, layer_id: int, args: LLMModelArgs):
         super().__init__()
         # attention
+        self.attention_norm_: RMSNorm = None  # dim
         self.wq_: Linear = None  # dim * dim
         self.wk_: Linear = None  # dim * dim
         self.wv_: Linear = None  # dim * dim
         self.wo_: Linear = None  # dim * dim
         # feed forward
-        self.ffn_: MLP = None
-        # norm
-        self.attention_norm_: RMSNorm = None  # dim
-        self.ffn_norm_: RMSNorm = None        # dim
+        self.ffn_: FeedForward = None
+
         # other arg
         self.layer_id_ = layer_id
         self.norm_eps_ = args.norm_eps_
@@ -195,9 +194,7 @@ class Transformer(torch.nn.Module):
         data = data + self.wo_.forward(attention_score, input_args)
 
         # feed forward fully connected
-        score_norm_data = self.ffn_norm_.forward(data)
-        data = data + \
-            self.ffn_.forward(score_norm_data, router_logits, input_args)
+        data = data + self.ffn_.forward(data, router_logits, input_args)
 
         return data
 
@@ -371,7 +368,9 @@ class LlamaModel(LLMModel):
                 layer.self_attn.v_proj, device=device)
             model.layers_[idx].wo_ = Linear(
                 layer.self_attn.o_proj, device=device)
-            model.layers_[idx].ffn_ = MLP(
+            model.layers_[idx].ffn_ = FeedForward(
+                norm=RMSNorm(layer.post_attention_layernorm.weight.to(
+                    device=device).requires_grad_(False), model.norm_eps_),
                 w1=Linear(layer.mlp.gate_proj, device=device),
                 w2=Linear(layer.mlp.down_proj, device=device),
                 w3=Linear(layer.mlp.up_proj, device=device),
@@ -379,8 +378,6 @@ class LlamaModel(LLMModel):
             )
             model.layers_[idx].attention_norm_ = RMSNorm(
                 layer.input_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
-            model.layers_[idx].ffn_norm_ = RMSNorm(
-                layer.post_attention_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
 
         return model
 
