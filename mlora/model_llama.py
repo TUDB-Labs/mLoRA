@@ -2,8 +2,8 @@ from mlora.modelargs import LoraConfig, MixConfig, LLMModelArgs, MultiLoraBatchD
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask, precompute_mask_for_inference
 from mlora.model import KVCache, LLMModel, RMSNorm
+from mlora.FeedForward import FeedForward
 from mlora.LoraLiner import Linear
-from mlora.MixLoRA import FeedForward
 
 import torch
 import torch.nn.functional as F

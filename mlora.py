@@ -217,25 +217,18 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
     return ret_accumulation_step
 
 
-def get_router_loss_function(config:  Dict[str, any]) -> Dict[str, torch.nn.Module]:
+def get_router_loss_function(adapters: Dict[str, mlora.LoraConfig]) -> Dict[str, torch.nn.Module]:
     loss_functions: Dict[str, torch.nn.Module] = {}
-    for lora_config in config["lora"]:
-        routing_strategy = lora_config.get("routing_strategy", "none")
-        if routing_strategy == "basic":
-            loss_functions[lora_config["name"]] = mlora.BasicRouterLoss(
-                lora_config.get("router_aux_loss_coef", 0.001),
-                lora_config["experts"],
-                lora_config.get("topk", 2))
-        elif routing_strategy == "switch":
-            loss_functions[lora_config["name"]] = mlora.SwitchRouterLoss(
-                lora_config.get("router_z_loss_coef", 0.001),
-                lora_config.get("router_aux_loss_coef", 0.001))
+    for lora_config in adapters:
+        if isinstance(lora_config, mlora.MixConfig):
+            loss_functions[lora_config.adapter_name_] = mlora.router_loss_factory(
+                lora_config)
 
     return loss_functions
 
 
 # to get test result and want early stop it
-def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
+def train(adapters: Dict[str, mlora.LoraConfig], config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
                             ] = llm_model.get_train_paramas()
@@ -244,7 +237,7 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
     accumulation_step: Dict[str, int] = get_accumulation_steps(config)
 
     loss_fn = torch.nn.CrossEntropyLoss()
-    router_loss_fn = get_router_loss_function(config)
+    router_loss_fn = get_router_loss_function(adapters)
 
     step_cnt = 0
     while not dispatcher.check_task_done():
@@ -342,4 +335,4 @@ if __name__ == "__main__":
         inference(adapters, model, tokenizer, True)
     else:
         dispatcher = mlora.Dispatcher(config, tokenizer)
-        train(config, model, dispatcher)
+        train(adapters, config, model, dispatcher)
