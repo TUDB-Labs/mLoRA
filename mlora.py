@@ -134,45 +134,26 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
 
 def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel) -> Dict[str, mlora.LoraConfig]:
     if args.disable_adapter:
-        return {"DEFAULT": mlora.LoraConfig(adapter_name_="DEFAULT")}
+        return {"DEFAULT": mlora.LoraConfig(
+            adapter_name_="DEFAULT",
+            prompt_template_="template/template_demo.json",
+            device_=args.device,
+        )}
 
     config_dict = {}
 
     for lora_config in config["lora"]:
         lora_weight = None
-        if "routing_strategy" in lora_config:
-            config_class = mlora.MixConfig()
-            config_class.routing_strategy_ = lora_config["routing_strategy"]
-            config_class.router_aux_loss_coef_ = lora_config.get(
-                "router_aux_loss_coef", 0.001)
-            config_class.num_experts_ = lora_config.get("experts", 8)
-            if config_class.routing_strategy_ == "basic":
-                config_class.top_k_ = lora_config.get("topk", 2)
-            elif config_class.routing_strategy_ == "switch":
-                config_class.router_z_loss_coef_ = lora_config.get(
-                    "router_z_loss_coef", 0.001)
-                config_class.expert_capacity_ = lora_config.get(
-                    "expert_capacity", 64)
-                config_class.jitter_noise_ = lora_config.get(
-                    "jitter_noise", 0.01)
-
-            lora_file_name = "mixlora_model.bin"
-        else:
-            config_class = mlora.LoraConfig()
-            lora_file_name = "adapter_model.bin"
-
+        config_class = mlora.lora_config_factory(lora_config)
         config_class.adapter_name_ = lora_config["name"]
+        config_class.prompt_template_ = lora_config["prompt"]
         config_class.device_ = args.device
-        config_class.lora_r_ = lora_config["r"]
-        config_class.lora_alpha_ = lora_config["alpha"]
-        config_class.lora_dropout_ = lora_config["dropout"]
-        config_class.target_modules_ = lora_config["target_modules"]
 
         config_dict[config_class.adapter_name_] = config_class
 
         if args.load_adapter:
             adapter_file_path = args.dir + os.sep + \
-                config_class.adapter_name_ + os.sep + lora_file_name
+                config_class.adapter_name_ + os.sep + "adapter_model.bin"
             log(f"Load adapter: {adapter_file_path}")
             lora_weight = torch.load(
                 adapter_file_path, map_location=args.device)
@@ -290,31 +271,33 @@ def train(adapters: Dict[str, mlora.LoraConfig], config: Dict[str, any], llm_mod
 def inference_callback(cur_pos, outputs):
     print(f"POSITION: {cur_pos}")
     for adapter_name, output in outputs.items():
-        print(f"{adapter_name} OUTPUT: {output[0]}")
+        print(f"{adapter_name} OUTPUT: {output[0].strip()}")
 
 
-def inference(config: Dict[str, mlora.LoraConfig],
+def inference(adapters: Dict[str, mlora.LoraConfig],
               llm_model: mlora.LLMModel,
               tokenizer: mlora.Tokenizer,
               echo=False):
     gen_configs: List[mlora.GenerateConfig] = []
-    for _, lora_config in config.items():
-        gen_configs.append(mlora.GenerateConfig(lora_config_=lora_config))
+    for _, lora_config in adapters.items():
+        gen_configs.append(mlora.GenerateConfig().init(lora_config))
 
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
             return
-        for config in gen_configs:
-            config.prompts_ = [input_raw]
+        for adapters in gen_configs:
+            adapters.prompts_ = [input_raw]
         outputs = mlora.generate(llm_model, tokenizer, gen_configs,
                                  temperature=0.2,
                                  device=args.device,
                                  stream_callback=inference_callback if echo else None)
+        print(f"\n{'='*10}\n")
         print(f"PROMPT: {input_raw}")
         for adapter_name, output in outputs.items():
             print(f"{adapter_name} OUTPUT:")
-            print(output[0])
+            print(output[0].strip())
+        print(f"\n{'='*10}\n")
 
 
 # Main Function

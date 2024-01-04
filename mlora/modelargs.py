@@ -55,10 +55,19 @@ class MultiLoraBatchData:
 class LoraConfig:
     adapter_name_: str = ""
     device_: str = "cuda:0"
-    lora_r_: int = 8
-    lora_alpha_: int = 16
-    lora_dropout_: float = 0.05
+    lora_r_: int = None
+    lora_alpha_: int = None
+    lora_dropout_: float = None
     target_modules_: dict = None
+    prompt_template_: str = None
+
+    def init(self, config: dict) -> "LoraConfig":
+        self.lora_r_ = config["r"]
+        self.lora_alpha_ = config["lora_alpha"]
+        self.lora_dropout_ = config["lora_dropout"]
+        self.target_modules_ = config["target_modules"]
+
+        return self
 
     def export(self) -> dict:
         config = {}
@@ -76,33 +85,60 @@ class LoraConfig:
 @dataclass
 class MixConfig(LoraConfig):
     # router config
-    router_aux_loss_coef_: float = 0.001
-    initializer_factor_: float = 1.0
-    routing_strategy_: str = "basic"
-    num_experts_: int = 8
-    # default, silu or gelu_new
-    act_fn_: str = "default"
-    # for top-k moes
-    top_k_: int = 2
-    # for switch transformers
-    router_z_loss_coef_: float = 0.001
-    # expert_capacity = (max_sequence_length / num_experts) * capacity_factor
-    # common values of capacity_factor: 1.0, 1.25, 2.0
-    expert_capacity_: int = 64
-    jitter_noise_: float = 0.1
-    dropout_rate_: float = 0.1
+    router_aux_loss_coef_: float = None
+    initializer_factor_: float = None
+    routing_strategy_: str = None
+    num_experts_: int = None
+    act_fn_: str = None
+    # mixtral config
+    top_k_: int = None
+    # switch transformers config
+    router_z_loss_coef_: float = None
+    expert_capacity_: int = None
+    jitter_noise_: float = None
+    dropout_rate_: float = None
+
+    def init(self, config: dict) -> "MixConfig":
+        super().init(config)
+        self.router_aux_loss_coef_ = config.get(
+            "router_aux_loss_coef", 0.001)  # for training
+        self.initializer_factor_ = config.get(
+            "initializer_factor", 1.0)  # for training
+        self.routing_strategy_ = config["routing_strategy"]
+        self.num_experts_ = config["num_experts"]
+        # silu for mixtral or gelu_new for switch transformers
+        self.act_fn_ = config["act_fn"]
+        if self.routing_strategy_ == "mixtral":
+            self.top_k_ = config.get("top_k", 2)
+        elif self.routing_strategy_ == "switch":
+            self.router_z_loss_coef_ = config.get(
+                "router_z_loss_coef", 0.001)  # for training
+            # expert_capacity = (max_sequence_length / num_experts) * capacity_factor
+            # common values of capacity_factor: 1.0, 1.25, 2.0
+            self.expert_capacity_ = config.get("expert_capacity", 64)
+            self.jitter_noise_ = config.get("jitter_noise", 0.1)
+            self.dropout_rate_ = config.get("ffn_dropout", 0.1)
+
+        return self
 
     def export(self) -> dict:
         config = super().export()
         config["peft_type"] = "MIXLORA"
         config["routing_strategy"] = self.routing_strategy_
-        config["experts"] = self.num_experts_
-        config["act"] = self.act_fn_
-        if self.routing_strategy_ == "basic":
-            config["topk"] = self.top_k_
+        config["num_experts"] = self.num_experts_
+        config["act_fn"] = self.act_fn_
+        if self.routing_strategy_ == "mixtral":
+            config["top_k"] = self.top_k_
         elif self.routing_strategy_ == "switch":
             config["expert_capacity"] = self.expert_capacity_
             config["jitter_noise"] = self.jitter_noise_
-            config["dropout"] = self.dropout_rate_
+            config["ffn_dropout"] = self.dropout_rate_
 
         return config
+
+
+def lora_config_factory(config: dict) -> LoraConfig:
+    if ("peft_type" in config and config["peft_type"] == "MIXLORA") or "routing_strategy" in config:
+        return MixConfig().init(config)
+    else:
+        return LoraConfig().init(config)

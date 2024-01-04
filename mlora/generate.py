@@ -10,14 +10,17 @@ import torch
 
 @dataclass
 class GenerateConfig:
-    # internal
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
+    adapter_name_: str = None
     prompter_: Prompter = None
-    # user settings
-    lora_config_: LoraConfig = None
-    prompt_template_: str = "template/demo.json"
     prompts_: List[str] = None
+
+    def init(self, config: LoraConfig) -> "GenerateConfig":
+        self.adapter_name_ = config.adapter_name_
+        self.prompter_ = Prompter(config.prompt_template_)
+
+        return self
 
 
 def sample_top_p(probs, p):
@@ -48,8 +51,7 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 
     packed_outputs = {}
     for config in configs:
-        packed_outputs[config.lora_config_.adapter_name_] = config.prompter_.get_response(
-            outputs[config.batch_start_idx_:config.batch_end_idx_])
+        packed_outputs[config.adapter_name_] = outputs[config.batch_start_idx_:config.batch_end_idx_]
 
     return packed_outputs
 
@@ -66,13 +68,12 @@ def generate(llm_model: LLMModel,
     raw_prompts: List[Tokens] = []
     batch_data_config: List[LoraBatchDataConfig] = []
     for config in configs:
-        config.prompter_ = Prompter(config.prompt_template_)
         tokens = [tokenizer.encode(prompt, True, False)
                   for prompt in config.prompter_.generate_prompt(instruction=config.prompts_)]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
         batch_data_config.append(LoraBatchDataConfig(
-            config.lora_config_.adapter_name_, config.batch_start_idx_, config.batch_end_idx_))
+            config.adapter_name_, config.batch_start_idx_, config.batch_end_idx_))
         raw_prompts.extend(tokens)
 
     batch_size = len(raw_prompts)

@@ -489,15 +489,8 @@ class LlamaModel(LLMModel):
 
             lora_config_dict = lora_config.export()
 
-            if isinstance(lora_config, MixConfig):
-                torch.save(lora_weight_dict, lora_output_dir +
-                           os.sep + "mixlora_model.bin")
+            torch.save(lora_weight_dict, lora_output_dir +
+                       os.sep + "adapter_model.bin")
 
-                with open(lora_output_dir + os.sep + "mixlora_config.json", "w") as f:
-                    json.dump(lora_config_dict, f, indent=4)
-            else:
-                torch.save(lora_weight_dict, lora_output_dir +
-                           os.sep + "adapter_model.bin")
-
-                with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
-                    json.dump(lora_config_dict, f, indent=4)
+            with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
+                json.dump(lora_config_dict, f, indent=4)

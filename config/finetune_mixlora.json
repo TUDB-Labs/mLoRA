@@ -8,7 +8,6 @@
     "lora": [
         {
             "name": "lora_0",
-            "output": "lora_0",
             "optim": "sgd",
             "lr": 1e-2,
             "momentum": 0.9,
@@ -17,8 +16,8 @@
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 8,
-            "alpha": 16,
-            "dropout": 0.05,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": true,
@@ -36,7 +35,6 @@
         },
         {
             "name": "lora_1",
-            "output": "lora_1",
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 16,
@@ -44,8 +42,8 @@
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 8,
-            "alpha": 16,
-            "dropout": 0.05,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": false,
@@ -55,8 +53,9 @@
                 "w2_proj": false,
                 "w3_proj": true
             },
-            "routing_strategy": "basic",
-            "experts": 8,
+            "routing_strategy": "mixtral",
+            "num_experts": 8,
+            "act_fn": "silu",
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
@@ -65,7 +64,6 @@
         },
         {
             "name": "lora_2",
-            "output": "lora_2",
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 16,
@@ -73,8 +71,8 @@
             "test_batch_size": 64,
             "num_epochs": 6,
             "r": 8,
-            "alpha": 16,
-            "dropout": 0.05,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": false,
@@ -85,7 +83,9 @@
                 "w3_proj": true
             },
             "routing_strategy": "switch",
-            "experts": 8,
+            "expert_capacity": 32,
+            "num_experts": 8,
+            "act_fn": "gelu_new",
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",

@@ -7,7 +7,7 @@ from typing import List, Tuple
 from transformers.activations import ACT2FN
 
 
-def _basic_load_balancing_loss_func(gate_logits: List[torch.Tensor], num_experts: int, top_k: int) -> float:
+def _mixtral_load_balancing_loss_func(gate_logits: List[torch.Tensor], num_experts: int, top_k: int) -> float:
     gate_logits = torch.cat(gate_logits, dim=0)
 
     routing_weights, selected_experts = torch.topk(
@@ -35,7 +35,7 @@ def _basic_load_balancing_loss_func(gate_logits: List[torch.Tensor], num_experts
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert.unsqueeze(-1)) * (num_experts**2)
 
 
-class BasicRouterLoss(torch.nn.Module):
+class MixtralRouterLoss(torch.nn.Module):
     def __init__(self, config: MixConfig) -> None:
         super().__init__()
         self.aux_loss_coef = config.router_aux_loss_coef_
@@ -43,10 +43,10 @@ class BasicRouterLoss(torch.nn.Module):
         self.topk = config.top_k_
 
     def forward(self, gate_logits) -> torch.Tensor:
-        return self.aux_loss_coef * _basic_load_balancing_loss_func(gate_logits, self.experts, self.topk)
+        return self.aux_loss_coef * _mixtral_load_balancing_loss_func(gate_logits, self.experts, self.topk)
 
 
-class BasicMoe(torch.nn.Module):
+class MixtralSparseMoe(torch.nn.Module):
     def __init__(self, in_features: int, config: MixConfig) -> None:
         super().__init__()
 
@@ -170,7 +170,7 @@ class SwitchRouterLoss(torch.nn.Module):
         return self.z_loss_coef * z_loss + self.aux_loss_coef * aux_loss
 
 
-class SwitchMoe(torch.nn.Module):
+class SwitchSparseMoe(torch.nn.Module):
     def __init__(self,  in_features: int, config: MixConfig) -> None:
         super().__init__()
 
@@ -231,7 +231,7 @@ class SwitchMoe(torch.nn.Module):
 
 
 router_loss_dict = {
-    "basic": BasicRouterLoss,
+    "mixtral": MixtralRouterLoss,
     "switch": SwitchRouterLoss
 }
 
@@ -244,8 +244,8 @@ def router_loss_factory(config: MixConfig) -> torch.nn.Module:
 
 
 moe_layer_dict = {
-    "basic": BasicMoe,
-    "switch": SwitchMoe
+    "mixtral": MixtralSparseMoe,
+    "switch": SwitchSparseMoe
 }
 
 
