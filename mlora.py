@@ -51,10 +51,10 @@ parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
 parser.add_argument('--config', type=str,
                     help='Path to finetune configuration')
-parser.add_argument('--output', type=str, default=".",
-                    help='Path to output checkpoints')
 parser.add_argument('--seed', type=int, default=42,
                     help='Random seed in integer, default is 42')
+parser.add_argument('--dir', type=str, default=".",
+                    help='Path to read or save checkpoints')
 parser.add_argument('--log', type=bool, default=True,
                     help='Turn on or off log, default is true')
 
@@ -171,7 +171,8 @@ def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel) -> Dict[s
         config_dict[config_class.adapter_name_] = config_class
 
         if args.load_adapter:
-            adapter_file_path = lora_config["output"] + os.sep + lora_file_name
+            adapter_file_path = args.dir + os.sep + \
+                config_class.adapter_name_ + os.sep + lora_file_name
             log(f"Load adapter: {adapter_file_path}")
             lora_weight = torch.load(
                 adapter_file_path, map_location=args.device)
@@ -271,7 +272,7 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                 accumulation_step[lora_config.adapter_name_]
             if router_outputs is not None and len(router_outputs[idx]) > 0:
                 router_loss = router_loss_fn[lora_config.adapter_name_](
-                    router_outputs[idx])
+                    router_outputs[idx]) / accumulation_step[lora_config.adapter_name_]
                 loss += router_loss
                 print(f"    adapter: {lora_config.adapter_name_} loss: {loss}")
                 print(
@@ -289,9 +290,9 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
                 all_optimizer[lora.adapter_name_].step()
 
         if step_cnt % config["save_step"] == 0:
-            llm_model.save_adapter_weight(args.output, f"{step_cnt}")
+            llm_model.save_adapter_weight(args.dir, f"{step_cnt}")
 
-    llm_model.save_adapter_weight(args.output)
+    llm_model.save_adapter_weight(args.dir)
 
 
 def inference_callback(cur_pos, outputs):
