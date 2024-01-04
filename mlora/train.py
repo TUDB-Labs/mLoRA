@@ -58,16 +58,21 @@ def train(dispatcher: Dispatcher,
           save_step: int = 2000,
           verbose: bool = False):
     device = torch.device(device)
+    config_dict = {}
+    for config in configs:
+        config_dict[config.adapter_name_] = config
+
     output_router_logits = False
     train_paramas = llm_model.get_train_paramas()
-    for adapter_name, config in configs.items():
+    for config in configs:
         if config.router_loss_fn_ is not None:
             output_router_logits = True
-        config.prepare(train_paramas[adapter_name])
+        config.prepare(train_paramas[config.adapter_name_])
+
     step_cnt = 0
     while not dispatcher.check_task_done():
         input: MultiLoraBatchData = dispatcher.get_train_data()
-        for _, config in configs.items():
+        for config in configs:
             config.optimizer_.zero_grad()
 
         step_cnt += 1
@@ -80,7 +85,7 @@ def train(dispatcher: Dispatcher,
 
         total_loss = None
         for idx, lora_config in enumerate(input.lora_batch_data_config_):
-            train_config = configs[lora_config.adapter_name_]
+            train_config = config_dict[lora_config.adapter_name_]
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
             loss_input = output[start_idx:end_idx][..., :-1,
@@ -106,7 +111,7 @@ def train(dispatcher: Dispatcher,
                 total_loss += loss
 
         total_loss.backward()
-        for _, config in configs.items():
+        for config in configs:
             if step_cnt % config.accumulation_step_ == 0:
                 config.optimizer_.step()
 

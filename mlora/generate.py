@@ -13,13 +13,14 @@ class GenerateConfig:
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
     adapter_name_: str = None
+    prompt_template_: str = None
     prompter_: Prompter = None
     prompts_: List[str] = None
 
     def init(self, config: LoraConfig) -> "GenerateConfig":
         self.adapter_name_ = config.adapter_name_
-        if config.prompt_template_ is not None:
-            self.prompter_ = Prompter(config.prompt_template_)
+        if self.prompt_template_ is not None:
+            self.prompter_ = Prompter(self.prompt_template_)
 
         return self
 

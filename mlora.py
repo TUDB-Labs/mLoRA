@@ -120,7 +120,7 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     return tokenizer, model
 
 
-def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel, do_train: bool = True) -> Dict[str, any]:
+def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel, inference: bool = True) -> Dict[str, any]:
     if args.disable_adapter:
         return {"DEFAULT": mlora.LoraConfig(
             adapter_name_="DEFAULT",
@@ -128,7 +128,7 @@ def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel, do_tr
             device_=args.device,
         )}
 
-    config_dict = {}
+    config_list = []
 
     for lora_config in config["lora"]:
         lora_weight = None
@@ -145,14 +145,14 @@ def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel, do_tr
                 adapter_file_path, map_location=args.device)
 
         llm_model.init_lora_layer_weight(config_class, lora_weight)
-        if do_train:
-            config_dict[config_class.adapter_name_] = mlora.TrainConfig().init(
-                lora_config, config_class)
+        if inference:
+            config_list.append(mlora.GenerateConfig().init(
+                config_class))
         else:
-            config_dict[config_class.adapter_name_] = mlora.GenerateConfig().init(
-                config_class)
+            config_list.append(mlora.TrainConfig().init(
+                lora_config, config_class))
 
-    return config_dict
+    return config_list
 
 
 def inference_callback(cur_pos, outputs):
@@ -165,18 +165,13 @@ def inference(llm_model: mlora.LLMModel,
               tokenizer: mlora.Tokenizer,
               adapters: dict,
               verbose=False):
-    gen_configs: List[mlora.GenerateConfig] = []
-    for _, lora_config in adapters.items():
-        lora_config.prompt_template_ = None
-        gen_configs.append(mlora.GenerateConfig().init(lora_config))
-
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
             return
-        for config in gen_configs:
+        for config in adapters:
             config.prompts_ = [input_raw]
-        outputs = mlora.generate(llm_model, tokenizer, gen_configs,
+        outputs = mlora.generate(llm_model, tokenizer, adapters,
                                  temperature=0.2,
                                  device=args.device,
                                  stream_callback=inference_callback if verbose else None)
@@ -196,7 +191,7 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     tokenizer, model = load_base_model(config)
-    adapters = init_adapter_config(config, model)
+    adapters = init_adapter_config(config, model, args.inference)
 
     torch.cuda.empty_cache()
 

@@ -136,9 +136,9 @@ class LLMModel(metaclass=ABCMeta):
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         pass
 
-    # @abstractclassmethod
-    # def load_adapter_weight(self, path: str):
-    #     pass
+    @abstractclassmethod
+    def load_adapter_weight(self, path: str, adapter_name: str = None):
+        pass
 
     @abstractclassmethod
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
@@ -150,6 +150,10 @@ class LLMModel(metaclass=ABCMeta):
 
     @abstractclassmethod
     def sequential_module(self) -> torch.nn.Sequential:
+        pass
+
+    @abstractclassmethod
+    def get_generate_paramas(self, prompts: List[str]) -> List:
         pass
 
     @abstractclassmethod

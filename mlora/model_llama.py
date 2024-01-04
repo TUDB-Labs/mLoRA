@@ -1,7 +1,8 @@
-from mlora.modelargs import LoraConfig, MixConfig, LLMModelArgs, MultiLoraBatchData
+from mlora.modelargs import LoraConfig, MixConfig, LLMModelArgs, MultiLoraBatchData, lora_config_factory
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask, precompute_mask_for_inference
 from mlora.model import KVCache, LLMModel, RMSNorm
+from mlora.generate import GenerateConfig
 from mlora.FeedForward import FeedForward
 from mlora.LoraLiner import Linear
 
@@ -10,12 +11,13 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 import xformers.ops
 import xformers.ops.fmha.attn_bias
-from transformers import LlamaForCausalLM
 from typing import List, Dict, Tuple, Optional
+from huggingface_hub import snapshot_download
+from transformers import LlamaForCausalLM
 from collections import OrderedDict
-import os
 import json
 import math
+import os
 
 
 class Embedding(torch.nn.Module):
@@ -416,6 +418,9 @@ class LlamaModel(LLMModel):
 
         return train_paramas
 
+    def get_generate_paramas(self, prompts: List[str]) -> List:
+        return [GenerateConfig(prompts_=prompts).init(config) for _, config in self.adapter_configs_.items()]
+
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         # return the lora weight and target_module's name
         lora_weight_dict = {}
@@ -478,6 +483,19 @@ class LlamaModel(LLMModel):
         seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)
+
+    def load_adapter_weight(self, path: str, adapter_name: str = None):
+        if adapter_name is None:
+            adapter_name = path
+        if not os.path.exists(path):
+            path = snapshot_download(repo_id=path, repo_type="model")
+        with open(path + os.sep + "adapter_config.json", 'r', encoding='utf8') as fp:
+            lora_config = lora_config_factory(json.load(fp))
+        lora_config.adapter_name_ = adapter_name
+        lora_weight = torch.load(
+            path + os.sep + "adapter_model.bin", map_location=self.device_)
+        self.init_lora_layer_weight(lora_config, lora_weight)
+        return adapter_name
 
     def save_adapter_weight(self, path: str, dir_suffix=""):
         for lora_name, lora_config in self.adapter_configs_.items():

@@ -64,7 +64,18 @@ class LoraConfig:
         self.lora_r_ = config["r"]
         self.lora_alpha_ = config["lora_alpha"]
         self.lora_dropout_ = config["lora_dropout"]
-        self.target_modules_ = config["target_modules"]
+        self.target_modules_ = {
+            "q_proj": False,
+            "k_proj": False,
+            "v_proj": False,
+            "o_proj": False,
+            "w1_proj": False,
+            "w2_proj": False,
+            "w3_proj": False
+        }
+        for target in config["target_modules"]:
+            if target in self.target_modules_:
+                self.target_modules_[target] = True
 
         return self
 
@@ -76,7 +87,11 @@ class LoraConfig:
         config["r"] = self.lora_r_
         config["lora_alpha"] = self.lora_alpha_
         config["lora_dropout"] = self.lora_dropout_
-        config["target_modules"] = self.target_modules_
+        tgt_list = []
+        for target, value in self.target_modules_.items():
+            if value:
+                tgt_list.append(target)
+        config["target_modules"] = tgt_list
 
         return config
 
