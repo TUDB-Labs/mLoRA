@@ -6,12 +6,12 @@ transformers==4.30.2
 bitsandbytes==0.40.2
 sentencepiece==0.1.99
 scipy==1.10.1
+protobuf==3.20.1
 xformers==0.0.20
+huggingface_hub
 nltk
 jieba
 rouge
 rouge_chinese
 flask
 peft
-protobuf==3.20.1
-huggingface_hub
