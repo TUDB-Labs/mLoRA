@@ -53,8 +53,7 @@ class MixtralSparseMoe(torch.nn.Module):
         self.adapter_name_: str = config.adapter_name_
         self.gate_ = torch.nn.Linear(
             in_features, config.num_experts_, bias=False, device=config.device_)
-        self.act_ = ACT2FN["silu" if config.act_fn_ ==
-                           "default" else config.act_fn_]
+        self.act_ = ACT2FN[config.act_fn_]
         self.experts_ = config.num_experts_
 
         self.topk_ = config.top_k_
@@ -177,8 +176,7 @@ class SwitchSparseMoe(torch.nn.Module):
         self.adapter_name_: str = config.adapter_name_
         self.gate_ = torch.nn.Linear(
             in_features, config.num_experts_, bias=False, device=config.device_)
-        self.act_ = ACT2FN["gelu_new" if config.act_fn_ ==
-                           "default" else config.act_fn_]
+        self.act_ = ACT2FN[config.act_fn_]
         self.experts_: int = config.num_experts_
 
         self.expert_capacity_: int = config.expert_capacity_
