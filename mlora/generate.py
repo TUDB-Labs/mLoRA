@@ -5,6 +5,7 @@ from mlora.utils import Prompter
 
 from dataclasses import dataclass
 from typing import List
+import logging
 import torch
 
 
@@ -24,7 +25,9 @@ class GenerateConfig:
             return instruction
 
         if self.prompter_ is None:
-            assert self.prompt_template_ is not None
+            if self.prompt_template_ is None:
+                logging.warn("Drop input when prompt template is not set.")
+                return instruction
             self.prompter_ = Prompter(self.prompt_template_)
 
         return self.prompter_.generate_prompt(instruction=instruction, input=input)

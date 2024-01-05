@@ -15,3 +15,5 @@ rouge
 rouge_chinese
 flask
 peft
+gradio==3.50
+fire
