@@ -125,7 +125,7 @@ def init_adapter_config(config: Dict[str, any],
 def inference_callback(cur_pos, outputs):
     print(f"POSITION: {cur_pos}")
     for adapter_name, output in outputs.items():
-        print(f"{adapter_name} OUTPUT: {output[0].strip()}")
+        print(f"{adapter_name} OUTPUT: {output[0]}")
 
 
 def inference(llm_model: mlora.LLMModel,
@@ -146,7 +146,7 @@ def inference(llm_model: mlora.LLMModel,
         print(f"PROMPT: {input_raw}")
         for adapter_name, output in outputs.items():
             print(f"{adapter_name} OUTPUT:")
-            print(output[0].strip())
+            print(output[0])
         print(f"\n{'='*10}\n")
 
 

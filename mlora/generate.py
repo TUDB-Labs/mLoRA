@@ -19,7 +19,7 @@ class GenerateConfig:
     prompter_: Prompter = None
 
     # Set prompt_template_ to enable the prompter
-    def generate_prompt(self, instruction: str, input: str = None):
+    def generate_prompt(self, instruction: str, input: str = None) -> str:
         if input is None and self.prompt_template_ is None:
             return instruction
 
@@ -28,6 +28,12 @@ class GenerateConfig:
             self.prompter_ = Prompter(self.prompt_template_)
 
         return self.prompter_.generate_prompt(instruction=instruction, input=input)
+
+    def get_response(self, output: str) -> str:
+        if self.prompter_ is None:
+            return output.strip()
+        else:
+            return self.prompter_.get_response(output)
 
 
 def sample_top_p(probs, p):
@@ -58,7 +64,8 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 
     packed_outputs = {}
     for config in configs:
-        packed_outputs[config.adapter_name_] = outputs[config.batch_start_idx_:config.batch_end_idx_]
+        packed_outputs[config.adapter_name_] = [config.get_response(
+            output) for output in outputs[config.batch_start_idx_:config.batch_end_idx_]]
 
     return packed_outputs
 

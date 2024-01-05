@@ -419,8 +419,9 @@ class LlamaModel(LLMModel):
 
     def get_generate_paramas(self) -> Dict[str, GenerateConfig]:
         generate_paramas = {}
-        for adapter_name, config in self.adapter_configs_.items():
-            generate_paramas[adapter_name] = GenerateConfig().init(config)
+        for adapter_name in self.adapter_configs_.keys():
+            generate_paramas[adapter_name] = GenerateConfig(
+                adapter_name_=adapter_name)
         return generate_paramas
 
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
