@@ -32,9 +32,9 @@ def run():
     if params['inference'] == 'true':
         shell_str += ' --inference'
     if params['load_lora'] == 'true':
-        shell_str += ' --load_lora'
+        shell_str += ' --load_adapter'
     if params['disable_lora'] == 'true':
-        shell_str += ' --disable_lora'
+        shell_str += ' --disable_adapter'
 
     if params['tokenizer']:
         shell_str += ' --tokenizer ' + params['tokenizer']
@@ -59,7 +59,8 @@ def run():
     process_id = str(uuid.uuid4())  # 生成一个唯一的进程ID
     print(shell_str)
     # 启动进程但不等待其完成
-    execmd_thread = threading.Thread(target=execmd, args=(shell_str, process_id, True))
+    execmd_thread = threading.Thread(
+        target=execmd, args=(shell_str, process_id, True))
     execmd_thread.start()
     # 返回进程ID给客户端
     return jsonify({"process_id": process_id}), 200
@@ -93,8 +94,10 @@ processes = {}
 
 
 def execmd(command, process_id, shell=False):
-    sp = subprocess.Popen(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    processes[process_id] = {'process': sp, 'output': [], 'finished': False}  # 添加'finished'标志
+    sp = subprocess.Popen(
+        command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    processes[process_id] = {'process': sp,
+                             'output': [], 'finished': False}  # 添加'finished'标志
     while sp.poll() is None:  # 检查子进程是否已经结束
         line = sp.stdout.readline()
         if line:  # 只有当有内容时才添加到输出列表
@@ -108,7 +111,8 @@ def execmd(command, process_id, shell=False):
 
 def execmdmanager(comand, shell=False):
     args = shlex.split(comand)
-    sp = subprocess.Popen(args, stdout=subprocess.PIPE, encoding="utf8", shell=shell, stderr=subprocess.STDOUT)
+    sp = subprocess.Popen(args, stdout=subprocess.PIPE,
+                          encoding="utf8", shell=shell, stderr=subprocess.STDOUT)
     return sp
 
 
