@@ -27,14 +27,14 @@ from typing import Dict, Tuple, List, Union
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
-parser.add_argument('--base_model', type=str,
+parser.add_argument('--base_model', type=str, required=True,
                     help='Path to or name of base model')
 parser.add_argument('--model_type', type=str, default="llama",
                     help='The model type, support: llama, chatglm')
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
-parser.add_argument('--prompt_template', type=bool, default=True,
-                    help="Load prompt template when inference")
+parser.add_argument('--disable_prompter', action="store_true",
+                    help="Disable prompter when inference")
 parser.add_argument('--load_adapter', action="store_true",
                     help="Load adapter from file instead of init randomly")
 parser.add_argument('--disable_adapter', action="store_true",
@@ -47,14 +47,14 @@ parser.add_argument('--load_4bit', action="store_true",
                     help='Load model in 4bit mode')
 parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
-parser.add_argument('--config', type=str,
+parser.add_argument('--config', type=str, required=True,
                     help='Path to finetune configuration')
 parser.add_argument('--seed', type=int, default=42,
                     help='Random seed in integer, default is 42')
 parser.add_argument('--dir', type=str, default=".",
                     help='Path to read or save checkpoints')
-parser.add_argument('--log', type=bool, default=True,
-                    help='Turn on or off log, default is true')
+parser.add_argument('--disable_log', action="store_true",
+                    help='Disable logging.')
 parser.add_argument('--log_file', type=str,
                     help="Save log to specific file.")
 
@@ -68,7 +68,7 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
+def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     if args.model_type == "llama":
         logging.info("Initializing LLaMA model.")
         model = mlora.LlamaModel.from_pretrained(
@@ -94,13 +94,6 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
 def init_adapter_config(config: Dict[str, any],
                         llm_model: mlora.LLMModel,
                         ) -> List[Union[mlora.GenerateConfig, mlora.TrainConfig]]:
-    if args.disable_adapter and args.inference:
-        config_class = mlora.GenerateConfig().init(
-            mlora.LoraConfig(adapter_name_="m-LoRA", device_=args.device))
-        if args.prompt_template:
-            config_class.prompt_template_ = "template/template_demo.json"
-        return {"m-LoRA": config_class}
-
     config_list = []
 
     for lora_config in config["lora"]:
@@ -118,13 +111,12 @@ def init_adapter_config(config: Dict[str, any],
 
         llm_model.init_lora_layer_weight(config_class, lora_weight)
         if args.inference:
-            config_class = mlora.GenerateConfig().init(
-                config_class)
-            if args.prompt_template:
+            config_class = mlora.GenerateConfig(
+                adapter_name_=config_class.adapter_name_)
+            if not args.disable_prompter:
                 config_class.prompt_template_ = lora_config["prompt"]
         else:
-            config_class = mlora.TrainConfig().init(
-                lora_config, config_class)
+            config_class = mlora.TrainConfig(lora_config, config_class)
         config_list.append(config_class)
 
     return config_list
@@ -138,17 +130,18 @@ def inference_callback(cur_pos, outputs):
 
 def inference(llm_model: mlora.LLMModel,
               tokenizer: mlora.Tokenizer,
-              adapters: dict):
+              adapters: List[mlora.GenerateConfig]):
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
             return
         for config in adapters:
             config.prompts_ = [input_raw]
+        callback = None if args.disable_log else inference_callback
         outputs = mlora.generate(llm_model, tokenizer, adapters,
                                  temperature=0.2,
                                  device=args.device,
-                                 stream_callback=inference_callback if args.log else None)
+                                 stream_callback=callback)
         print(f"\n{'='*10}\n")
         print(f"PROMPT: {input_raw}")
         for adapter_name, output in outputs.items():
@@ -167,19 +160,9 @@ if __name__ == "__main__":
         log_handlers.append(logging.FileHandler(args.log_file))
 
     logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
-                        level=logging.INFO if args.log else logging.WARNING,
+                        level=logging.WARNING if args.disable_log else logging.INFO,
                         handlers=log_handlers,
                         force=True)
-
-    if args.base_model is None:
-        logging.error('error: Argument --base_model are required.')
-        parser.print_help()
-        exit(-1)
-
-    if args.config is None:
-        logging.error('error: Argument --config are required.')
-        parser.print_help()
-        exit(-1)
 
     if torch.cuda.is_available():
         logging.info('NVIDIA CUDA initialized successfully.')
@@ -194,7 +177,7 @@ if __name__ == "__main__":
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
 
-    tokenizer, model = load_base_model(config)
+    tokenizer, model = load_base_model()
     adapters = init_adapter_config(config, model)
 
     torch.cuda.empty_cache()

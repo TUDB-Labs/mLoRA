@@ -3,37 +3,24 @@ from mlora.dispatcher import Dispatcher
 from mlora.MixLoRA import router_loss_factory
 from mlora.model import LLMModel
 
-from dataclasses import dataclass
 from typing import Dict, List
 import logging
 import torch
 
 
-@dataclass
 class TrainConfig:
-    adapter_name_: str = None
-    batch_size_: int = None
-    micro_batch_size_: int = None
-    optimizer_name_: str = None
-    learning_rate_: float = None
-    momentum_: float = None
-
-    accumulation_step_: int = None
-    optimizer_: torch.optim.Optimizer = None
-    loss_fn_: torch.nn.Module = None
-    router_loss_fn_: torch.nn.Module = None
-
-    def init(self, train_config: Dict[str, any], lora_config: LoraConfig) -> "TrainConfig":
+    def __init__(self, train_config: Dict[str, any], lora_config: LoraConfig):
         self.adapter_name_ = lora_config.adapter_name_
         self.batch_size_ = train_config["batch_size"]
         self.micro_batch_size_ = train_config["micro_batch_size"]
         self.optimizer_name_ = train_config["optim"]
         self.learning_rate_ = train_config["lr"]
         self.momentum_ = train_config.get("momentum", 0)
-        if isinstance(lora_config, MixConfig):
-            self.router_loss_fn_ = router_loss_factory(lora_config)
-
-        return self
+        self.router_loss_fn_ = router_loss_factory(
+            lora_config) if isinstance(lora_config, MixConfig) else None
+        self.accumulation_step_: int = None
+        self.optimizer_: torch.optim.Optimizer = None
+        self.loss_fn_: torch.nn.Module = None
 
     def prepare(self, train_paramas: List[torch.Tensor]):
         if self.batch_size_ < self.micro_batch_size_ or self.batch_size_ % self.micro_batch_size_ != 0:

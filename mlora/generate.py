@@ -1,4 +1,4 @@
-from mlora.modelargs import LoraConfig, LoraBatchDataConfig, MultiLoraBatchData
+from mlora.modelargs import LoraBatchDataConfig, MultiLoraBatchData
 from mlora.tokenizer import Tokenizer, Tokens
 from mlora.model import LLMModel, KVCache
 from mlora.utils import Prompter
@@ -10,27 +10,24 @@ import torch
 
 @dataclass
 class GenerateConfig:
+    adapter_name_: str = None
+    prompts_: List[str] = None
+    prompt_template_: str = None
+    # Do not set these manually
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
-    adapter_name_: str = None
-    prompt_template_: str = None
     prompter_: Prompter = None
-    prompts_: List[str] = None
 
-    def init(self, config: LoraConfig) -> "GenerateConfig":
-        self.adapter_name_ = config.adapter_name_
-        if self.prompt_template_ is not None:
+    # Set prompt_template_ to enable the prompter
+    def generate_prompt(self, instruction: str, input: str = None):
+        if input is None and self.prompt_template_ is None:
+            return instruction
+
+        if self.prompter_ is None:
+            assert self.prompt_template_ is not None
             self.prompter_ = Prompter(self.prompt_template_)
 
-        return self
-
-    def generate_prompt(self, instruction: str, input: str = None):
-        if self.prompter_ is None:
-            if input is not None:
-                raise RuntimeWarning("Input must format with prompter.")
-            return instruction
-        else:
-            return self.prompter_(instruction=instruction, input=input)
+        return self.prompter_.generate_prompt(instruction=instruction, input=input)
 
 
 def sample_top_p(probs, p):
