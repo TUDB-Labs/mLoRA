@@ -21,9 +21,9 @@ import json
 import torch
 import mlora
 import random
-import datetime
+import logging
 import argparse
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Union
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
@@ -55,37 +55,10 @@ parser.add_argument('--dir', type=str, default=".",
                     help='Path to read or save checkpoints')
 parser.add_argument('--log', type=bool, default=True,
                     help='Turn on or off log, default is true')
+parser.add_argument('--log_file', type=str,
+                    help="Save log to specific file.")
 
 args = parser.parse_args()
-
-if args.inference:
-    args.load_adapter = True
-
-
-def log(msg: str):
-    if args.log:
-        print('[%s] m-LoRA: %s' %
-              (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg))
-
-
-if torch.cuda.is_available():
-    log('NVIDIA CUDA initialized successfully.')
-    log('Total %i GPU(s) detected.' % torch.cuda.device_count())
-else:
-    print('m-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
-    exit(-1)
-
-
-if args.base_model is None:
-    print('error: Argument --base_model are required.')
-    parser.print_help()
-    exit(-1)
-
-
-if args.config is None:
-    print('error: Argument --config are required.')
-    parser.print_help()
-    exit(-1)
 
 
 # Functions
@@ -97,20 +70,18 @@ def setup_seed(seed):
 
 def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     if args.model_type == "llama":
-        log("Initializing LLaMA model.")
+        logging.info("Initializing LLaMA model.")
         model = mlora.LlamaModel.from_pretrained(
             path=args.base_model,
             device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            verbose=args.log
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
         )
     elif args.model_type == "chatglm":
-        log("Initializing ChatGLM model.")
+        logging.info("Initializing ChatGLM model.")
         model = mlora.ChatGLMModel.from_pretrained(
             path=args.base_model,
             device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            verbose=args.log
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
         )
     else:
         raise f"unkown model type {args.model_type}"
@@ -120,7 +91,9 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
     return tokenizer, model
 
 
-def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel) -> Dict[str, any]:
+def init_adapter_config(config: Dict[str, any],
+                        llm_model: mlora.LLMModel,
+                        ) -> List[Union[mlora.GenerateConfig, mlora.TrainConfig]]:
     if args.disable_adapter:
         config_class = mlora.LoraConfig(
             adapter_name_="m-LoRA", device_=args.device)
@@ -145,7 +118,7 @@ def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel) -> Di
         if args.load_adapter:
             adapter_file_path = args.dir + os.sep + \
                 config_class.adapter_name_ + os.sep + "adapter_model.bin"
-            log(f"Load adapter: {adapter_file_path}")
+            logging.info(f"Load adapter: {adapter_file_path}")
             lora_weight = torch.load(
                 adapter_file_path, map_location=args.device)
 
@@ -192,6 +165,36 @@ def inference(llm_model: mlora.LLMModel,
 
 # Main Function
 if __name__ == "__main__":
+    if args.inference:
+        args.load_adapter = True
+
+    log_handlers = [logging.StreamHandler()]
+    if args.log_file is not None:
+        log_handlers.append(logging.FileHandler(args.log_file))
+
+    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
+                        level=logging.INFO if args.log else logging.WARNING,
+                        handlers=log_handlers,
+                        force=True)
+
+    if args.base_model is None:
+        logging.error('error: Argument --base_model are required.')
+        parser.print_help()
+        exit(-1)
+
+    if args.config is None:
+        logging.error('error: Argument --config are required.')
+        parser.print_help()
+        exit(-1)
+
+    if torch.cuda.is_available():
+        logging.info('NVIDIA CUDA initialized successfully.')
+        logging.info('Total %i GPU(s) detected.' % torch.cuda.device_count())
+    else:
+        logging.error(
+            'm-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
+        exit(-1)
+
     setup_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
@@ -205,5 +208,5 @@ if __name__ == "__main__":
     if args.inference:
         inference(model, tokenizer, adapters)
     else:
-        mlora.train(mlora.Dispatcher(config, tokenizer), model, adapters,
-                    args.device, args.dir, config["save_step"], args.log)
+        mlora.train(mlora.Dispatcher(config, tokenizer), model,
+                    adapters, args.device, args.dir, config["save_step"])

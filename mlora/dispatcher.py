@@ -6,6 +6,7 @@ from mlora import LoraBatchDataConfig
 import sys
 import math
 import random
+import logging
 import datasets
 from dataclasses import dataclass
 from typing import Dict, List, Union
@@ -120,8 +121,8 @@ class TrainTask():
 
             ret.append(TrainData(prompt_=text, tokens_=tokens))
             if idx % 10000 == 0:
-                print(
-                    f"encode text data {self.adapter_name_}: {idx}/{len(lora_text_data)}")
+                logging.info(
+                    f"Encode text data {self.adapter_name_}: {idx}/{len(lora_text_data)}")
 
         if is_train_data and self.group_by_length_:
             ret.sort(key=lambda x: len(x.tokens_), reverse=True)
@@ -179,8 +180,8 @@ class TrainTask():
 
         ret_data = self.train_token_data_[start_idx:end_idx]
 
-        print(f"{self.adapter_name_} train data:")
-        print(
+        logging.info(f"{self.adapter_name_} train data:")
+        logging.info(
             f"    epoch: {self.epoch_cnt_}/{self.total_epoch_num_} \
             step in epoch: {start_idx}/{len(self.train_token_data_)}")
 

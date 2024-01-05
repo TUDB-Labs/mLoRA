@@ -5,6 +5,7 @@ from mlora.model import LLMModel
 
 from dataclasses import dataclass
 from typing import Dict, List
+import logging
 import torch
 
 
@@ -55,8 +56,7 @@ def train(dispatcher: Dispatcher,
           configs: List[TrainConfig],
           device="cuda:0",
           save_dir: str = ".",
-          save_step: int = 2000,
-          verbose: bool = False):
+          save_step: int = 2000) -> None:
     device = torch.device(device)
     config_dict = {}
     for config in configs:
@@ -98,13 +98,13 @@ def train(dispatcher: Dispatcher,
                 router_loss = train_config.router_loss_fn_(
                     router_outputs[idx]) / train_config.accumulation_step_
                 loss += router_loss
-                if verbose:
-                    print(f"    adapter: {lora_config.adapter_name_}" +
-                          f" loss: {loss}")
-                    print(f"{' '*(6 + len(lora_config.adapter_name_))}" +
-                          f" router loss: {router_loss}")
-            elif verbose:
-                print(f"    adapter: {lora_config.adapter_name_} loss: {loss}")
+                logging.info(f"    adapter: {lora_config.adapter_name_}" +
+                             f" loss: {loss}")
+                logging.info(f"{' '*(6 + len(lora_config.adapter_name_))}" +
+                             f" router loss: {router_loss}")
+            else:
+                logging.info(
+                    f"    adapter: {lora_config.adapter_name_} loss: {loss}")
             if total_loss is None:
                 total_loss = loss
             else:

@@ -15,6 +15,7 @@ from typing import List, Dict, Tuple, Optional
 from huggingface_hub import snapshot_download
 from transformers import LlamaForCausalLM
 from collections import OrderedDict
+import logging
 import json
 import math
 import os
@@ -301,11 +302,9 @@ class LlamaModel(LLMModel):
                         bf16: bool = True,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
-                        verbose: bool = False,
                         ) -> LLMModel:
         if bits in [4, 8]:
-            if verbose:
-                print(f"Loading model with quantization, bits = {bits}.")
+            logging.info(f"Loading model with quantization, bits = {bits}.")
             from transformers import BitsAndBytesConfig
             compute_dtype = (torch.float16 if fp16 else (
                 torch.bfloat16 if bf16 else torch.float32))

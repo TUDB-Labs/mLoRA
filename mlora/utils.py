@@ -1,5 +1,6 @@
-import torch
 import json
+import torch
+import logging
 import os.path as osp
 from typing import Union
 from transformers import LlamaForCausalLM
@@ -14,16 +15,13 @@ def convert_hf_to_pth(source: str, dest: str):
 
 # manage templates and prompt building.
 class Prompter:
-    def __init__(self, file_name: str, verbose: bool = False):
-        self._verbose = verbose
+    def __init__(self, file_name: str):
         if not osp.exists(file_name):
             raise ValueError(f"Can't read {file_name}")
         with open(file_name) as fp:
             self.template = json.load(fp)
-        if self._verbose:
-            print(
-                f"Using prompt template {file_name}: {self.template['description']}"
-            )
+        logging.info(
+            f"Using prompt template {file_name}: {self.template['description']}")
 
     def generate_prompt(
         self,
@@ -43,8 +41,7 @@ class Prompter:
             )
         if label:
             res = f"{res}{label}"
-        if self._verbose:
-            print(res)
+        logging.debug(res)
         return res
 
     def get_response(self, output: str) -> str:
