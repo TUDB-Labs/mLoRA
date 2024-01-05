@@ -60,22 +60,18 @@ class Iteratorize:
         self.stop_now = True
 
 
-def main(
-    load_8bit: bool = False,
-    base_model: str = "",
-    lora_weights: str = "",
-    target_device: str = "cuda:0",
-    prompt_template: str = None,
-    server_name: str = "0.0.0.0",
-    share_gradio: bool = False,
-):
-    assert (
-        base_model
-    ), "Please specify a --base_model"
+def main(base_model: str,
+         template: str = None,
+         lora_weights: str = "",
+         load_8bit: bool = False,
+         load_4bit: bool = False,
+         device: str = "cuda:0",
+         server_name: str = "0.0.0.0",
+         share_gradio: bool = False):
 
-    model = mlora.LlamaModel.from_pretrained(
-        base_model, device=target_device, bits=8 if load_8bit else None)
-    tokenizer = mlora.Tokenizer(base_model, device=target_device)
+    model = mlora.LlamaModel.from_pretrained(base_model, device=device,
+                                             bits=(8 if load_8bit else (4 if load_4bit else None)))
+    tokenizer = mlora.Tokenizer(base_model, device=device)
 
     if lora_weights:
         model.load_adapter_weight(lora_weights, "m-LoRA")
@@ -83,7 +79,7 @@ def main(
     else:
         generation_config = mlora.GenerateConfig(adapter_name_="m-LoRA")
 
-    generation_config.prompt_template_ = prompt_template
+    generation_config.prompt_template_ = template
 
     def evaluate(
         instruction,
@@ -105,7 +101,8 @@ def main(
             "configs": [generation_config],
             "temperature": temperature,
             "top_p": top_p,
-            "max_gen_len": max_new_tokens
+            "max_gen_len": max_new_tokens,
+            "device": device
         }
 
         if stream_output:
