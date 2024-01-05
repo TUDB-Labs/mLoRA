@@ -33,8 +33,7 @@ else:
     generate_paramas = mlora.GenerateConfig(adapter_name_=adapter_name)
 
 generate_paramas.prompt_template_ = args.template
-generate_paramas.prompts_ = [
-    generate_paramas.generate_prompt(args.instruction, args.input)]
+generate_paramas.prompts_ = [(args.instruction, args.input)]
 
 output = mlora.generate(model, tokenizer, [generate_paramas],
                         temperature=0.5, top_p=0.9, max_gen_len=128,

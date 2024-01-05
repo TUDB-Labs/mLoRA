@@ -3,8 +3,8 @@ from mlora.tokenizer import Tokenizer, Tokens
 from mlora.model import LLMModel, KVCache
 from mlora.utils import Prompter
 
+from typing import List, Union, Tuple
 from dataclasses import dataclass
-from typing import List
 import logging
 import torch
 
@@ -12,7 +12,7 @@ import torch
 @dataclass
 class GenerateConfig:
     adapter_name_: str = None
-    prompts_: List[str] = None
+    prompts_: List[Union[str, Tuple[str, str]]] = None
     prompt_template_: str = None
     # Do not set these manually
     batch_start_idx_: int = -1
@@ -21,16 +21,23 @@ class GenerateConfig:
 
     # Set prompt_template_ to enable the prompter
     def generate_prompt(self, instruction: str, input: str = None) -> str:
-        if input is None and self.prompt_template_ is None:
+        if self.prompt_template_ is None:
+            if input is not None:
+                logging.warn("Drop input when prompt template is not set.")
             return instruction
 
         if self.prompter_ is None:
-            if self.prompt_template_ is None:
-                logging.warn("Drop input when prompt template is not set.")
-                return instruction
             self.prompter_ = Prompter(self.prompt_template_)
 
         return self.prompter_.generate_prompt(instruction=instruction, input=input)
+
+    def get_prompts(self) -> List[str]:
+        prompts = []
+        for prompt in self.prompts_:
+            args = prompt if isinstance(prompt, Tuple) else (prompt, None)
+            prompts.append(self.generate_prompt(*args))
+
+        return prompts
 
     def get_response(self, output: str) -> str:
         if self.prompter_ is None:
@@ -87,7 +94,7 @@ def generate(llm_model: LLMModel,
     batch_data_config: List[LoraBatchDataConfig] = []
     for config in configs:
         tokens = [tokenizer.encode(prompt, True, False)
-                  for prompt in config.generate_prompt(instruction=config.prompts_)]
+                  for prompt in config.get_prompts()]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
         batch_data_config.append(LoraBatchDataConfig(

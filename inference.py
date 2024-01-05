@@ -97,8 +97,7 @@ def main(
         if len(input) == 0:
             input = None
 
-        generation_config.prompts_ = [
-            generation_config.generate_prompt(instruction, input)]
+        generation_config.prompts_ = [(instruction, input)]
 
         generate_params = {
             "llm_model": model,
