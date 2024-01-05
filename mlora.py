@@ -95,10 +95,8 @@ def init_adapter_config(config: Dict[str, any],
                         llm_model: mlora.LLMModel,
                         ) -> List[Union[mlora.GenerateConfig, mlora.TrainConfig]]:
     if args.disable_adapter and args.inference:
-        config_class = mlora.LoraConfig(
-            adapter_name_="m-LoRA", device_=args.device)
         config_class = mlora.GenerateConfig().init(
-            config_class)
+            mlora.LoraConfig(adapter_name_="m-LoRA", device_=args.device))
         if args.prompt_template:
             config_class.prompt_template_ = "template/template_demo.json"
         return {"m-LoRA": config_class}
