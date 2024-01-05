@@ -246,10 +246,8 @@ class LlamaModel(LLMModel):
         self.n_heads_ = args.n_heads_
         self.vocab_size_ = args.vocab_size_
         self.pad_token_id_ = args.pad_token_id_
+        self.max_seq_len_ = args.max_seq_len_
         self.dim_ = args.dim_
-
-        # need to set
-        self.eos_token_id_ = -1
 
         # adapter type
         self.adapter_configs_: Dict[str, LoraConfig] = {}
@@ -342,7 +340,10 @@ class LlamaModel(LLMModel):
         llama_args.vocab_size_ = llama_model.config.vocab_size
         llama_args.max_seq_len_ = 4096 if not hasattr(
             llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
-        llama_args.pad_token_id_ = -1
+        llama_args.pad_token_id_ = llama_model.config.pad_token_id
+        if llama_args.pad_token_id_ is None:
+            llama_args.pad_token_id_ = -1
+
         llama_args.device = device
 
         model = LlamaModel(llama_args)

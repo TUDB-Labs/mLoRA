@@ -9,7 +9,6 @@ prompts = ["Tell me about China."]
 model = mlora.LlamaModel.from_pretrained(
     model_name, device=target_device, bits=8)
 tokenizer = mlora.Tokenizer(model_name, device=target_device)
-model.pad_token_id_ = tokenizer.pad_id_
 
 adapter_name = model.load_adapter_weight(lora_name)
 

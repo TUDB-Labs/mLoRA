@@ -33,6 +33,8 @@ parser.add_argument('--model_type', type=str, default="llama",
                     help='The model type, support: llama, chatglm')
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
+parser.add_argument('--prompt_template', type=bool, default=True,
+                    help="Load prompt template when inference")
 parser.add_argument('--load_adapter', action="store_true",
                     help="Load adapter from file instead of init randomly")
 parser.add_argument('--disable_adapter', action="store_true",
@@ -115,18 +117,22 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
 
     tokenizer = mlora.Tokenizer(args.base_model, device=args.device)
 
-    model.pad_token_id_ = tokenizer.pad_id_
-
     return tokenizer, model
 
 
-def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel, inference: bool = True) -> Dict[str, any]:
+def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel) -> Dict[str, any]:
     if args.disable_adapter:
-        return {"DEFAULT": mlora.LoraConfig(
-            adapter_name_="DEFAULT",
-            prompt_template_="template/template_demo.json",
-            device_=args.device,
-        )}
+        config_class = mlora.LoraConfig(
+            adapter_name_="m-LoRA", device_=args.device)
+        if args.inference:
+            config_class = mlora.GenerateConfig().init(
+                config_class)
+            if args.prompt_template:
+                config_class.prompt_template_ = "template/template_demo.json"
+        else:
+            config_class = mlora.TrainConfig().init(
+                lora_config, config_class)
+        return {"m-LoRA": config_class}
 
     config_list = []
 
@@ -134,7 +140,6 @@ def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel, infer
         lora_weight = None
         config_class = mlora.lora_config_factory(lora_config)
         config_class.adapter_name_ = lora_config["name"]
-        config_class.prompt_template_ = lora_config["prompt"]
         config_class.device_ = args.device
 
         if args.load_adapter:
@@ -145,12 +150,15 @@ def init_adapter_config(config: Dict[str, any], llm_model: mlora.LLMModel, infer
                 adapter_file_path, map_location=args.device)
 
         llm_model.init_lora_layer_weight(config_class, lora_weight)
-        if inference:
-            config_list.append(mlora.GenerateConfig().init(
-                config_class))
+        if args.inference:
+            config_class = mlora.GenerateConfig().init(
+                config_class)
+            if args.prompt_template:
+                config_class.prompt_template_ = lora_config["prompt"]
         else:
-            config_list.append(mlora.TrainConfig().init(
-                lora_config, config_class))
+            config_class = mlora.TrainConfig().init(
+                lora_config, config_class)
+        config_list.append(config_class)
 
     return config_list
 
@@ -163,8 +171,7 @@ def inference_callback(cur_pos, outputs):
 
 def inference(llm_model: mlora.LLMModel,
               tokenizer: mlora.Tokenizer,
-              adapters: dict,
-              verbose=False):
+              adapters: dict):
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
@@ -174,7 +181,7 @@ def inference(llm_model: mlora.LLMModel,
         outputs = mlora.generate(llm_model, tokenizer, adapters,
                                  temperature=0.2,
                                  device=args.device,
-                                 stream_callback=inference_callback if verbose else None)
+                                 stream_callback=inference_callback if args.log else None)
         print(f"\n{'='*10}\n")
         print(f"PROMPT: {input_raw}")
         for adapter_name, output in outputs.items():
@@ -191,12 +198,12 @@ if __name__ == "__main__":
         config = json.load(fp)
 
     tokenizer, model = load_base_model(config)
-    adapters = init_adapter_config(config, model, args.inference)
+    adapters = init_adapter_config(config, model)
 
     torch.cuda.empty_cache()
 
     if args.inference:
         inference(model, tokenizer, adapters, args.log)
     else:
-        mlora.train(mlora.Dispatcher(config, tokenizer), model,
-                    adapters, args.device, args.dir, config["save_step"], args.log)
+        mlora.train(mlora.Dispatcher(config, tokenizer), model, adapters,
+                    args.device, args.dir, config["save_step"], args.log)

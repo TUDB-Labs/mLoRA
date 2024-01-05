@@ -90,7 +90,8 @@ def generate(llm_model: LLMModel,
     batch_size = len(raw_prompts)
     min_tokens_len = min(len(t) for t in raw_prompts)
     max_tokens_len = max(len(t) for t in raw_prompts)
-    total_len = max_gen_len + max_tokens_len
+    assert max_tokens_len <= llm_model.max_seq_len_
+    total_len = min(llm_model.max_seq_len, max_gen_len + max_tokens_len)
 
     tokens = torch.full((batch_size, total_len),
                         tokenizer.pad_id_, dtype=torch.int64, device=device)
