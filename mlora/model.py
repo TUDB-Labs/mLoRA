@@ -153,7 +153,7 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def get_generate_paramas(self, prompts: List[str]) -> List:
+    def get_generate_paramas(self) -> Dict[str, any]:
         pass
 
     @abstractclassmethod
