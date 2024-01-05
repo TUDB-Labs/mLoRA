@@ -171,7 +171,7 @@ class SwitchRouterLoss(torch.nn.Module):
 
 
 class SwitchSparseMoe(torch.nn.Module):
-    def __init__(self,  in_features: int, config: MixConfig) -> None:
+    def __init__(self, in_features: int, config: MixConfig) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name_

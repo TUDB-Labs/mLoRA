@@ -90,9 +90,10 @@ class Transformer(torch.nn.Module):
 
         if isinstance(config, MixConfig):
             # Inject LoRA configs into FFN layer
+            gate_layer_name = f"mixlora.layers.{self.layer_id_}.gate.weight"
             self.ffn_.init_moe_weight(in_features=self.n_heads_ * self.head_dim_,
                                       config=config,
-                                      gate=weight if weight is None else weight[f"mixlora.layers.{self.layer_id_}.gate.weight"])
+                                      gate=weight if weight is None else weight[gate_layer_name])
 
             moe_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
             init_moe = True

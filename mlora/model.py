@@ -37,7 +37,7 @@ def precompute_mask_for_inference(input: MultiLoraBatchData,
                                   dtype: torch.dtype = torch.float32) -> torch.Tensor:
     mask = torch.full((1, 1, input.batch_seq_len_,
                       input.batch_seq_len_), float("-inf"), device=device)
-    mask = mask.to(torch.float32).triu(diagonal=seq_pos+1)
+    mask = mask.to(torch.float32).triu(diagonal=(seq_pos + 1))
     return mask.to(dtype)
 
 

@@ -94,17 +94,13 @@ def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMM
 def init_adapter_config(config: Dict[str, any],
                         llm_model: mlora.LLMModel,
                         ) -> List[Union[mlora.GenerateConfig, mlora.TrainConfig]]:
-    if args.disable_adapter:
+    if args.disable_adapter and args.inference:
         config_class = mlora.LoraConfig(
             adapter_name_="m-LoRA", device_=args.device)
-        if args.inference:
-            config_class = mlora.GenerateConfig().init(
-                config_class)
-            if args.prompt_template:
-                config_class.prompt_template_ = "template/template_demo.json"
-        else:
-            config_class = mlora.TrainConfig().init(
-                lora_config, config_class)
+        config_class = mlora.GenerateConfig().init(
+            config_class)
+        if args.prompt_template:
+            config_class.prompt_template_ = "template/template_demo.json"
         return {"m-LoRA": config_class}
 
     config_list = []

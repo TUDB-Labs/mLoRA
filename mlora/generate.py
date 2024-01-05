@@ -27,7 +27,7 @@ class GenerateConfig:
     def generate_prompt(self, instruction: str, input: str = None):
         if self.prompter_ is None:
             if input is not None:
-                raise RuntimeWarning(f"Input must format with prompter.")
+                raise RuntimeWarning("Input must format with prompter.")
             return instruction
         else:
             return self.prompter_(instruction=instruction, input=input)
