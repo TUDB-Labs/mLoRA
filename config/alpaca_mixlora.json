@@ -61,7 +61,6 @@
         },
         {
             "name": "lora_2",
-            "output": "lora_2",
             "optim": "adamw",
             "lr": 1e-5,
             "batch_size": 16,
