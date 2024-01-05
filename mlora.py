@@ -203,7 +203,7 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     if args.inference:
-        inference(model, tokenizer, adapters, args.log)
+        inference(model, tokenizer, adapters)
     else:
         mlora.train(mlora.Dispatcher(config, tokenizer), model, adapters,
                     args.device, args.dir, config["save_step"], args.log)
