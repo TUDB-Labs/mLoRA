@@ -1,6 +1,6 @@
 from mlora.modelargs import MultiLoraBatchData, LoraConfig, MixConfig
 from mlora.dispatcher import Dispatcher
-from mlora.MixLoRA import router_loss_factory
+from mlora.mix_lora import router_loss_factory
 from mlora.model import LLMModel
 
 from typing import Dict, List
@@ -59,13 +59,14 @@ def train(dispatcher: Dispatcher,
     step_cnt = 0
     while not dispatcher.check_task_done():
         input: MultiLoraBatchData = dispatcher.get_train_data()
+        input.output_router_logits_ = output_router_logits
+
         for config in configs:
             config.optimizer_.zero_grad()
 
         step_cnt += 1
 
-        output, router_outputs = llm_model.forward(
-            input, output_router_logits=output_router_logits)
+        output, router_outputs = llm_model.forward(input)
 
         labels = torch.tensor(input.batch_tokens_,
                               dtype=torch.long).to(device)

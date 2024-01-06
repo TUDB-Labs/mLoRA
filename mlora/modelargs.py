@@ -1,5 +1,8 @@
+from typing import List, Dict, Tuple
 from dataclasses import dataclass
-from typing import List
+
+import torch
+
 
 Tokens = List[int]
 
@@ -34,6 +37,27 @@ class LoraBatchDataConfig:
     batch_end_idx_: int = -1
 
 
+class KVCache:
+    def __init__(self) -> None:
+        self.cache_k: List[torch.Tensor] = []
+        self.cache_v: List[torch.Tensor] = []
+        self.seq_pos: int = 0
+
+    def update(self, xk: torch.Tensor, xv: torch.Tensor, layer_idx: int,
+               bsz: int, seq_len: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        if len(self.cache_k) <= layer_idx:
+            self.cache_k.append(xk)
+            self.cache_v.append(xv)
+        else:
+            self.cache_k[layer_idx][:bsz,
+                                    self.seq_pos: self.seq_pos + seq_len] = xk
+            self.cache_v[layer_idx][:bsz,
+                                    self.seq_pos: self.seq_pos + seq_len] = xv
+
+        return self.cache_k[layer_idx][:bsz, :self.seq_pos + seq_len], \
+            self.cache_v[layer_idx][:bsz, :self.seq_pos + seq_len]
+
+
 @dataclass
 class MultiLoraBatchData:
     prompts_: List[str] = None
@@ -48,6 +72,10 @@ class MultiLoraBatchData:
     batch_tokens_: List[Tokens] = None
     tokens_len_without_pad_: Tokens = None
 
+    router_logits_: List[List] = None
+    kv_cache_: KVCache = None
+
+    output_router_logits_: bool = False
     inference_model_: bool = False
 
 
@@ -58,20 +86,26 @@ class LoraConfig:
     lora_r_: int = None
     lora_alpha_: int = None
     lora_dropout_: float = None
-    target_modules_: dict = None
+    target_modules_: Dict[str, bool] = None
 
-    def init(self, config: dict) -> "LoraConfig":
+    def from_config(self, config: Dict[str, any]) -> "LoraConfig":
         self.lora_r_ = config["r"]
         self.lora_alpha_ = config["lora_alpha"]
         self.lora_dropout_ = config["lora_dropout"]
         self.target_modules_ = {
+            # LLaMA names
             "q_proj": False,
             "k_proj": False,
             "v_proj": False,
             "o_proj": False,
             "w1_proj": False,
             "w2_proj": False,
-            "w3_proj": False
+            "w3_proj": False,
+            # ChatGLM names
+            "qkv": False,
+            "dense": False,
+            "mlp_in": False,
+            "mlp_out": False
         }
         for target in config["target_modules"]:
             if target in self.target_modules_:
@@ -79,7 +113,7 @@ class LoraConfig:
 
         return self
 
-    def export(self) -> dict:
+    def export(self) -> Dict[str, any]:
         config = {}
         config["bias"] = "none"
         config["peft_type"] = "LORA"
@@ -111,8 +145,8 @@ class MixConfig(LoraConfig):
     jitter_noise_: float = None
     dropout_rate_: float = None
 
-    def init(self, config: dict) -> "MixConfig":
-        super().init(config)
+    def from_config(self, config: Dict[str, any]) -> "MixConfig":
+        super().from_config(config)
         self.router_aux_loss_coef_ = config.get(
             "router_aux_loss_coef", 0.001)  # for training
         self.routing_strategy_ = config["routing_strategy"]
@@ -132,7 +166,7 @@ class MixConfig(LoraConfig):
 
         return self
 
-    def export(self) -> dict:
+    def export(self) -> Dict[str, any]:
         config = super().export()
         config["peft_type"] = "MIXLORA"
         config["routing_strategy"] = self.routing_strategy_
@@ -148,8 +182,8 @@ class MixConfig(LoraConfig):
         return config
 
 
-def lora_config_factory(config: dict) -> LoraConfig:
+def lora_config_factory(config: Dict[str, any]) -> LoraConfig:
     if ("peft_type" in config and config["peft_type"] == "MIXLORA") or "routing_strategy" in config:
-        return MixConfig().init(config)
+        return MixConfig().from_config(config)
     else:
-        return LoraConfig().init(config)
+        return LoraConfig().from_config(config)

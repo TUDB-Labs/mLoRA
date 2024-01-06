@@ -110,27 +110,6 @@ class RMSNorm(torch.nn.Module):
         return (self.weight_ * data).to(input_dtype)
 
 
-class KVCache:
-    def __init__(self) -> None:
-        self.cache_k: List[torch.Tensor] = []
-        self.cache_v: List[torch.Tensor] = []
-        self.seq_pos: int = 0
-
-    def update(self, xk: torch.Tensor, xv: torch.Tensor, layer_idx: int,
-               bsz: int, seq_len: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        if len(self.cache_k) <= layer_idx:
-            self.cache_k.append(xk)
-            self.cache_v.append(xv)
-        else:
-            self.cache_k[layer_idx][:bsz,
-                                    self.seq_pos: self.seq_pos + seq_len] = xk
-            self.cache_v[layer_idx][:bsz,
-                                    self.seq_pos: self.seq_pos + seq_len] = xv
-
-        return self.cache_k[layer_idx][:bsz, :self.seq_pos + seq_len], \
-            self.cache_v[layer_idx][:bsz, :self.seq_pos + seq_len]
-
-
 class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
@@ -161,7 +140,5 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData,
-                output_router_logits: bool = False,
-                kv_cache: KVCache = None) -> torch.Tensor:
+    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         pass

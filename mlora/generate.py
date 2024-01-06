@@ -1,7 +1,7 @@
-from mlora.modelargs import LoraBatchDataConfig, MultiLoraBatchData
+from mlora.modelargs import KVCache, LoraBatchDataConfig, MultiLoraBatchData
 from mlora.tokenizer import Tokenizer, Tokens
-from mlora.model import LLMModel, KVCache
-from mlora.utils import Prompter
+from mlora.prompter import Prompter
+from mlora.model import LLMModel
 
 from typing import List, Union, Tuple
 from dataclasses import dataclass
@@ -121,9 +121,10 @@ def generate(llm_model: LLMModel,
             lora_batch_data_config_=batch_data_config,
             batch_seq_len_=(cur_pos - prev_pos),
             batch_tokens_=tokens[:, prev_pos:cur_pos],
+            kv_cache_=kv_cache,
             inference_model_=True)
         kv_cache.seq_pos = prev_pos
-        logits, _ = llm_model.forward(input=input_data, kv_cache=kv_cache)
+        logits, _ = llm_model.forward(input_data)
         if temperature > 0:
             probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
             next_token = sample_top_p(probs, top_p)

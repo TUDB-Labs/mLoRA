@@ -121,7 +121,7 @@ Firstly, you should clone this repository and install dependencies:
 git clone https://github.com/TUDB-Labs/multi-lora-fine-tune
 cd multi-lora-fine-tune
 # Optional but recommended
-conda create -n mlora_env python=3.9
+conda create -n mlora_env python=3.10
 conda activate mlora_env
 # Install requirements
 pip install -r requirements.txt
@@ -151,7 +151,7 @@ You can run finetune through webui by following the instructions in the ‘webui
 You can also install m-LoRA into your environment:
 ```bash
 # Optional but recommended
-conda create -n mlora_env python=3.9
+conda create -n mlora_env python=3.10
 conda activate mlora_env
 # Install requirements
 pip install mlora

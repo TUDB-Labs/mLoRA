@@ -1,10 +1,11 @@
 from mlora.modelargs import LoraConfig, MixConfig, LLMModelArgs, MultiLoraBatchData, lora_config_factory
 from mlora.checkpoint import CheckpointRecomputeFunction
-from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask, precompute_mask_for_inference
-from mlora.model import KVCache, LLMModel, RMSNorm
+from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle
+from mlora.model import precompute_mask, precompute_mask_for_inference
+from mlora.model import LLMModel, RMSNorm
 from mlora.generate import GenerateConfig
-from mlora.FeedForward import FeedForward
-from mlora.LoraLiner import Linear
+from mlora.feed_forward import FeedForward
+from mlora.lora_liner import Linear
 
 import torch
 import torch.nn.functional as F
@@ -143,9 +144,7 @@ class Transformer(torch.nn.Module):
                 data: torch.Tensor,
                 mask: torch.Tensor,
                 rope_angle: Tuple[torch.Tensor, torch.Tensor],
-                input_args: MultiLoraBatchData,
-                router_logits: Tuple[List] = None,
-                kv_cache: KVCache = None):
+                input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
         attention_norm_data = self.attention_norm_.forward(data)
@@ -163,8 +162,8 @@ class Transformer(torch.nn.Module):
         xq, xk = apply_rotary_emb(xq, xk, rope_angle)
 
         # apply kv cache
-        if kv_cache is not None:
-            xk, xv = kv_cache.update(
+        if input_args.kv_cache_ is not None:
+            xk, xv = input_args.kv_cache_.update(
                 xk, xv, self.layer_id_, batch_size, max_seq_len)
 
         # for llama2 need to repeat the heads
@@ -173,7 +172,7 @@ class Transformer(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        if kv_cache is not None:
+        if input_args.kv_cache_ is not None:
             xq = xq.transpose(1, 2)
             xk = xk.transpose(1, 2)
             xv = xv.transpose(1, 2)
@@ -196,7 +195,7 @@ class Transformer(torch.nn.Module):
         data = data + self.wo_.forward(attention_score, input_args)
 
         # feed forward fully connected
-        data = data + self.ffn_.forward(data, router_logits, input_args)
+        data = data + self.ffn_.forward(data, input_args)
 
         return data
 
@@ -251,13 +250,11 @@ class LlamaModel(LLMModel):
         self.max_seq_len_ = args.max_seq_len_
         self.dim_ = args.dim_
 
-        # adapter type
+        # adapter configs
         self.adapter_configs_: Dict[str, LoraConfig] = {}
 
     # train model or inference model: output is probs
-    def forward(self, input: MultiLoraBatchData,
-                output_router_logits: bool = False,
-                kv_cache: KVCache = None) -> torch.Tensor:
+    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         if isinstance(input.batch_tokens_, torch.Tensor):
             tokens = input.batch_tokens_.to(self.device_)
         else:
@@ -267,29 +264,27 @@ class LlamaModel(LLMModel):
         seq_module = self.sequential_module()
 
         if input.inference_model_:
-            assert kv_cache is not None
+            assert input.kv_cache_ is not None
             if input.batch_seq_len_ > 1:
                 # prepare mask
                 mask = precompute_mask_for_inference(
-                    input, kv_cache.seq_pos, self.device_)
+                    input, input.kv_cache_.seq_pos, self.device_)
             else:
                 mask = None
-            data = (tokens, mask, self.rope_angle_,
-                    input, None, kv_cache, False)
-            router_logits = None
+            data = (tokens, mask, self.rope_angle_, input, False)
         else:
             # prepare mask
             mask = precompute_mask(input, self.n_heads_, self.device_)
             # store routing data when training
-            router_logits: Tuple[List] = tuple([] for _ in range(
-                len(input.lora_batch_data_config_))) if output_router_logits else None
-            data = (tokens, mask, self.rope_angle_,
-                    input, router_logits, None, True)
+            if input.output_router_logits_:
+                input.router_logits_: Tuple[List] = tuple([] for _ in range(
+                    len(input.lora_batch_data_config_)))
+            data = (tokens, mask, self.rope_angle_, input, True)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
 
-        return data[0], router_logits
+        return data[0], input.router_logits_
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         self.adapter_configs_[config.adapter_name_] = config
@@ -424,7 +419,7 @@ class LlamaModel(LLMModel):
                 adapter_name_=adapter_name)
         return generate_paramas
 
-    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+    def get_lora_weight_dict(self, lora_name: str) -> Dict[str, torch.Tensor]:
         # return the lora weight and target_module's name
         lora_weight_dict = {}
         for idx, transformer_layer in enumerate(self.layers_):

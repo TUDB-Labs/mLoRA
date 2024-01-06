@@ -1,10 +1,10 @@
 from mlora.modelargs import MixConfig, MultiLoraBatchData
-from mlora.LoraLiner import Linear
-from mlora.MixLoRA import moe_layer_factory
+from mlora.lora_liner import Linear
+from mlora.mix_lora import moe_layer_factory
 from mlora.model import RMSNorm
 
+from typing import Optional
 import torch
-from typing import Tuple, Optional
 
 
 class FeedForward(torch.nn.Module):
@@ -20,17 +20,18 @@ class FeedForward(torch.nn.Module):
         # device
         self.device_ = device
         # mix of experts
-        self.enable_moe_: bool = False
         self.moes_: torch.ModuleDict = {}
 
-    def init_moe_weight(self, in_features: int, config: MixConfig, gate: Optional[torch.Tensor] = None):
-        self.moes_[config.adapter_name_] = moe_layer_factory(
-            in_features, config)
-        if gate is not None:
-            with torch.no_grad():
-                self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
-        self.enable_moe_ = True
+    def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+        if len(self.moes_) == 0:
+            score_norm_data = self.norm_(data)
+            w1 = self.w1_.forward(score_norm_data, input_args)
+            w3 = self.w3_.forward(score_norm_data, input_args)
+            return self.w2_.forward(self.act_(w1) * w3, input_args)
+        else:
+            return self._mixlora_forward(data, input_args)
 
+    # LoRA
     def _lora_forward(self, lora_name, act_fn, norm_data):
         # Applying LoRA weights to FFN weights
         if lora_name in self.w1_.loras_:
@@ -52,17 +53,19 @@ class FeedForward(torch.nn.Module):
         else:
             return self.w2_.weight_.forward(act_result)
 
-    def _expert_forward(self, moe_name, act_fn, expert_idx, norm_data):
+    # MixLoRA
+    def init_moe_weight(self, in_features: int, config: MixConfig, gate: Optional[torch.Tensor] = None):
+        self.moes_[config.adapter_name_] = moe_layer_factory(
+            in_features, config)
+        if gate is not None:
+            with torch.no_grad():
+                self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
+
+    def _expert_forward_callback(self, moe_name, act_fn, expert_idx, norm_data):
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
         return self._lora_forward(lora_name, act_fn, norm_data)
 
-    def forward(self, data: torch.Tensor, router_outputs: Tuple, input_args: MultiLoraBatchData) -> torch.Tensor:
-        if not self.enable_moe_:
-            score_norm_data = self.norm_(data)
-            w1 = self.w1_.forward(score_norm_data, input_args)
-            w3 = self.w3_.forward(score_norm_data, input_args)
-            return self.w2_.forward(self.act_(w1) * w3, input_args)
-
+    def _mixlora_forward(self, data: torch.Tensor, input_args: MultiLoraBatchData):
         final_hidden_states = None
         for idx, lora_config in enumerate(input_args.lora_batch_data_config_):
             moe_name = lora_config.adapter_name_
@@ -71,10 +74,11 @@ class FeedForward(torch.nn.Module):
 
             if moe_name in self.moes_:
                 current_hidden_states, current_router_outputs = self.moes_[
-                    moe_name].forward(self.norm_, self._expert_forward, data[start_idx:end_idx])
+                    moe_name].forward(self.norm_, self._expert_forward_callback, data[start_idx:end_idx])
 
-                if router_outputs is not None and current_router_outputs is not None:
-                    router_outputs[idx].append(current_router_outputs)
+                if input_args.router_logits_ is not None and current_router_outputs is not None:
+                    input_args.router_logits_[idx].append(
+                        current_router_outputs)
             else:
                 score_norm_data = self.norm_(data[start_idx:end_idx])
                 current_hidden_states = self._lora_forward(
