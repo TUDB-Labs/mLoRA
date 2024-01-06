@@ -84,8 +84,8 @@ def main(base_model: str,
     def evaluate(
         instruction,
         input="",
-        temperature=0.6,
-        top_p=0.9,
+        temperature=0.1,
+        top_p=0.75,
         top_k=40,
         max_new_tokens=128,
         stream_output=False,
@@ -137,13 +137,13 @@ def main(base_model: str,
             ),
             gr.components.Textbox(lines=2, label="Input", placeholder="none"),
             gr.components.Slider(
-                minimum=0, maximum=1, value=0.2, label="Temperature"
+                minimum=0, maximum=1, value=1, label="Temperature"
             ),
             gr.components.Slider(
                 minimum=0, maximum=1, value=0.9, label="Top-p"
             ),
             gr.components.Slider(
-                minimum=0, maximum=100, value=40, label="Top-k"
+                minimum=0, maximum=100, step=1, value=40, label="Top-k"
             ),
             gr.components.Slider(
                 minimum=1, maximum=2000, step=1, value=128, label="Max tokens"
