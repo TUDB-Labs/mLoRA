@@ -3,6 +3,7 @@ import logging
 import os.path as osp
 from typing import Union
 
+
 # manage templates and prompt building.
 class Prompter:
     def __init__(self, file_name: str):
