@@ -31,7 +31,7 @@ class Prompter:
                 instruction=instruction
             )
         if label:
-            res = f"{res}{label}"
+            res = f"{res}{label}\n"
         logging.debug(res)
         return res
 

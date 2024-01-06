@@ -1,4 +1,5 @@
-from mlora.modelargs import LoraConfig, MixConfig, LLMModelArgs, MultiLoraBatchData, lora_config_factory
+from mlora.modelargs import LoraConfig, MixConfig, lora_config_factory
+from mlora.modelargs import KVCache, LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle
 from mlora.model import precompute_mask, precompute_mask_for_inference
@@ -245,6 +246,7 @@ class LlamaModel(LLMModel):
 
         self.device_ = args.device
         self.n_heads_ = args.n_heads_
+        self.n_kv_heads_ = args.n_kv_heads_
         self.vocab_size_ = args.vocab_size_
         self.pad_token_id_ = args.pad_token_id_
         self.max_seq_len_ = args.max_seq_len_
@@ -461,6 +463,10 @@ class LlamaModel(LLMModel):
                     ] = transformer_layer.ffn_.moes_[lora_name].gate_.weight
 
         return lora_weight_dict
+
+    def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
+        return KVCache(batch_size, max_seq_len, self.n_kv_heads_,
+                       self.dim_ // self.n_heads_, len(self.layers_), self.device_)
 
     def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()

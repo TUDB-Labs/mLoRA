@@ -39,21 +39,23 @@ class LoraBatchDataConfig:
 
 
 class KVCache:
-    def __init__(self) -> None:
+    def __init__(self, max_batch_size, max_seq_len, n_local_kv_heads, head_dim,
+                 n_layers, device="cuda:0") -> None:
         self.cache_k: List[torch.Tensor] = []
         self.cache_v: List[torch.Tensor] = []
+        for _ in range(n_layers):
+            self.cache_k.append(torch.zeros(
+                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device))
+            self.cache_v.append(torch.zeros(
+                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device))
         self.seq_pos: int = 0
 
     def update(self, xk: torch.Tensor, xv: torch.Tensor, layer_idx: int,
                bsz: int, seq_len: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        if len(self.cache_k) <= layer_idx:
-            self.cache_k.append(xk)
-            self.cache_v.append(xv)
-        else:
-            self.cache_k[layer_idx][:bsz,
-                                    self.seq_pos: self.seq_pos + seq_len] = xk
-            self.cache_v[layer_idx][:bsz,
-                                    self.seq_pos: self.seq_pos + seq_len] = xv
+        self.cache_k[layer_idx][:bsz,
+                                self.seq_pos: self.seq_pos + seq_len] = xk
+        self.cache_v[layer_idx][:bsz,
+                                self.seq_pos: self.seq_pos + seq_len] = xv
 
         return self.cache_k[layer_idx][:bsz, :self.seq_pos + seq_len], \
             self.cache_v[layer_idx][:bsz, :self.seq_pos + seq_len]
@@ -120,9 +122,16 @@ class LoraConfig:
             "mlp_in": False,
             "mlp_out": False
         }
-        for target in config["target_modules"]:
-            if target in self.target_modules_:
-                self.target_modules_[target] = True
+        if isinstance(config["target_modules"], List):
+            for target in config["target_modules"]:
+                if target in self.target_modules_:
+                    self.target_modules_[target] = True
+        elif isinstance(config["target_modules"], Dict):
+            for target, value in config["target_modules"].items():
+                if target in self.target_modules_:
+                    self.target_modules_[target] = value
+        else:
+            raise ValueError("broken config item: target_modules")
 
         return self
 

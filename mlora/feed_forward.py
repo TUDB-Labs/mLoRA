@@ -24,7 +24,7 @@ class FeedForward(torch.nn.Module):
 
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
         if len(self.moes_) == 0:
-            score_norm_data = self.norm_(data)
+            score_norm_data = self.norm_.forward(data)
             w1 = self.w1_.forward(score_norm_data, input_args)
             w3 = self.w3_.forward(score_norm_data, input_args)
             return self.w2_.forward(self.act_(w1) * w3, input_args)

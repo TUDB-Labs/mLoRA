@@ -1,4 +1,4 @@
-from mlora.modelargs import KVCache, LoraBatchDataConfig, MultiLoraBatchData
+from mlora.modelargs import LoraBatchDataConfig, MultiLoraBatchData
 from mlora.tokenizer import Tokenizer, Tokens
 from mlora.prompter import Prompter
 from mlora.model import LLMModel
@@ -46,15 +46,20 @@ class GenerateConfig:
             return self.prompter_.get_response(output)
 
 
-def sample_top_p(probs, p):
-    probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
-    probs_sum = torch.cumsum(probs_sort, dim=-1)
-    mask = probs_sum - probs_sort > p
-    probs_sort[mask] = 0.0
-    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
-    next_token = torch.multinomial(probs_sort, num_samples=1)
-    next_token = torch.gather(probs_idx, -1, next_token)
-    return next_token
+def sample_top_p(probs, p, filter_value=float("-inf"), min_tokens_to_keep=1):
+    sorted_logits, sorted_indices = torch.sort(probs, descending=False)
+    cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
+    sorted_indices_to_remove = cumulative_probs <= (1 - p)
+    sorted_indices_to_remove[..., -min_tokens_to_keep:] = 0
+    indices_to_remove = sorted_indices_to_remove.scatter(
+        1, sorted_indices, sorted_indices_to_remove)
+    return probs.masked_fill(indices_to_remove, filter_value)
+
+
+def sample_top_k(probs, k, filter_value=float("-inf")):
+    top_k = min(k, probs.size(-1))  # Safety check
+    indices_to_remove = probs < torch.topk(probs, top_k)[0][..., -1, None]
+    return probs.masked_fill(indices_to_remove, filter_value)
 
 
 def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
@@ -84,11 +89,19 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 def generate(llm_model: LLMModel,
              tokenizer: Tokenizer,
              configs: List[GenerateConfig],
-             temperature=0.6,
+             temperature=1,
              top_p=0.9,
+             top_k=50,
+             do_sample=True,
              max_gen_len=128,
              device="cuda:0",
              stream_callback=None):
+    sample_conditions = [temperature > 0,
+                         top_p > 0 and top_p <= 1.0, top_k > 0]
+    if not do_sample and any(sample_conditions):
+        do_sample = True
+        logging.warn("do_sample force to enabled.")
+
     device = torch.device(device)
     raw_prompts: List[Tokens] = []
     batch_data_config: List[LoraBatchDataConfig] = []
@@ -113,7 +126,7 @@ def generate(llm_model: LLMModel,
         tokens[k, : len(t)] = torch.tensor(t, dtype=torch.int64, device=device)
 
     prev_pos = 0
-    kv_cache = KVCache()
+    kv_cache = llm_model.prepare_kv_cache(batch_size, total_len)
     stop_reached = torch.tensor([False] * batch_size, device=device)
     input_text_mask = tokens != tokenizer.pad_id_
     for cur_pos in range(min_tokens_len, total_len):
@@ -125,11 +138,21 @@ def generate(llm_model: LLMModel,
             inference_model_=True)
         kv_cache.seq_pos = prev_pos
         logits, _ = llm_model.forward(input_data)
+        probs = logits[:, -1]
         if temperature > 0:
-            probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
-            next_token = sample_top_p(probs, top_p)
+            probs = probs / temperature
+
+        if top_k > 0:
+            probs = sample_top_k(probs, top_k)
+
+        if top_p > 0 and top_p <= 1.0:
+            probs = sample_top_p(probs, top_p)
+
+        if do_sample:
+            probs = torch.softmax(probs, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
         else:
-            next_token = torch.argmax(logits[:, -1], dim=-1)
+            next_token = torch.argmax(probs, dim=-1)
 
         next_token = next_token.reshape(-1)
         next_token = torch.where(

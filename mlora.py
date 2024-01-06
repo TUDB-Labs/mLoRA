@@ -86,7 +86,7 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     else:
         raise f"unkown model type {args.model_type}"
 
-    tokenizer = mlora.Tokenizer(args.base_model, device=args.device)
+    tokenizer = mlora.Tokenizer(args.base_model)
 
     return tokenizer, model
 
@@ -139,7 +139,6 @@ def inference(llm_model: mlora.LLMModel,
             config.prompts_ = [input_raw]
         callback = None if args.disable_log else inference_callback
         outputs = mlora.generate(llm_model, tokenizer, adapters,
-                                 temperature=0.2,
                                  device=args.device,
                                  stream_callback=callback)
         print(f"\n{'='*10}\n")

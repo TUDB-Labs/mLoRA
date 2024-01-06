@@ -71,7 +71,7 @@ def main(base_model: str,
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
                                              bits=(8 if load_8bit else (4 if load_4bit else None)))
-    tokenizer = mlora.Tokenizer(base_model, device=device)
+    tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:
         model.load_adapter_weight(lora_weights, "m-LoRA")
@@ -84,8 +84,9 @@ def main(base_model: str,
     def evaluate(
         instruction,
         input="",
-        temperature=0.1,
-        top_p=0.75,
+        temperature=0.6,
+        top_p=0.9,
+        top_k=40,
         max_new_tokens=128,
         stream_output=False,
     ):
@@ -101,6 +102,7 @@ def main(base_model: str,
             "configs": [generation_config],
             "temperature": temperature,
             "top_p": top_p,
+            "top_k": top_k,
             "max_gen_len": max_new_tokens,
             "device": device
         }
@@ -139,6 +141,9 @@ def main(base_model: str,
             ),
             gr.components.Slider(
                 minimum=0, maximum=1, value=0.9, label="Top-p"
+            ),
+            gr.components.Slider(
+                minimum=0, maximum=100, value=40, label="Top-k"
             ),
             gr.components.Slider(
                 minimum=1, maximum=2000, step=1, value=128, label="Max tokens"

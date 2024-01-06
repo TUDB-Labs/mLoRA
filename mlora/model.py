@@ -1,4 +1,4 @@
-from mlora.modelargs import LoraConfig, MultiLoraBatchData
+from mlora.modelargs import KVCache, LoraConfig, MultiLoraBatchData
 
 import torch
 import einops
@@ -125,6 +125,10 @@ class LLMModel(metaclass=ABCMeta):
 
     @abstractclassmethod
     def save_adapter_weight(self, path: str, dir_suffix=""):
+        pass
+
+    @abstractclassmethod
+    def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
         pass
 
     @abstractclassmethod

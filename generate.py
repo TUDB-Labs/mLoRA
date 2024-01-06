@@ -13,7 +13,7 @@ def main(base_model: str,
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
                                              bits=(8 if load_8bit else (4 if load_4bit else None)))
-    tokenizer = mlora.Tokenizer(base_model, device=device)
+    tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:
         adapter_name = model.load_adapter_weight(lora_weights)
