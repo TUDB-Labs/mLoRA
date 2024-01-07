@@ -10,9 +10,8 @@
             "name": "lora_0",
             "optim": "adamw",
             "lr": 3e-4,
-            "momentum": 0.9,
             "batch_size": 64,
-            "micro_batch_size": 64,
+            "micro_batch_size": 32,
             "test_batch_size": 64,
             "num_epochs": 50,
             "r": 8,
@@ -28,7 +27,6 @@
                 "w3_proj": true
             },
             "data": "data/dummy_data.json",
-            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
             "expand_side": "right"
@@ -38,7 +36,7 @@
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 64,
-            "micro_batch_size": 64,
+            "micro_batch_size": 32,
             "test_batch_size": 64,
             "num_epochs": 50,
             "r": 32,
@@ -54,7 +52,6 @@
                 "w3_proj": false
             },
             "data": "data/dummy_data.json",
-            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
             "expand_side": "right"
