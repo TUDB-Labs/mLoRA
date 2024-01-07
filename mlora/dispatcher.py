@@ -1,11 +1,12 @@
+from mlora import Prompter
 from mlora import Tokenizer
 from mlora import MultiLoraBatchData
 from mlora import LoraBatchDataConfig
 
 import sys
 import math
-import json
 import random
+import logging
 import datasets
 from dataclasses import dataclass
 from typing import Dict, List, Union
@@ -18,13 +19,6 @@ Tokens = List[int]
 class TrainData:
     prompt_: str = ""
     tokens_: Tokens = None
-
-
-@dataclass
-class TemplateData:
-    parameter_: List[str] = None
-    prompt_: str = ""
-    prompt_without_input_: str = ""
 
 
 def load_dataset(data_path: str):
@@ -47,7 +41,7 @@ class TrainTask():
     train_token_data_: List[TrainData] = None
     test_token_data_: List[TrainData] = None
 
-    template_data_: TemplateData = None
+    prompter_: Prompter = None
 
     # train parameter
     total_epoch_num_: int = -1
@@ -96,43 +90,20 @@ class TrainTask():
         self.expand_token_id_ = expand_token_id
 
     def __load_template_data(self):
-        assert self.template_data_ is None
-        with open(self.prompt_template_path_, "r", encoding="utf8") as fp:
-            template_config_obj = json.load(fp)
-        self.template_data_ = TemplateData(
-            parameter_=template_config_obj["parameter"],
-            prompt_=template_config_obj["prompt"],
-            prompt_without_input_=template_config_obj["prompt_no_input"]
-        )
+        assert self.prompter_ is None
+        self.prompter_ = Prompter(self.prompt_template_path_)
 
     # read from file and replace the template
     def __parse_data_with_template(self,
                                    data: List) -> List[str]:
 
         ret_data_text: List[str] = []
-        for raw_data in data:
-            raw_data_obj = {}
-
-            check_without_input_flag = False
-            for para in self.template_data_.parameter_:
-                if para not in raw_data or raw_data[para] is None:
-                    check_without_input_flag = True
-                    continue
-                raw_data_obj[para] = raw_data[para]
-
-            text_data: str = ""
-            if check_without_input_flag:
-                text_data = self.template_data_.prompt_without_input_
-            else:
-                text_data = self.template_data_.prompt_
-
-            for para in self.template_data_.parameter_:
-                if para not in raw_data_obj:
-                    continue
-                text_data = text_data.replace(
-                    "{" + para + "}", raw_data[para])
-
-            ret_data_text.append(text_data)
+        for data_point in data:
+            ret_data_text.append(self.prompter_.generate_prompt(
+                data_point["instruction"],
+                data_point.get("input", None),
+                data_point.get("output", None),
+            ))
 
         return ret_data_text
 
@@ -150,8 +121,8 @@ class TrainTask():
 
             ret.append(TrainData(prompt_=text, tokens_=tokens))
             if idx % 10000 == 0:
-                print(
-                    f"encode text data {self.adapter_name_}: {idx}/{len(lora_text_data)}")
+                logging.info(
+                    f"Encode text data {self.adapter_name_}: {idx}/{len(lora_text_data)}")
 
         if is_train_data and self.group_by_length_:
             ret.sort(key=lambda x: len(x.tokens_), reverse=True)
@@ -209,8 +180,8 @@ class TrainTask():
 
         ret_data = self.train_token_data_[start_idx:end_idx]
 
-        print(f"{self.adapter_name_} train data:")
-        print(
+        logging.info(f"{self.adapter_name_} train data:")
+        logging.info(
             f"    epoch: {self.epoch_cnt_}/{self.total_epoch_num_} \
             step in epoch: {start_idx}/{len(self.train_token_data_)}")
 

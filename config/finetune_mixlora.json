@@ -2,8 +2,8 @@
     "cutoff_len": 256,
     "save_step": 2000,
     "early_stop_test_step": 2000,
-    "train_lora_candidate_num": 4,
-    "train_lora_simultaneously_num": 2,
+    "train_lora_candidate_num": 3,
+    "train_lora_simultaneously_num": 3,
     "train_strategy": "optim",
     "lora": [
         {
@@ -19,10 +19,13 @@
             "lora_alpha": 16,
             "lora_dropout": 0.05,
             "target_modules": {
-                "qkv": true,
-                "dense": true,
-                "mlp_in": true,
-                "mlp_out": true
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true,
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
             },
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
@@ -42,11 +45,17 @@
             "lora_alpha": 16,
             "lora_dropout": 0.05,
             "target_modules": {
-                "qkv": true,
-                "dense": true,
-                "mlp_in": true,
-                "mlp_out": true
+                "q_proj": true,
+                "k_proj": false,
+                "v_proj": true,
+                "o_proj": false,
+                "w1_proj": true,
+                "w2_proj": false,
+                "w3_proj": true
             },
+            "routing_strategy": "mixtral",
+            "num_experts": 8,
+            "act_fn": "silu",
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
@@ -61,15 +70,22 @@
             "micro_batch_size": 4,
             "test_batch_size": 64,
             "num_epochs": 3,
-            "r": 16,
+            "r": 8,
             "lora_alpha": 16,
             "lora_dropout": 0.05,
             "target_modules": {
-                "qkv": true,
-                "dense": true,
-                "mlp_in": true,
-                "mlp_out": true
+                "q_proj": true,
+                "k_proj": false,
+                "v_proj": true,
+                "o_proj": false,
+                "w1_proj": true,
+                "w2_proj": false,
+                "w3_proj": true
             },
+            "routing_strategy": "switch",
+            "expert_capacity": 32,
+            "num_experts": 8,
+            "act_fn": "gelu_new",
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",

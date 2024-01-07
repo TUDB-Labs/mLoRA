@@ -11,7 +11,6 @@
     "lora": [
         {
             "name": "lora_0",
-            "output": "lora_0",
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 16,
@@ -19,8 +18,8 @@
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 8,
-            "alpha": 16,
-            "dropout": 0.05,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": false,
@@ -36,15 +35,14 @@
         {
             "name": "lora_1",
             "output": "lora_1",
-            "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 16,
             "micro_batch_size": 4,
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 8,
-            "alpha": 16,
-            "dropout": 0.05,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": false,
