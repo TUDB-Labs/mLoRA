@@ -46,7 +46,7 @@ class GenerateConfig:
             return self.prompter_.get_response(output)
 
 
-def sample_top_p(probs, p, filter_value=float("-inf"), min_tokens_to_keep=1):
+def _logits_sample_top_p(probs, p, filter_value=float("-inf"), min_tokens_to_keep=1):
     sorted_logits, sorted_indices = torch.sort(probs, descending=False)
     cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
     sorted_indices_to_remove = cumulative_probs <= (1 - p)
@@ -56,10 +56,17 @@ def sample_top_p(probs, p, filter_value=float("-inf"), min_tokens_to_keep=1):
     return probs.masked_fill(indices_to_remove, filter_value)
 
 
-def sample_top_k(probs, k, filter_value=float("-inf")):
+def _logits_sample_top_k(probs, k, filter_value=float("-inf")):
     top_k = min(k, probs.size(-1))  # Safety check
     indices_to_remove = probs < torch.topk(probs, top_k)[0][..., -1, None]
     return probs.masked_fill(indices_to_remove, filter_value)
+
+
+def _logits_repetition_penalty(prev_tokens, probs, penalty):
+    score = torch.gather(probs, 1, prev_tokens)
+    score = torch.where(score < 0, score * penalty, score / penalty)
+    probs.scatter_(1, prev_tokens, score)
+    return probs
 
 
 def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
@@ -86,19 +93,22 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 
 
 @torch.inference_mode()
-def generate(llm_model: LLMModel,
+def generate(model: LLMModel,
              tokenizer: Tokenizer,
              configs: List[GenerateConfig],
              temperature=1,
              top_p=0.9,
              top_k=50,
              do_sample=True,
+             repetition_penalty=1.1,
+             renormalize_logits=True,
              max_gen_len=128,
              device="cuda:0",
              stream_callback=None):
-    sample_conditions = [temperature > 0,
-                         top_p > 0 and top_p <= 1.0, top_k > 0]
-    if not do_sample and any(sample_conditions):
+    process_conditions = any([repetition_penalty > 0])
+    sample_conditions = any(
+        [temperature > 0, top_p > 0 and top_p <= 1.0, top_k > 0])
+    if not do_sample and sample_conditions:
         do_sample = True
         logging.warn("do_sample force to enabled.")
 
@@ -117,8 +127,8 @@ def generate(llm_model: LLMModel,
     batch_size = len(raw_prompts)
     min_tokens_len = min(len(t) for t in raw_prompts)
     max_tokens_len = max(len(t) for t in raw_prompts)
-    assert max_tokens_len <= llm_model.max_seq_len_
-    total_len = min(llm_model.max_seq_len_, max_gen_len + max_tokens_len)
+    assert max_tokens_len <= model.max_seq_len_
+    total_len = min(model.max_seq_len_, max_gen_len + max_tokens_len)
 
     tokens = torch.full((batch_size, total_len),
                         tokenizer.pad_id_, dtype=torch.int64, device=device)
@@ -126,7 +136,7 @@ def generate(llm_model: LLMModel,
         tokens[k, : len(t)] = torch.tensor(t, dtype=torch.int64, device=device)
 
     prev_pos = 0
-    kv_cache = llm_model.prepare_kv_cache(batch_size, total_len)
+    kv_cache = model.prepare_kv_cache(batch_size, total_len)
     stop_reached = torch.tensor([False] * batch_size, device=device)
     input_text_mask = tokens != tokenizer.pad_id_
     for cur_pos in range(min_tokens_len, total_len):
@@ -137,16 +147,27 @@ def generate(llm_model: LLMModel,
             kv_cache_=kv_cache,
             inference_model_=True)
         kv_cache.seq_pos = prev_pos
-        logits, _ = llm_model.forward(input_data)
+        logits, _ = model.forward(input_data)
         probs = logits[:, -1]
+
+        if repetition_penalty > 0:
+            probs = _logits_repetition_penalty(
+                tokens[:, :cur_pos], probs, repetition_penalty)
+
+        if process_conditions and renormalize_logits:
+            probs = probs.log_softmax(-1)
+
         if temperature > 0:
             probs = probs / temperature
 
         if top_k > 0:
-            probs = sample_top_k(probs, top_k)
+            probs = _logits_sample_top_k(probs, top_k)
 
         if top_p > 0 and top_p <= 1.0:
-            probs = sample_top_p(probs, top_p)
+            probs = _logits_sample_top_p(probs, top_p)
+
+        if sample_conditions and renormalize_logits:
+            probs = probs.log_softmax(-1)
 
         if do_sample:
             probs = torch.softmax(probs, dim=-1)
