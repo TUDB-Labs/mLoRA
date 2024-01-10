@@ -101,4 +101,4 @@ jobs:
       - name: test inference with lora
         run: |
           cd /workspace/multi-lora-fine-tune
-          python generate.py --base_model "/data/llama-7b-hf" --lora_weights "./lora_0" --half_precision --instruction "What is m-LoRA?"
+          python generate.py --base_model "/data/llama-7b-hf" --lora_weights "./lora_0" --load_16bit --instruction "What is m-LoRA?"

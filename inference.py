@@ -64,7 +64,7 @@ class Iteratorize:
 def main(base_model: str,
          template: str = None,
          lora_weights: str = "",
-         half_precision: bool = False,
+         load_16bit: bool = False,
          load_8bit: bool = False,
          load_4bit: bool = False,
          device: str = "cuda:0",
@@ -74,7 +74,7 @@ def main(base_model: str,
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
                                              bits=(8 if load_8bit else (
                                                  4 if load_4bit else None)),
-                                             dtype=torch.bfloat16 if half_precision else torch.float32)
+                                             dtype=torch.bfloat16 if load_16bit else torch.float32)
     tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:

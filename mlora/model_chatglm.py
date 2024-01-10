@@ -196,7 +196,7 @@ class ChatGLMModel(LLMModel):
             raise ValueError(f"unsupported compute dtype {dtype}")
 
         if dtype in [torch.bfloat16, torch.float16]:
-            logging.info(f"Loading model with half precision.")
+            logging.info("Loading model with half precision.")
 
         if not torch.cuda.is_bf16_supported():
             if dtype == torch.bfloat16:
