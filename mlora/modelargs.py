@@ -29,6 +29,7 @@ class LLMModelArgs:
     pad_token_id_: int = -1
     max_seq_len_: int = 2048
     device: str = ""
+    dtype: torch.dtype = None
 
 
 @dataclass
@@ -40,14 +41,14 @@ class LoraBatchDataConfig:
 
 class KVCache:
     def __init__(self, max_batch_size, max_seq_len, n_local_kv_heads, head_dim,
-                 n_layers, device="cuda:0") -> None:
+                 n_layers, device="cuda:0", dtype=torch.float32) -> None:
         self.cache_k: List[torch.Tensor] = []
         self.cache_v: List[torch.Tensor] = []
         for _ in range(n_layers):
             self.cache_k.append(torch.zeros(
-                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device))
+                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device, dtype=dtype))
             self.cache_v.append(torch.zeros(
-                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device))
+                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device, dtype=dtype))
         self.seq_pos: int = 0
 
     def update(self, xk: torch.Tensor, xv: torch.Tensor, layer_idx: int,
@@ -86,6 +87,7 @@ class MultiLoraBatchData:
 class LoraConfig:
     adapter_name_: str = ""
     device_: str = "cuda:0"
+    dtype_: torch.dtype = None
     lora_r_: int = None
     lora_alpha_: int = None
     lora_dropout_: float = None
