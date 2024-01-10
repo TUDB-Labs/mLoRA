@@ -84,7 +84,8 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
         model = mlora.ChatGLMModel.from_pretrained(
             path=args.base_model,
             device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+            dtype=torch.float32
         )
     else:
         raise f"unkown model type {args.model_type}"
