@@ -29,11 +29,11 @@ class Lora(torch.nn.Module):
         self.scaling_ = alpha / r
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        data_ = F.dropout(data.type_as(self.lora_a_), self.dropout_)
+        data_ = F.dropout(data.to(self.lora_a_.dtype), self.dropout_)
         data_ @= self.lora_a_.transpose(0, 1)
         data_ @= self.lora_b_.transpose(0, 1)
         data_ *= self.scaling_
-        return data_.type_as(data)
+        return data_.to(data.dtype)
 
 
 class Linear(torch.nn.Module):

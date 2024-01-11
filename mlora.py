@@ -77,7 +77,7 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
             path=args.base_model,
             device=args.device,
             bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            dtype=torch.bfloat16 if args.load_16bit else torch.float32
+            load_dtype=torch.bfloat16 if args.load_16bit else torch.float32
         )
     elif args.model_type == "chatglm":
         logging.info("Initializing ChatGLM model.")
@@ -85,7 +85,7 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
             path=args.base_model,
             device=args.device,
             bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            dtype=torch.float32
+            load_dtype=torch.float32
         )
     else:
         raise f"unkown model type {args.model_type}"

@@ -184,24 +184,24 @@ class ChatGLMModel(LLMModel):
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
-                        dtype: torch.dtype = torch.bfloat16,
+                        load_dtype: torch.dtype = torch.bfloat16,
                         compute_dtype: torch.dtype = torch.bfloat16,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
                         ) -> LLMModel:
-        if dtype not in [torch.bfloat16, torch.float16, torch.float32]:
-            raise ValueError(f"unsupported dtype {dtype}")
+        if load_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
+            raise ValueError(f"unsupported dtype {load_dtype}")
 
         if compute_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
-            raise ValueError(f"unsupported compute dtype {dtype}")
+            raise ValueError(f"unsupported compute dtype {compute_dtype}")
 
-        if dtype in [torch.bfloat16, torch.float16]:
+        if load_dtype in [torch.bfloat16, torch.float16]:
             logging.info("Loading model with half precision.")
 
         if not torch.cuda.is_bf16_supported():
-            if dtype == torch.bfloat16:
+            if load_dtype == torch.bfloat16:
                 logging.warning("bf16 is not available. deprecated to fp16.")
-                dtype = torch.float16
+                load_dtype = torch.float16
 
             if compute_dtype == torch.bfloat16:
                 logging.warning("bf16 is not available. deprecated to fp16.")
@@ -225,12 +225,12 @@ class ChatGLMModel(LLMModel):
                     bnb_4bit_use_double_quant=double_quant,
                     bnb_4bit_quant_type=quant_type,
                 ),
-                torch_dtype=dtype)
+                torch_dtype=load_dtype)
         else:
             chatglm_model = AutoModel.from_pretrained(
                 path,
                 device_map=device,
-                torch_dtype=dtype,
+                torch_dtype=load_dtype,
                 quantization_bit=bits,
                 trust_remote_code=True)
 

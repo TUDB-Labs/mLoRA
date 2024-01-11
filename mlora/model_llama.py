@@ -44,7 +44,7 @@ class OutputLayer(torch.nn.Module):
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         data_ = data.to(self.weight_.dtype) @ self.weight_.transpose(0, 1)
-        return data_.type_as(data)
+        return data_.to(data.dtype)
 
 
 class RMSNormLayer(torch.nn.Module):
@@ -185,7 +185,7 @@ class Transformer(torch.nn.Module):
             if mask is not None:
                 attention_score = attention_score + mask
             attention_score = F.softmax(
-                attention_score.float(), dim=-1).type_as(xq)
+                attention_score.float(), dim=-1).to(xq.dtype)
             attention_score = torch.matmul(attention_score, xv)
             attention_score = attention_score.transpose(1, 2).contiguous()
         else:
@@ -301,24 +301,27 @@ class LlamaModel(LLMModel):
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
-                        dtype: torch.dtype = torch.bfloat16,
+                        load_dtype: torch.dtype = torch.bfloat16,
                         compute_dtype: torch.dtype = torch.bfloat16,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
                         ) -> LLMModel:
-        if dtype not in [torch.bfloat16, torch.float16, torch.float32]:
-            raise ValueError(f"unsupported dtype {dtype}")
+        # load_dtype will change the precision of LLaMA pre-trained model
+        # when loading with quantization (bits = 8 or bits = 4), load_dtype will only influence the actual computing precision
+        if load_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
+            raise ValueError(f"unsupported load dtype {load_dtype}")
 
         if compute_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
-            raise ValueError(f"unsupported compute dtype {dtype}")
+            raise ValueError(f"unsupported compute dtype {compute_dtype}")
 
-        if dtype in [torch.bfloat16, torch.float16]:
+        if load_dtype in [torch.bfloat16, torch.float16]:
             logging.info("Loading model with half precision.")
 
+        # BFloat16 is only supported after Ampere GPUs
         if not torch.cuda.is_bf16_supported():
-            if dtype == torch.bfloat16:
+            if load_dtype == torch.bfloat16:
                 logging.warning("bf16 is not available. deprecated to fp16.")
-                dtype = torch.float16
+                load_dtype = torch.float16
 
             if compute_dtype == torch.bfloat16:
                 logging.warning("bf16 is not available. deprecated to fp16.")
@@ -340,12 +343,12 @@ class LlamaModel(LLMModel):
                     bnb_4bit_use_double_quant=double_quant,
                     bnb_4bit_quant_type=quant_type,
                 ),
-                torch_dtype=dtype)
+                torch_dtype=load_dtype)
         else:
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
                 device_map=device,
-                torch_dtype=dtype)
+                torch_dtype=load_dtype)
 
         llama_args = LLMModelArgs()
         llama_args.dim_ = llama_model.config.hidden_size
