@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 import xformers.ops
 import xformers.ops.fmha.attn_bias
-from transformers import AutoModel
+from transformers import AutoModel, BitsAndBytesConfig
 from typing import List, Dict, Optional, Tuple
 from huggingface_hub import snapshot_download
 import os
@@ -184,17 +184,32 @@ class ChatGLMModel(LLMModel):
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
-                        fp16: bool = True,
-                        bf16: bool = True,
+                        load_dtype: torch.dtype = torch.bfloat16,
+                        compute_dtype: torch.dtype = torch.bfloat16,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
                         ) -> LLMModel:
+        if load_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
+            raise ValueError(f"unsupported dtype {load_dtype}")
+
+        if compute_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
+            raise ValueError(f"unsupported compute dtype {compute_dtype}")
+
+        if load_dtype in [torch.bfloat16, torch.float16]:
+            logging.info("Loading model with half precision.")
+
+        if not torch.cuda.is_bf16_supported():
+            if load_dtype == torch.bfloat16:
+                logging.warning("bf16 is not available. deprecated to fp16.")
+                load_dtype = torch.float16
+
+            if compute_dtype == torch.bfloat16:
+                logging.warning("bf16 is not available. deprecated to fp16.")
+                compute_dtype = torch.float16
+
         # now only support the qlora - 4bit
         if bits in [4, 8]:
             logging.info(f"Loading model with quantization, bits = {bits}.")
-            from transformers import BitsAndBytesConfig
-            compute_dtype = (torch.float16 if fp16 else (
-                torch.bfloat16 if bf16 else torch.float32))
             chatglm_model = AutoModel.from_pretrained(
                 path,
                 trust_remote_code=True,
@@ -210,12 +225,12 @@ class ChatGLMModel(LLMModel):
                     bnb_4bit_use_double_quant=double_quant,
                     bnb_4bit_quant_type=quant_type,
                 ),
-                torch_dtype=(torch.float32 if fp16 else (torch.bfloat16 if bf16 else torch.float32)))
+                torch_dtype=load_dtype)
         else:
             chatglm_model = AutoModel.from_pretrained(
                 path,
                 device_map=device,
-                torch_dtype=torch.float32,
+                torch_dtype=load_dtype,
                 quantization_bit=bits,
                 trust_remote_code=True)
 

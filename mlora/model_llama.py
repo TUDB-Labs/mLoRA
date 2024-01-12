@@ -15,6 +15,7 @@ import xformers.ops
 import xformers.ops.fmha.attn_bias
 from typing import List, Dict, Tuple, Optional
 from huggingface_hub import snapshot_download
+from transformers import BitsAndBytesConfig
 from transformers import LlamaForCausalLM
 from collections import OrderedDict
 import logging
@@ -42,7 +43,8 @@ class OutputLayer(torch.nn.Module):
         self.weight_: torch.Tensor = weight
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        return data @ self.weight_.transpose(0, 1)
+        data_ = data.to(self.weight_.dtype) @ self.weight_.transpose(0, 1)
+        return data_.to(data.dtype)
 
 
 class RMSNormLayer(torch.nn.Module):
@@ -81,6 +83,7 @@ class Transformer(torch.nn.Module):
         self.n_kv_heads_ = args.n_kv_heads_
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
+        self.dtype_ = args.dtype
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         adapter_name = config.adapter_name_
@@ -160,7 +163,7 @@ class Transformer(torch.nn.Module):
         xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_)
 
         # apply rotary embedding
-        xq, xk = apply_rotary_emb(xq, xk, rope_angle)
+        xq, xk = apply_rotary_emb(xq, xk, rope_angle, self.dtype_)
 
         # apply kv cache
         if input_args.kv_cache_ is not None:
@@ -182,7 +185,7 @@ class Transformer(torch.nn.Module):
             if mask is not None:
                 attention_score = attention_score + mask
             attention_score = F.softmax(
-                attention_score.float(), dim=-1).type_as(xq)
+                attention_score.float(), dim=-1).to(xq.dtype)
             attention_score = torch.matmul(attention_score, xv)
             attention_score = attention_score.transpose(1, 2).contiguous()
         else:
@@ -251,6 +254,7 @@ class LlamaModel(LLMModel):
         self.pad_token_id_ = args.pad_token_id_
         self.max_seq_len_ = args.max_seq_len_
         self.dim_ = args.dim_
+        self.dtype_ = args.dtype
 
         # adapter configs
         self.adapter_configs_: Dict[str, LoraConfig] = {}
@@ -276,7 +280,8 @@ class LlamaModel(LLMModel):
             data = (tokens, mask, self.rope_angle_, input, False)
         else:
             # prepare mask
-            mask = precompute_mask(input, self.n_heads_, self.device_)
+            mask = precompute_mask(input, self.n_heads_,
+                                   self.device_).to(self.dtype_)
             # store routing data when training
             if input.output_router_logits_:
                 input.router_logits_: Tuple[List] = tuple([] for _ in range(
@@ -296,16 +301,34 @@ class LlamaModel(LLMModel):
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
-                        fp16: bool = True,
-                        bf16: bool = True,
+                        load_dtype: torch.dtype = torch.bfloat16,
+                        compute_dtype: torch.dtype = torch.bfloat16,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
                         ) -> LLMModel:
+        # load_dtype will change the precision of LLaMA pre-trained model
+        # when loading with quantization (bits = 8 or bits = 4), load_dtype will only influence the actual computing precision
+        if load_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
+            raise ValueError(f"unsupported load dtype {load_dtype}")
+
+        if compute_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
+            raise ValueError(f"unsupported compute dtype {compute_dtype}")
+
+        if load_dtype in [torch.bfloat16, torch.float16]:
+            logging.info("Loading model with half precision.")
+
+        # BFloat16 is only supported after Ampere GPUs
+        if not torch.cuda.is_bf16_supported():
+            if load_dtype == torch.bfloat16:
+                logging.warning("bf16 is not available. deprecated to fp16.")
+                load_dtype = torch.float16
+
+            if compute_dtype == torch.bfloat16:
+                logging.warning("bf16 is not available. deprecated to fp16.")
+                compute_dtype = torch.float16
+
         if bits in [4, 8]:
             logging.info(f"Loading model with quantization, bits = {bits}.")
-            from transformers import BitsAndBytesConfig
-            compute_dtype = (torch.float16 if fp16 else (
-                torch.bfloat16 if bf16 else torch.float32))
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
                 load_in_4bit=bits == 4,
@@ -320,12 +343,12 @@ class LlamaModel(LLMModel):
                     bnb_4bit_use_double_quant=double_quant,
                     bnb_4bit_quant_type=quant_type,
                 ),
-                torch_dtype=(torch.float32 if fp16 else (torch.bfloat16 if bf16 else torch.float32)))
+                torch_dtype=load_dtype)
         else:
             llama_model = LlamaForCausalLM.from_pretrained(
                 path,
                 device_map=device,
-                torch_dtype=torch.float32)
+                torch_dtype=load_dtype)
 
         llama_args = LLMModelArgs()
         llama_args.dim_ = llama_model.config.hidden_size
@@ -340,22 +363,23 @@ class LlamaModel(LLMModel):
         llama_args.pad_token_id_ = llama_model.config.pad_token_id
         if llama_args.pad_token_id_ is None:
             llama_args.pad_token_id_ = -1
+        llama_args.dtype = llama_model.dtype
 
         llama_args.device = device
 
         model = LlamaModel(llama_args)
 
         embedding_weight = llama_model.model.embed_tokens.weight.to(
-            device=device).requires_grad_(False)
+            device=device).detach()
         model.token_embedding_ = Embedding(
             embedding_weight, llama_args.pad_token_id_)
 
         output_weight = llama_model.lm_head.weight.to(
-            dtype=torch.float32, device=device).requires_grad_(False)
+            dtype=torch.float32, device=device).detach()
         model.output_ = OutputLayer(output_weight)
 
         norm_weight = llama_model.model.norm.weight.to(
-            device=device).requires_grad_(False)
+            device=device).detach()
         model.norm_ = RMSNormLayer(norm_weight, model.norm_eps_)
 
         for idx, layer in enumerate(llama_model.model.layers):
@@ -369,14 +393,14 @@ class LlamaModel(LLMModel):
                 layer.self_attn.o_proj, device=device)
             model.layers_[idx].ffn_ = FeedForward(
                 norm=RMSNorm(layer.post_attention_layernorm.weight.to(
-                    device=device).requires_grad_(False), model.norm_eps_),
+                    device=device).detach(), model.norm_eps_),
                 w1=Linear(layer.mlp.gate_proj, device=device),
                 w2=Linear(layer.mlp.down_proj, device=device),
                 w3=Linear(layer.mlp.up_proj, device=device),
                 device=device
             )
             model.layers_[idx].attention_norm_ = RMSNorm(
-                layer.input_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
+                layer.input_layernorm.weight.to(device=device).detach(), model.norm_eps_)
 
         return model
 
@@ -466,7 +490,7 @@ class LlamaModel(LLMModel):
 
     def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
         return KVCache(batch_size, max_seq_len, self.n_kv_heads_,
-                       self.dim_ // self.n_heads_, len(self.layers_), self.device_)
+                       self.dim_ // self.n_heads_, len(self.layers_), self.device_, self.dtype_)
 
     def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()

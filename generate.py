@@ -1,4 +1,5 @@
 import mlora
+import torch
 import fire
 
 
@@ -7,12 +8,15 @@ def main(base_model: str,
          input: str = None,
          template: str = None,
          lora_weights: str = None,
+         load_16bit: bool = False,
          load_8bit: bool = False,
          load_4bit: bool = False,
          device: str = "cuda:0"):
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
-                                             bits=(8 if load_8bit else (4 if load_4bit else None)))
+                                             bits=(8 if load_8bit else (
+                                                 4 if load_4bit else None)),
+                                             load_dtype=torch.bfloat16 if load_16bit else torch.float32)
     tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:
