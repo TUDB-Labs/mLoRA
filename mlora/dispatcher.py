@@ -96,13 +96,13 @@ class TrainTask():
                       is_train_data: bool = True) -> List[TrainData]:
         ret: List[TrainData] = []
         for idx, data_point in enumerate(data):
-            input, label = self.dataload_function_(data_point)
+            input, label, flags = self.dataload_function_(data_point)
             if is_train_data:
-                tokens = self.tokenizer_.encode(input, bos=True, eos=True)
+                tokens = self.tokenizer_.encode(input, **flags)
                 if len(tokens) > self.train_cutoff_len_:
                     tokens = tokens[:self.train_cutoff_len_]
             else:
-                tokens = self.tokenizer_.encode(input, bos=True, eos=False)
+                tokens = self.tokenizer_.encode(input, **flags)
 
             ret.append(TrainData(prompt_=input, tokens_=tokens, labels_=label))
             if idx % 10000 == 0:

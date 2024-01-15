@@ -38,7 +38,7 @@ class SelfSupervised(BasicTask):
         return self.prompter_.generate_prompt(
             data_point["instruction"],
             data_point.get("input", None),
-            data_point.get("output", None)), None
+            data_point.get("output", None)), None, {"bos": True, "eos": False}
 
     def compute_loss(self, input: MultiLoraBatchData, output: torch.Tensor,
                      start_idx: int, end_idx: int) -> torch.Tensor:
@@ -56,7 +56,7 @@ class Classification(BasicTask):
         self.num_labels_ = num_labels
         self.pad_id_ = model.pad_token_id_
         self.score_ = torch.nn.Linear(
-            model.dim_, self.num_labels_, bias=False, dtype=model.dtype_, device=model.device_)
+            model.dim_, self.num_labels_, bias=False, dtype=torch.float32, device=model.device_)
 
     def extra_paramas(self):
         return {"classifier": self.score_.weight}
@@ -69,7 +69,7 @@ class Classification(BasicTask):
                               start_idx:end_idx], dtype=self.label_dtype_, device=output.device)
         logits = output[start_idx:end_idx]
         batch_size = input_ids.shape[0]
-        logits = self.score_(logits)
+        logits = self.score_(logits.to(torch.float32))
         if self.pad_id_ is None:
             sequence_lengths = -1
         else:
@@ -94,21 +94,22 @@ class GlueSst2(Classification):
 
     @staticmethod
     def dataload_function(data_point):
-        return data_point["sentence"], [int(data_point["label"])]
+        return data_point["sentence"], [int(data_point["label"])], {"bos": True, "eos": False}
 
 
-class GlueStsB(Classification):
+class GlueMrpc(Classification):
     def __init__(self, model: LLMModel) -> None:
-        super().__init__(model, label_dtype=model.dtype_, num_labels=1)
+        super().__init__(model, label_dtype=torch.long, num_labels=2)
 
     @staticmethod
     def dataload_function(data_point):
-        return data_point["sentence1"] + "<sep>" + data_point["sentence2"], [float(data_point["label"])]
+        return (data_point["sentence1"] + "<s>" + data_point["sentence2"],
+                [int(data_point["label"])], {"bos": True, "eos": False})
 
 
 classification_task_dict = {
     "glue:sst2": GlueSst2,
-    "glue:stsb": GlueStsB,
+    "glue:mrpc": GlueMrpc,
 }
 
 

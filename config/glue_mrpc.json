@@ -1,5 +1,5 @@
 {
-    "cutoff_len": 128,
+    "cutoff_len": 512,
     "save_step": 2000,
     "early_stop_test_step": 2000,
     "train_lora_candidate_num": 2,
@@ -7,12 +7,12 @@
     "train_strategy": "optim",
     "lora": [
         {
-            "name": "stsb_lora_0",
-            "task_type": "glue:stsb",
+            "name": "mrpc_lora_0",
+            "task_type": "glue:mrpc",
             "optim": "adamw",
-            "lr": 1e-5,
+            "lr": 1e-3,
             "batch_size": 16,
-            "micro_batch_size": 16,
+            "micro_batch_size": 8,
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 16,
@@ -31,12 +31,12 @@
             "expand_side": "right"
         },
         {
-            "name": "stsb_lora_1",
-            "task_type": "glue:stsb",
+            "name": "mrpc_lora_1",
+            "task_type": "glue:mrpc",
             "optim": "adamw",
-            "lr": 1e-5,
+            "lr": 1e-3,
             "batch_size": 16,
-            "micro_batch_size": 16,
+            "micro_batch_size": 8,
             "test_batch_size": 64,
             "num_epochs": 3,
             "r": 8,
