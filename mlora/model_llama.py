@@ -83,7 +83,7 @@ class Transformer(torch.nn.Module):
         self.n_kv_heads_ = args.n_kv_heads_
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
-        self.dtype_ = args.dtype
+        self.dtype_ = args.dtype_
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         adapter_name = config.adapter_name_
@@ -168,7 +168,8 @@ class Transformer(torch.nn.Module):
         # apply kv cache
         if input_args.kv_cache_ is not None:
             xk, xv = input_args.kv_cache_.update(
-                xk, xv, self.layer_id_, batch_size, max_seq_len)
+                xk, xv, self.layer_id_, batch_size,
+                max_seq_len, input_args.inference_seq_pos_)
 
         # for llama2 need to repeat the heads
         # before dim: batch_size, seq_len, n_kv_head, head_dim
@@ -176,7 +177,7 @@ class Transformer(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        if input_args.kv_cache_ is not None:
+        if input_args.inference_seq_pos_ >= 0:
             xq = xq.transpose(1, 2)
             xk = xk.transpose(1, 2)
             xv = xv.transpose(1, 2)
@@ -243,18 +244,18 @@ class LlamaModel(LLMModel):
 
         # cos and sin
         self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
-            args.dim_ // args.n_heads_, args.max_seq_len_, args.device)
+            args.dim_ // args.n_heads_, args.max_seq_len_, args.device_)
 
         self.norm_eps_ = args.norm_eps_
 
-        self.device_ = args.device
+        self.device_ = args.device_
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
         self.vocab_size_ = args.vocab_size_
         self.pad_token_id_ = args.pad_token_id_
         self.max_seq_len_ = args.max_seq_len_
         self.dim_ = args.dim_
-        self.dtype_ = args.dtype
+        self.dtype_ = args.dtype_
 
         # adapter configs
         self.adapter_configs_: Dict[str, LoraConfig] = {}
@@ -267,14 +268,13 @@ class LlamaModel(LLMModel):
             tokens = torch.tensor(input.batch_tokens_,
                                   dtype=torch.int64).to(self.device_)
 
-        seq_module = self.sequential_module()
+        seq_module = self.sequential_module(input.skip_lm_head_)
 
-        if input.inference_model_:
-            assert input.kv_cache_ is not None
+        if input.inference_seq_pos_ >= 0:
             if input.batch_seq_len_ > 1:
                 # prepare mask
                 mask = precompute_mask_for_inference(
-                    input, input.kv_cache_.seq_pos, self.device_)
+                    input, input.inference_seq_pos_, self.device_)
             else:
                 mask = None
             data = (tokens, mask, self.rope_angle_, input, False)
@@ -363,9 +363,9 @@ class LlamaModel(LLMModel):
         llama_args.pad_token_id_ = llama_model.config.pad_token_id
         if llama_args.pad_token_id_ is None:
             llama_args.pad_token_id_ = -1
-        llama_args.dtype = llama_model.dtype
+        llama_args.dtype_ = llama_model.dtype
 
-        llama_args.device = device
+        llama_args.device_ = device
 
         model = LlamaModel(llama_args)
 
@@ -492,7 +492,7 @@ class LlamaModel(LLMModel):
         return KVCache(batch_size, max_seq_len, self.n_kv_heads_,
                        self.dim_ // self.n_heads_, len(self.layers_), self.device_, self.dtype_)
 
-    def sequential_module(self) -> torch.nn.Sequential:
+    def sequential_module(self, skip_lm_head: bool = False) -> torch.nn.Sequential:
         seq_module = OrderedDict()
 
         seq_module.update(
@@ -507,8 +507,9 @@ class LlamaModel(LLMModel):
         seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
         seq_module.move_to_end("norm")
 
-        seq_module.update({"output": LlamaSequentialWrapper(self.output_)})
-        seq_module.move_to_end("output")
+        if not skip_lm_head:
+            seq_module.update({"output": LlamaSequentialWrapper(self.output_)})
+            seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)
 

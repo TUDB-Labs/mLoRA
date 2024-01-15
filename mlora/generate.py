@@ -103,6 +103,7 @@ def generate(model: LLMModel,
              repetition_penalty=1.1,
              renormalize_logits=True,
              max_gen_len=128,
+             use_cache=True,
              device="cuda:0",
              stream_callback=None):
     process_conditions = any([repetition_penalty > 0])
@@ -136,7 +137,8 @@ def generate(model: LLMModel,
         tokens[k, : len(t)] = torch.tensor(t, dtype=torch.int64, device=device)
 
     prev_pos = 0
-    kv_cache = model.prepare_kv_cache(batch_size, total_len)
+    kv_cache = model.prepare_kv_cache(
+        batch_size, total_len) if use_cache else None
     stop_reached = torch.tensor([False] * batch_size, device=device)
     input_text_mask = tokens != tokenizer.pad_id_
     for cur_pos in range(min_tokens_len, total_len):
@@ -145,8 +147,7 @@ def generate(model: LLMModel,
             batch_seq_len_=(cur_pos - prev_pos),
             batch_tokens_=tokens[:, prev_pos:cur_pos],
             kv_cache_=kv_cache,
-            inference_model_=True)
-        kv_cache.seq_pos = prev_pos
+            inference_seq_pos_=prev_pos)
         logits, _ = model.forward(input_data)
         probs = logits[:, -1]
 
@@ -185,7 +186,8 @@ def generate(model: LLMModel,
                 configs, tokenizer, raw_prompts, tokens, max_gen_len))
         stop_reached |= (~input_text_mask[:, cur_pos]) & (
             next_token == tokenizer.eos_id_)
-        prev_pos = cur_pos
+        if kv_cache is not None:
+            prev_pos = cur_pos
         if all(stop_reached):
             break
 

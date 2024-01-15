@@ -120,7 +120,8 @@ def init_adapter_config(config: Dict[str, any],
             if not args.disable_prompter:
                 config_class.prompt_template_ = lora_config["prompt"]
         else:
-            config_class = mlora.TrainConfig(lora_config, config_class)
+            config_class = mlora.TrainConfig(
+                llm_model, lora_config, config_class)
         config_list.append(config_class)
 
     return config_list
@@ -188,5 +189,5 @@ if __name__ == "__main__":
     if args.inference:
         inference(model, tokenizer, adapters)
     else:
-        mlora.train(mlora.Dispatcher(config, tokenizer), model,
+        mlora.train(mlora.Dispatcher(tokenizer, config), model,
                     adapters, args.device, args.dir, config["save_step"])
