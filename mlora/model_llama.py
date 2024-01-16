@@ -286,7 +286,8 @@ class LlamaModel(LLMModel):
             if input.output_router_logits_:
                 input.router_logits_: Tuple[List] = tuple([] for _ in range(
                     len(input.lora_batch_data_config_)))
-            data = (tokens, mask, self.rope_angle_, input, True)
+            data = (tokens, mask, self.rope_angle_,
+                    input, input.checkpoint_recompute_)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)

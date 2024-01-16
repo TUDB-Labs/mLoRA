@@ -12,22 +12,22 @@
             "optim": "adamw",
             "lr": 1e-3,
             "batch_size": 16,
-            "micro_batch_size": 8,
+            "micro_batch_size": 16,
             "test_batch_size": 64,
-            "num_epochs": 3,
-            "r": 16,
-            "lora_alpha": 32,
+            "num_epochs": 2,
+            "r": 32,
+            "lora_alpha": 64,
             "lora_dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": true,
                 "v_proj": true,
                 "o_proj": true,
-                "w1_proj": true,
-                "w2_proj": true,
-                "w3_proj": true
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
             },
-            "group_by_length": true,
+            "group_by_length": false,
             "expand_side": "right"
         },
         {
@@ -36,25 +36,25 @@
             "optim": "adamw",
             "lr": 1e-3,
             "batch_size": 16,
-            "micro_batch_size": 8,
+            "micro_batch_size": 16,
             "test_batch_size": 64,
-            "num_epochs": 3,
+            "num_epochs": 2,
             "r": 8,
             "lora_alpha": 16,
             "lora_dropout": 0.05,
             "target_modules": {
-                "q_proj": false,
+                "q_proj": true,
                 "k_proj": false,
-                "v_proj": false,
+                "v_proj": true,
                 "o_proj": false,
                 "w1_proj": true,
                 "w2_proj": true,
-                "w3_proj": true
+                "w3_proj": false
             },
             "routing_strategy": "mixtral",
             "num_experts": 4,
             "act_fn": "silu",
-            "group_by_length": true,
+            "group_by_length": false,
             "expand_side": "right"
         }
     ]

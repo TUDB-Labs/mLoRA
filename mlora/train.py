@@ -38,7 +38,7 @@ class SelfSupervised(BasicTask):
         return self.prompter_.generate_prompt(
             data_point["instruction"],
             data_point.get("input", None),
-            data_point.get("output", None)), None, {"bos": True, "eos": False}
+            data_point.get("output", None)), None, {"bos": True, "eos": True}
 
     def compute_loss(self, input: MultiLoraBatchData, output: torch.Tensor,
                      start_idx: int, end_idx: int) -> torch.Tensor:
@@ -88,28 +88,30 @@ class Classification(BasicTask):
             return loss_fn(pooled_logits, labels)
 
 
-class GlueSst2(Classification):
+class OneTextClassification(Classification):
     def __init__(self, model: LLMModel) -> None:
         super().__init__(model, label_dtype=torch.long, num_labels=2)
 
     @staticmethod
     def dataload_function(data_point):
-        return data_point["sentence"], [int(data_point["label"])], {"bos": True, "eos": False}
+        return data_point["sentence"], [int(data_point["label"])], {"bos": True, "eos": True}
 
 
-class GlueMrpc(Classification):
+class TwoTextClassification(Classification):
     def __init__(self, model: LLMModel) -> None:
         super().__init__(model, label_dtype=torch.long, num_labels=2)
 
     @staticmethod
     def dataload_function(data_point):
-        return (data_point["sentence1"] + "<s>" + data_point["sentence2"],
-                [int(data_point["label"])], {"bos": True, "eos": False})
+        return (data_point["sentence1"] + " </s> " + data_point["sentence2"],
+                [int(data_point["label"])], {"bos": True, "eos": True})
 
 
 classification_task_dict = {
-    "glue:sst2": GlueSst2,
-    "glue:mrpc": GlueMrpc,
+    "glue:sst2": OneTextClassification,
+    "glue:mrpc": TwoTextClassification,
+    "glue:rte":  TwoTextClassification,
+    "glue:wnli": TwoTextClassification,
 }
 
 
@@ -140,6 +142,10 @@ class TrainConfig:
                 f"error batch_size {self.batch_size_} and micro batch size {self.micro_batch_size_}")
         self.accumulation_step_ = self.batch_size_ / self.micro_batch_size_
         train_paramas.extend(self.task.extra_paramas().values())
+        paramas_count = sum(t.numel()
+                            for t in train_paramas if t.requires_grad)
+        logging.info(
+            f"{self.adapter_name_} total trainable params: {paramas_count}")
         if self.optimizer_name_ == "sgd":
             self.optimizer_ = torch.optim.SGD(
                 train_paramas, lr=self.learning_rate_, momentum=self.momentum_)
@@ -155,9 +161,6 @@ class TrainConfig:
 
     def router_loss(self, router_logits: torch.Tensor) -> torch.Tensor:
         return self.router_loss_fn_(router_logits) / self.accumulation_step_
-
-    def step(self):
-        return self.optimizer_.step()
 
     def save(self, path: str, dir_suffix=""):
         lora_output_dir = path + os.sep + self.adapter_name_
@@ -234,7 +237,7 @@ def train(dispatcher: Dispatcher,
         total_loss.backward()
         for config in configs:
             if step_cnt % config.accumulation_step_ == 0:
-                config.step()
+                config.optimizer_.step()
             if step_cnt % save_step == 0:
                 config.save(save_dir, f"{step_cnt}")
 

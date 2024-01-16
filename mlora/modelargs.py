@@ -78,6 +78,7 @@ class MultiLoraBatchData:
     kv_cache_: KVCache = None
 
     output_router_logits_: bool = False
+    checkpoint_recompute_: bool = True
     inference_seq_pos_: int = -1
     skip_lm_head_: bool = False
 

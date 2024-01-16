@@ -11,11 +11,11 @@ def precompute_mask(input: MultiLoraBatchData,
                     n_head: int,
                     device: str,
                     dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    mask = torch.full((len(input.prompts_), n_head,
+    mask = torch.full((len(input.batch_tokens_), n_head,
                       input.batch_seq_len_, input.batch_seq_len_), float("-inf"))
     mask = torch.triu(mask, diagonal=1).to(torch.float32).cuda(device)
 
-    for idx, _ in enumerate(input.prompts_):
+    for idx, _ in enumerate(input.batch_tokens_):
         zero_len = input.tokens_len_without_pad_[idx]
         inf_len = input.batch_seq_len_ - zero_len
         expand_side = input.expand_side_[idx]
