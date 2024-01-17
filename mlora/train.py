@@ -1,7 +1,7 @@
 from mlora.modelargs import MultiLoraBatchData, LoraConfig, MixConfig
 from mlora.dispatcher import Dispatcher
 from mlora.mix_lora import router_loss_factory
-from mlora.tasks import task_factory
+from mlora.tasks import train_task_factory
 from mlora.model import LLMModel
 
 from typing import Dict, List
@@ -26,10 +26,8 @@ class TrainConfig:
             lora_config) if isinstance(lora_config, MixConfig) else None
         self.accumulation_step_: int = None
         self.optimizer_: torch.optim.Optimizer = None
-        self.task = task_factory(model, train_config)
+        self.task = train_task_factory(model, train_config, lora_weight)
         train_config["dataloader"] = self.task.dataload_function
-        if lora_weight is not None:
-            self.task.load_state_dict(lora_weight)
         if "task_type" in train_config and "data" not in train_config:
             train_config["data"] = train_config["task_type"]
 

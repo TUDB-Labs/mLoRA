@@ -33,6 +33,8 @@ parser.add_argument('--model_type', type=str, default="llama",
                     help='The model type, support: llama, chatglm')
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
+parser.add_argument('--evaluate', action="store_true",
+                    help='The evaluate mode (just for test)')
 parser.add_argument('--disable_prompter', action="store_true",
                     help="Disable prompter when inference")
 parser.add_argument('--load_adapter', action="store_true",
@@ -119,6 +121,12 @@ def init_adapter_config(config: Dict[str, any],
                 adapter_name_=config_class.adapter_name_)
             if not args.disable_prompter:
                 config_class.prompt_template_ = lora_config["prompt"]
+        elif args.evaluate:
+            config_class = mlora.EvaluateConfig(
+                adapter_name_=config_class.adapter_name_, task_type_=lora_config["task_type"],
+                task_=mlora.classification_task_factory(
+                    model, lora_config["task_type"], lora_weight),
+                batch_size_=lora_config["micro_batch_size"])
         else:
             config_class = mlora.TrainConfig(
                 llm_model, lora_config, config_class, lora_weight)
@@ -155,7 +163,7 @@ def inference(llm_model: mlora.LLMModel,
 
 # Main Function
 if __name__ == "__main__":
-    if args.inference:
+    if args.inference or args.evaluate:
         args.load_adapter = True
 
     log_handlers = [logging.StreamHandler()]
@@ -187,6 +195,8 @@ if __name__ == "__main__":
 
     if args.inference:
         inference(model, tokenizer, adapters)
+    elif args.evaluate:
+        mlora.evaluate(model, tokenizer, adapters, config["cutoff_len"])
     else:
         mlora.train(mlora.Dispatcher(config, tokenizer), model,
                     adapters, args.dir, config["save_step"])
