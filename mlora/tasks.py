@@ -53,7 +53,8 @@ class CasualLM(BasicTask):
              logits: torch.Tensor, labels: List) -> torch.Tensor:
         labels = torch.tensor(labels, dtype=torch.long, device=logits.device)
         loss_fn = torch.nn.CrossEntropyLoss()
-        return loss_fn(logits.contiguous().view(-1, self.vocab_size_), labels.contiguous().view(-1))
+        return loss_fn(logits[..., :-1, :].contiguous().view(-1, self.vocab_size_),
+                       labels[..., 1:].contiguous().view(-1))
 
 
 # Sequence Classification
