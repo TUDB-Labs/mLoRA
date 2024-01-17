@@ -125,10 +125,6 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def save_adapter_weight(self, path: str, dir_suffix=""):
-        pass
-
-    @abstractclassmethod
     def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
         pass
 

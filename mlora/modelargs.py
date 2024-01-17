@@ -80,7 +80,6 @@ class MultiLoraBatchData:
     output_router_logits_: bool = False
     checkpoint_recompute_: bool = True
     inference_seq_pos_: int = -1
-    skip_lm_head_: bool = False
 
 
 @dataclass

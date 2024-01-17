@@ -262,13 +262,9 @@ class LlamaModel(LLMModel):
 
     # train model or inference model: output is probs
     def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
-        if isinstance(input.batch_tokens_, torch.Tensor):
-            tokens = input.batch_tokens_.to(self.device_)
-        else:
-            tokens = torch.tensor(input.batch_tokens_,
-                                  dtype=torch.int64).to(self.device_)
+        tokens = input.batch_tokens_.to(self.device_)
 
-        seq_module = self.sequential_module(input.skip_lm_head_)
+        seq_module = self.sequential_module()
 
         if input.inference_seq_pos_ >= 0:
             if input.batch_seq_len_ > 1:
@@ -493,7 +489,7 @@ class LlamaModel(LLMModel):
         return KVCache(batch_size, max_seq_len, self.n_kv_heads_,
                        self.dim_ // self.n_heads_, len(self.layers_), self.device_, self.dtype_)
 
-    def sequential_module(self, skip_lm_head: bool = False) -> torch.nn.Sequential:
+    def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()
 
         seq_module.update(
@@ -507,10 +503,6 @@ class LlamaModel(LLMModel):
 
         seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
         seq_module.move_to_end("norm")
-
-        if not skip_lm_head:
-            seq_module.update({"output": LlamaSequentialWrapper(self.output_)})
-            seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)
 
@@ -526,24 +518,3 @@ class LlamaModel(LLMModel):
             path + os.sep + "adapter_model.bin", map_location=self.device_)
         self.init_lora_layer_weight(lora_config, lora_weight)
         return adapter_name
-
-    def save_adapter_weight(self, path: str, dir_suffix=""):
-        for lora_name, lora_config in self.adapter_configs_.items():
-            lora_output_dir = path + os.sep + lora_name
-            if dir_suffix != "":
-                lora_output_dir += os.sep + \
-                    lora_name + "_" + dir_suffix
-
-            if not os.path.exists(lora_output_dir):
-                os.makedirs(lora_output_dir)
-
-            lora_weight_dict = self.get_lora_weight_dict(
-                lora_name)
-
-            lora_config_dict = lora_config.export()
-
-            torch.save(lora_weight_dict, lora_output_dir +
-                       os.sep + "adapter_model.bin")
-
-            with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
-                json.dump(lora_config_dict, f, indent=4)

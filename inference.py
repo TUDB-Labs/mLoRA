@@ -110,7 +110,6 @@ def main(base_model: str,
             "top_k": top_k,
             "repetition_penalty": repetition_penalty,
             "max_gen_len": max_new_tokens,
-            "device": device
         }
 
         if stream_output:

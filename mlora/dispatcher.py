@@ -194,8 +194,8 @@ class Dispatcher():
     strategy_: str = ""
 
     def __init__(self,
-                 tokenizer: Tokenizer,
-                 config: Dict[str, any]) -> None:
+                 config: Dict[str, any],
+                 tokenizer: Tokenizer) -> None:
         self.tokenizer_ = tokenizer
         self.config_ = config
 

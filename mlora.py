@@ -121,7 +121,7 @@ def init_adapter_config(config: Dict[str, any],
                 config_class.prompt_template_ = lora_config["prompt"]
         else:
             config_class = mlora.TrainConfig(
-                llm_model, lora_config, config_class)
+                llm_model, lora_config, config_class, lora_weight)
         config_list.append(config_class)
 
     return config_list
@@ -144,7 +144,6 @@ def inference(llm_model: mlora.LLMModel,
             config.prompts_ = [input_raw]
         callback = None if args.disable_log else inference_callback
         outputs = mlora.generate(llm_model, tokenizer, adapters,
-                                 device=args.device,
                                  stream_callback=callback)
         print(f"\n{'='*10}\n")
         print(f"PROMPT: {input_raw}")
@@ -189,5 +188,5 @@ if __name__ == "__main__":
     if args.inference:
         inference(model, tokenizer, adapters)
     else:
-        mlora.train(mlora.Dispatcher(tokenizer, config), model,
-                    adapters, args.device, args.dir, config["save_step"])
+        mlora.train(mlora.Dispatcher(config, tokenizer), model,
+                    adapters, args.dir, config["save_step"])
