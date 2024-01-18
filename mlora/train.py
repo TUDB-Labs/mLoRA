@@ -4,7 +4,8 @@ from mlora.mix_lora import router_loss_factory
 from mlora.tasks import train_task_factory
 from mlora.model import LLMModel
 
-from typing import Dict, List
+from transformers import get_linear_schedule_with_warmup
+from typing import Dict, List, Union
 import logging
 import torch
 import json
@@ -22,12 +23,22 @@ class TrainConfig:
         self.optimizer_name_ = train_config["optim"]
         self.learning_rate_ = train_config["lr"]
         self.momentum_ = train_config.get("momentum", 0)
+        self.weight_decay_ = train_config.get("weight_decay", 0.01)
+        self.cls_learning_rate_ = train_config.get(
+            "cls_lr", self.learning_rate_)
+        self.cls_momentum_ = train_config.get("cls_momentum", self.momentum_)
+        self.cls_weight_decay_ = train_config.get(
+            "cls_weight_decay", self.weight_decay_)
+        self.warmup_steps_: Union[int, float] = train_config.get(
+            "warmup_steps", 0)
+        self.all_training_steps_: int = -1
+        self.lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
         self.router_loss_fn_ = router_loss_factory(
             lora_config) if isinstance(lora_config, MixConfig) else None
         self.accumulation_step_: int = None
         self.optimizer_: torch.optim.Optimizer = None
-        self.task = train_task_factory(model, train_config, lora_weight)
-        train_config["dataloader"] = self.task.dataload_function
+        self.task_ = train_task_factory(model, train_config, lora_weight)
+        train_config["dataloader"] = self.task_.dataload_function
         if "task_type" in train_config and "data" not in train_config:
             train_config["data"] = train_config["task_type"]
 
@@ -36,19 +47,41 @@ class TrainConfig:
             raise ValueError(
                 f"error batch_size {self.batch_size_} and micro batch size {self.micro_batch_size_}")
         self.accumulation_step_ = self.batch_size_ / self.micro_batch_size_
-        train_paramas.extend(self.task.state_dict().values())
         paramas_count = sum(t.numel()
                             for t in train_paramas if t.requires_grad)
+        classifier_paramas = self.task_.state_dict().values()
         logging.info(
             f"{self.adapter_name_} total trainable params: {paramas_count}")
         if self.optimizer_name_ == "sgd":
             self.optimizer_ = torch.optim.SGD(
-                train_paramas, lr=self.learning_rate_, momentum=self.momentum_)
+                train_paramas, lr=self.learning_rate_,
+                momentum=self.momentum_, weight_decay=self.weight_decay_)
+            if len(classifier_paramas) > 0:
+                self.optimizer_.add_param_group(
+                    {"params": classifier_paramas,
+                     "lr": self.cls_learning_rate_,
+                     "momentum": self.cls_momentum_,
+                     "weight_decay": self.cls_weight_decay_})
         elif self.optimizer_name_ == "adamw":
             self.optimizer_ = torch.optim.AdamW(
-                train_paramas, lr=self.learning_rate_)
+                train_paramas, lr=self.learning_rate_, weight_decay=self.weight_decay_)
+            if len(classifier_paramas) > 0:
+                self.optimizer_.add_param_group(
+                    {"params": classifier_paramas,
+                     "lr": self.cls_learning_rate_,
+                     "weight_decay": self.cls_weight_decay_})
         else:
             raise ValueError(f"unkown optimizer {self.optimizer_name_}")
+
+    def step_lr_scheduler(self, total_epoch, len_dataset):
+        if self.lr_scheduler_ is None:
+            total_steps = (len_dataset // self.batch_size_)*total_epoch if len_dataset % self.batch_size_ == 0 else (
+                len_dataset // self.batch_size_ + 1)*total_epoch
+            warmup_steps = self.warmup_steps_ * \
+                total_steps if isinstance(
+                    self.warmup_steps_, float) else self.warmup_steps_
+            self.lr_scheduler_ = get_linear_schedule_with_warmup(
+                self.optimizer_, warmup_steps, total_steps)
 
 
 def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suffix=""):
@@ -63,7 +96,7 @@ def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suf
     lora_weight_dict = model.get_lora_weight_dict(config.adapter_name_)
     lora_config_dict = model.adapter_configs_[config.adapter_name_].export()
 
-    extra_paramas = config.task.state_dict()
+    extra_paramas = config.task_.state_dict()
     if len(extra_paramas) > 0:
         lora_weight_dict.update(extra_paramas)
 
@@ -97,7 +130,10 @@ def train(dispatcher: Dispatcher,
             input.batch_tokens_, dtype=torch.long, device=model.device_)
         input.output_router_logits_ = output_router_logits
 
-        for config in configs:
+        for task in dispatcher.running_train_task_:
+            config = config_dict[task.adapter_name_]
+            config.step_lr_scheduler(
+                task.total_epoch_num_, len(task.train_token_data_))
             config.optimizer_.zero_grad()
 
         step_cnt += 1
@@ -107,7 +143,7 @@ def train(dispatcher: Dispatcher,
         total_loss = None
         for idx, lora_config in enumerate(input.lora_batch_data_config_):
             train_config = config_dict[lora_config.adapter_name_]
-            train_task = train_config.task
+            train_task = train_config.task_
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
             logits = train_task.forward(output[start_idx:end_idx])
@@ -131,9 +167,12 @@ def train(dispatcher: Dispatcher,
                 total_loss += loss
 
         total_loss.backward()
-        for config in configs:
+        for task in dispatcher.running_train_task_:
+            config = config_dict[task.adapter_name_]
             if step_cnt % config.accumulation_step_ == 0:
                 config.optimizer_.step()
+                config.lr_scheduler_.step()
+
             if step_cnt % save_step == 0:
                 save_adapter_weight(model, config, save_dir, f"{step_cnt}")
 

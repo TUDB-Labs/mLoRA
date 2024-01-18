@@ -102,13 +102,14 @@ class SequenceClassification(BasicTask):
             labels, dtype=self.label_dtype_, device=logits.device)
         pooled_logits = self._pool_logits(input_ids, logits)
         if self.task_type_ == "regression":
-            pooled_logits = pooled_logits[:, 0]
+            if self.num_labels_ == 1:
+                pooled_logits = pooled_logits[:, 0]
         elif self.task_type_ == "single_label_classification":
             pooled_logits = torch.argmax(
                 pooled_logits, dim=-1).to(self.label_dtype_)
         elif self.task_type_ != "multi_label_classification":
             raise ValueError(f"unknown task type {self.task_type_}")
-        return pooled_logits, labels
+        return pooled_logits, labels.squeeze()
 
     def loss(self, input_ids: torch.Tensor,
              logits: torch.Tensor, labels: List) -> torch.Tensor:
@@ -117,7 +118,10 @@ class SequenceClassification(BasicTask):
         pooled_logits = self._pool_logits(input_ids, logits)
         if self.task_type_ == "regression":
             loss_fn = torch.nn.MSELoss()
-            return loss_fn(pooled_logits.squeeze(), labels.squeeze())
+            if self.num_labels_ == 1:
+                return loss_fn(pooled_logits.squeeze(), labels.squeeze())
+            else:
+                return loss_fn(pooled_logits, labels)
         elif self.task_type_ == "single_label_classification":
             loss_fn = torch.nn.CrossEntropyLoss()
             return loss_fn(pooled_logits.view(-1, self.num_labels_), labels.view(-1))
