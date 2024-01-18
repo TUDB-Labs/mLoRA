@@ -19,7 +19,7 @@ jobs:
           current_branch="${{ steps.branch_name.outputs.branch }}"
           cd /workspace
           rm -rf ./multi-lora-fine-tune
-          git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+          git clone -b $current_branch --single-branch https://github.com/TUDB-Labs/multi-lora-fine-tune.git
 
       - name: finetune llama-7b
         run: |
@@ -43,7 +43,7 @@ jobs:
           current_branch="${{ steps.branch_name.outputs.branch }}"
           cd /workspace
           rm -rf ./multi-lora-fine-tune
-          git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+          git clone -b $current_branch --single-branch https://github.com/TUDB-Labs/multi-lora-fine-tune.git
 
       - name: finetune vicuna-7b-v1.1
         run: |
@@ -67,7 +67,7 @@ jobs:
           current_branch="${{ steps.branch_name.outputs.branch }}"
           cd /workspace
           rm -rf ./multi-lora-fine-tune
-          git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+          git clone -b $current_branch --single-branch https://github.com/TUDB-Labs/multi-lora-fine-tune.git
 
       - name: finetune chatglm2-6b
         run: |
@@ -91,7 +91,7 @@ jobs:
           current_branch="${{ steps.branch_name.outputs.branch }}"
           cd /workspace
           rm -rf ./multi-lora-fine-tune
-          git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+          git clone -b $current_branch --single-branch https://github.com/TUDB-Labs/multi-lora-fine-tune.git
 
       - name: finetune llama-7b with mixlora
         run: |
