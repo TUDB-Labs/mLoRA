@@ -140,7 +140,7 @@ classification_task_dict = {
         "num_labels": 2,
         "label_dtype": torch.long,
         "dataload_function": lambda data_point: (
-            data_point["sentence"],
+            [data_point["sentence"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True}
         ),
@@ -150,7 +150,7 @@ classification_task_dict = {
         "num_labels": 3,
         "label_dtype": torch.long,
         "dataload_function": lambda data_point: (
-            data_point["premise"] + " </s> " + data_point["hypothesis"],
+            [data_point["premise"], data_point["hypothesis"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
@@ -160,7 +160,7 @@ classification_task_dict = {
         "num_labels": 2,
         "label_dtype": torch.long,
         "dataload_function": lambda data_point: (
-            data_point["sentence1"] + " </s> " + data_point["sentence2"],
+            [data_point["sentence1"], data_point["sentence2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
@@ -170,7 +170,7 @@ classification_task_dict = {
         "num_labels": 2,
         "label_dtype": torch.long,
         "dataload_function": lambda data_point: (
-            data_point["question"] + " </s> " + data_point["sentence"],
+            [data_point["question"], data_point["sentence"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
@@ -180,7 +180,7 @@ classification_task_dict = {
         "num_labels": 2,
         "label_dtype": torch.long,
         "dataload_function": lambda data_point: (
-            data_point["question1"] + " </s> " + data_point["question2"],
+            [data_point["question1"], data_point["question2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
@@ -200,7 +200,7 @@ classification_task_dict = {
         "num_labels": 2,
         "label_dtype": torch.long,
         "dataload_function": lambda data_point: (
-            data_point["sentence"],
+            [data_point["sentence"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
@@ -210,7 +210,7 @@ classification_task_dict = {
         "num_labels": 1,
         "label_dtype": torch.float,
         "dataload_function": lambda data_point: (
-            data_point["sentence1"] + " </s> " + data_point["sentence2"],
+            [data_point["sentence1"], data_point["sentence2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
