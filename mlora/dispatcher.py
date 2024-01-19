@@ -96,6 +96,8 @@ class TrainTask():
         ret: List[TrainData] = []
         for idx, data_point in enumerate(data):
             inputs, labels, flags = self.dataload_function_(data_point)
+            assert isinstance(inputs, List)
+            assert isinstance(labels, List) or labels is None
             if is_train_data:
                 tokens = []
                 for text in inputs:

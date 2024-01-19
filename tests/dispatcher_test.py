@@ -27,7 +27,8 @@ class TestDataSet(unittest.TestCase):
                              lora["data"],
                              -1,
                              lora["test_data"],
-                             lora["prompt"],
+                             lambda data_point: (
+                                 [""], None, {"bos": True, "eos": True}),
                              lora["num_epochs"],
                              lora["batch_size"],
                              lora["micro_batch_size"],
