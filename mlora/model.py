@@ -131,5 +131,6 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
+    def forward(self, input: MultiLoraBatchData,
+                kv_cache: KVCache = None) -> torch.Tensor:
         pass
