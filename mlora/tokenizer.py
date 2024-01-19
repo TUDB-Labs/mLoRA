@@ -25,5 +25,12 @@ class Tokenizer:
             ret = ret + [self.eos_id_]
         return ret
 
+    def attention_mask(self, tokens: Tokens) -> Tokens:
+        mask = []
+        special_tokens = [self.pad_id_]
+        for tok in tokens:
+            mask.append(1 if tok in special_tokens else 0)
+        return mask
+
     def decode(self, data: Tokens) -> str:
         return self.tokenizer.decode(data)

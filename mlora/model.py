@@ -7,38 +7,28 @@ from abc import ABCMeta, abstractclassmethod
 from typing import Tuple, Dict, List, Optional
 
 
-def precompute_mask(input: MultiLoraBatchData,
-                    n_head: int,
+def precompute_mask(tokens: torch.Tensor,
+                    attention_masks: List[int],
+                    n_heads: int,
+                    seq_start_pos: int,
                     device: str,
-                    dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    mask = torch.full((len(input.prompts_), n_head,
-                      input.batch_seq_len_, input.batch_seq_len_), float("-inf"))
-    mask = torch.triu(mask, diagonal=1).to(torch.float32).cuda(device)
+                    dtype: torch.dtype) -> torch.Tensor:
+    batch_size, batch_seq_len = tokens.shape
 
-    for idx, _ in enumerate(input.prompts_):
-        zero_len = input.tokens_len_without_pad_[idx]
-        inf_len = input.batch_seq_len_ - zero_len
-        expand_side = input.expand_side_[idx]
+    mask = torch.full((batch_size, n_heads, batch_seq_len, batch_seq_len),
+                      float("-inf"), device=device, dtype=torch.float32)
+    mask = torch.triu(mask, diagonal=(seq_start_pos + 1))
 
-        if expand_side == "right":
-            mask[idx] += torch.tensor([0] * zero_len + [float("-inf")] * inf_len).expand(
-                input.batch_seq_len_, input.batch_seq_len_).cuda(device)
-        else:
-            mask[idx] += torch.tensor([float("-inf")] * inf_len + [0] * zero_len).expand(
-                input.batch_seq_len_, input.batch_seq_len_).cuda(device)
+    if attention_masks is not None:
+        attention_masks = torch.tensor(
+            attention_masks, dtype=torch.bool, device=device)
+        attention_masks = attention_masks.view(batch_size, 1, 1, batch_seq_len)
+        attention_masks = attention_masks.expand(-1,
+                                                 n_heads, batch_seq_len, -1)
+        mask = torch.masked_fill(mask, attention_masks, float("-inf"))
 
     mask.requires_grad_(False)
-    return mask.to(dtype)
-
-
-def precompute_mask_for_inference(input: MultiLoraBatchData,
-                                  seq_pos: int,
-                                  device: str,
-                                  dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    mask = torch.full((1, 1, input.batch_seq_len_,
-                      input.batch_seq_len_), float("-inf"), device=device)
-    mask = mask.to(torch.float32).triu(diagonal=(seq_pos + 1))
-    return mask.to(dtype)
+    return mask.to(device=device, dtype=dtype)
 
 
 def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -125,10 +115,6 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def save_adapter_weight(self, path: str, dir_suffix=""):
-        pass
-
-    @abstractclassmethod
     def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
         pass
 
@@ -145,5 +131,6 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
+    def forward(self, input: MultiLoraBatchData,
+                kv_cache: KVCache = None) -> torch.Tensor:
         pass

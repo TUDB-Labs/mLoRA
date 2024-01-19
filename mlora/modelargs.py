@@ -28,8 +28,8 @@ class LLMModelArgs:
     vocab_size_: int = -1
     pad_token_id_: int = -1
     max_seq_len_: int = 2048
-    device: str = ""
-    dtype: torch.dtype = None
+    device_: str = ""
+    dtype_: torch.dtype = None
 
 
 @dataclass
@@ -49,38 +49,30 @@ class KVCache:
                 (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device, dtype=dtype))
             self.cache_v.append(torch.zeros(
                 (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device, dtype=dtype))
-        self.seq_pos: int = 0
 
     def update(self, xk: torch.Tensor, xv: torch.Tensor, layer_idx: int,
-               bsz: int, seq_len: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.cache_k[layer_idx][:bsz,
-                                self.seq_pos: self.seq_pos + seq_len] = xk
-        self.cache_v[layer_idx][:bsz,
-                                self.seq_pos: self.seq_pos + seq_len] = xv
+               bsz: int, seq_len: int, seq_pos: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        self.cache_k[layer_idx][:bsz, seq_pos: seq_pos + seq_len] = xk
+        self.cache_v[layer_idx][:bsz, seq_pos: seq_pos + seq_len] = xv
 
-        return self.cache_k[layer_idx][:bsz, :self.seq_pos + seq_len], \
-            self.cache_v[layer_idx][:bsz, :self.seq_pos + seq_len]
+        return self.cache_k[layer_idx][:bsz, :seq_pos + seq_len], \
+            self.cache_v[layer_idx][:bsz, :seq_pos + seq_len]
 
 
 @dataclass
 class MultiLoraBatchData:
-    prompts_: List[str] = None
     lora_batch_data_config_: List[LoraBatchDataConfig] = None
 
-    # batch seq len
-    # the expand right and tokens without pad len
-    # be need by the mask matrix
-    batch_seq_len_: int = None
-    expand_side_: List[str] = None
-
     batch_tokens_: List[Tokens] = None
-    tokens_len_without_pad_: Tokens = None
-
-    router_logits_: List[List] = None
-    kv_cache_: KVCache = None
+    attention_masks_: List[Tokens] = None
 
     output_router_logits_: bool = False
-    inference_model_: bool = False
+    gradient_checkpoint_: bool = True
+    inference_seq_pos_: int = -1
+
+    @property
+    def inference_mode_(self) -> bool:
+        return self.inference_seq_pos_ >= 0
 
 
 @dataclass
