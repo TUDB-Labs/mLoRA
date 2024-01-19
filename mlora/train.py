@@ -125,9 +125,7 @@ def train(dispatcher: Dispatcher,
 
     step_cnt = 0
     while not dispatcher.check_task_done():
-        input: MultiLoraBatchData = dispatcher.get_train_data()
-        input.batch_tokens_ = torch.tensor(
-            input.batch_tokens_, dtype=torch.long, device=model.device_)
+        batch_labels, input = dispatcher.get_train_data()
         input.output_router_logits_ = output_router_logits
 
         for task in dispatcher.running_train_task_:
@@ -147,8 +145,8 @@ def train(dispatcher: Dispatcher,
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
             logits = train_task.forward(output[start_idx:end_idx])
-            loss = train_task.loss(input.batch_tokens_[start_idx:end_idx],
-                                   logits, input.batch_labels_[start_idx:end_idx])
+            loss = train_task.loss(logits, batch_labels[start_idx:end_idx],
+                                   input.batch_tokens_[start_idx:end_idx])
             loss = loss / train_config.accumulation_step_
             if router_outputs is not None and len(router_outputs[idx]) > 0:
                 router_loss = train_config.router_loss_fn_(router_outputs[idx])

@@ -61,25 +61,18 @@ class KVCache:
 
 @dataclass
 class MultiLoraBatchData:
-    prompts_: List[str] = None
     lora_batch_data_config_: List[LoraBatchDataConfig] = None
 
-    # batch seq len
-    # the expand right and tokens without pad len
-    # be need by the mask matrix
-    batch_seq_len_: int = None
-    expand_side_: List[str] = None
-
     batch_tokens_: List[Tokens] = None
-    batch_labels_: List[List] = None
-    tokens_len_without_pad_: List[int] = None
-
-    router_logits_: List[List] = None
-    kv_cache_: KVCache = None
+    attention_masks_: List[Tokens] = None
 
     output_router_logits_: bool = False
-    checkpoint_recompute_: bool = True
+    gradient_checkpoint_: bool = True
     inference_seq_pos_: int = -1
+
+    @property
+    def inference_mode_(self) -> bool:
+        return self.inference_seq_pos_ >= 0
 
 
 @dataclass

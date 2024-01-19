@@ -16,7 +16,6 @@ Tokens = List[int]
 
 @dataclass
 class TrainData:
-    prompt_: str = ""
     tokens_: Tokens = None
     labels_: List = None
 
@@ -96,15 +95,19 @@ class TrainTask():
                       is_train_data: bool = True) -> List[TrainData]:
         ret: List[TrainData] = []
         for idx, data_point in enumerate(data):
-            input, label, flags = self.dataload_function_(data_point)
+            inputs, labels, flags = self.dataload_function_(data_point)
             if is_train_data:
-                tokens = self.tokenizer_.encode(input, **flags)
+                tokens = []
+                for text in inputs:
+                    tokens.extend(self.tokenizer_.encode(text, **flags))
                 if len(tokens) > self.train_cutoff_len_:
                     tokens = tokens[:self.train_cutoff_len_]
             else:
-                tokens = self.tokenizer_.encode(input, **flags)
+                tokens = []
+                for text in inputs:
+                    tokens.extend(self.tokenizer_.encode(text, **flags))
 
-            ret.append(TrainData(prompt_=input, tokens_=tokens, labels_=label))
+            ret.append(TrainData(tokens_=tokens, labels_=labels))
             if idx % 10000 == 0:
                 logging.info(
                     f"Encode text data {self.adapter_name_}: {idx}/{len(data)}")
@@ -323,11 +326,9 @@ class Dispatcher():
 
         # all prompts and tokens / config
         batch_seq_len = math.ceil(batch_seq_len / 8) * 8
-        prompts: List[str] = []
-        expand_side: List[str] = []
         batch_tokens: List[Tokens] = []
+        attention_masks: List[Tokens] = []
         batch_labels: List[List] = []
-        tokens_len_without_pad: List[int] = []
         lora_batch_data_config: List[LoraBatchDataConfig] = []
 
         # batch the all adapter data
@@ -336,9 +337,7 @@ class Dispatcher():
             adapter_end_idx: int = adapter_start_idx + \
                 len(all_train_data[adapter])
             for data in all_train_data[adapter]:
-                prompts.append(data.prompt_)
                 tokens: Tokens = data.tokens_.copy()
-                tokens_len_without_pad.append(len(tokens))
                 # get the pad token from lora config
                 lora_config = None
                 for ilora_conf in self.config_["lora"]:
@@ -352,8 +351,8 @@ class Dispatcher():
                         tokens.append(self.tokenizer_.pad_id_)
                     else:
                         tokens.insert(0, self.tokenizer_.pad_id_)
-                expand_side.append(pad_side)
                 batch_tokens.append(tokens)
+                attention_masks.append(self.tokenizer_.attention_mask(tokens))
                 labels: List = data.labels_
                 if labels is None:
                     labels = tokens.copy()
@@ -368,10 +367,6 @@ class Dispatcher():
 
         self.__dispatch_task_out()
 
-        return MultiLoraBatchData(prompts_=prompts,
-                                  lora_batch_data_config_=lora_batch_data_config,
-                                  batch_seq_len_=batch_seq_len,
-                                  expand_side_=expand_side,
-                                  batch_tokens_=batch_tokens,
-                                  batch_labels_=batch_labels,
-                                  tokens_len_without_pad_=tokens_len_without_pad)
+        return batch_labels, MultiLoraBatchData(lora_batch_data_config_=lora_batch_data_config,
+                                                batch_tokens_=batch_tokens,
+                                                attention_masks_=attention_masks)

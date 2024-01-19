@@ -145,11 +145,9 @@ def generate(model: LLMModel,
     for cur_pos in range(min_tokens_len, total_len):
         input_data = MultiLoraBatchData(
             lora_batch_data_config_=batch_data_config,
-            batch_seq_len_=(cur_pos - prev_pos),
-            batch_tokens_=tokens[:, prev_pos:cur_pos],
-            kv_cache_=kv_cache,
+            batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
             inference_seq_pos_=prev_pos)
-        logits = lm_head.forward(model.forward(input_data)[0])
+        logits = lm_head.forward(model.forward(input_data, kv_cache)[0])
         probs = logits[:, -1]
 
         if repetition_penalty > 0:

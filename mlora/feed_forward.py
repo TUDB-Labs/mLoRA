@@ -3,7 +3,7 @@ from mlora.lora_liner import Linear
 from mlora.mix_lora import moe_layer_factory
 from mlora.model import RMSNorm
 
-from typing import Optional
+from typing import List, Optional
 import torch
 
 
@@ -22,14 +22,15 @@ class FeedForward(torch.nn.Module):
         # mix of experts
         self.moes_: torch.ModuleDict = {}
 
-    def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData,
+                router_logits: List[List] = None) -> torch.Tensor:
         if len(self.moes_) == 0:
             score_norm_data = self.norm_.forward(data)
             w1 = self.w1_.forward(score_norm_data, input_args)
             w3 = self.w3_.forward(score_norm_data, input_args)
             return self.w2_.forward(self.act_(w1) * w3, input_args)
         else:
-            return self._mixlora_forward(data, input_args)
+            return self._mixlora_forward(data, input_args, router_logits)
 
     # LoRA
     def _lora_forward(self, lora_name, act_fn, norm_data):
@@ -65,7 +66,8 @@ class FeedForward(torch.nn.Module):
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
         return self._lora_forward(lora_name, act_fn, norm_data)
 
-    def _mixlora_forward(self, data: torch.Tensor, input_args: MultiLoraBatchData):
+    def _mixlora_forward(self, data: torch.Tensor, input_args: MultiLoraBatchData,
+                         router_logits: List[List] = None):
         final_hidden_states = None
         for idx, lora_config in enumerate(input_args.lora_batch_data_config_):
             moe_name = lora_config.adapter_name_
@@ -76,9 +78,8 @@ class FeedForward(torch.nn.Module):
                 current_hidden_states, current_router_outputs = self.moes_[
                     moe_name].forward(self.norm_, self._expert_forward_callback, data[start_idx:end_idx])
 
-                if input_args.router_logits_ is not None and current_router_outputs is not None:
-                    input_args.router_logits_[idx].append(
-                        current_router_outputs)
+                if router_logits is not None and current_router_outputs is not None:
+                    router_logits[idx].append(current_router_outputs)
             else:
                 score_norm_data = self.norm_(data[start_idx:end_idx])
                 current_hidden_states = self._lora_forward(

@@ -27,8 +27,8 @@ class BasicTask():
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         pass
 
-    def loss(self, input_ids: torch.Tensor,
-             logits: torch.Tensor, labels: List) -> torch.Tensor:
+    def loss(self, logits: torch.Tensor, labels: List,
+             batch_tokens: List = None) -> torch.Tensor:
         pass
 
 
@@ -41,16 +41,17 @@ class CasualLM(BasicTask):
         self.prompter_ = prompter
 
     def dataload_function(self, data_point):
-        return self.prompter_.generate_prompt(
+        return ([self.prompter_.generate_prompt(
             data_point["instruction"],
             data_point.get("input", None),
-            data_point.get("output", None)), None, {"bos": True, "eos": True}
+            data_point.get("output", None))],
+            None, {"bos": True, "eos": True})
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.lm_head_(hidden_states)
 
-    def loss(self, input_ids: torch.Tensor,
-             logits: torch.Tensor, labels: List) -> torch.Tensor:
+    def loss(self, logits: torch.Tensor, labels: List,
+             batch_tokens: List = None) -> torch.Tensor:
         labels = torch.tensor(labels, dtype=torch.long, device=logits.device)
         loss_fn = torch.nn.CrossEntropyLoss()
         return loss_fn(logits[..., :-1, :].contiguous().view(-1, self.vocab_size_),
@@ -87,20 +88,21 @@ class SequenceClassification(BasicTask):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.score_(hidden_states.to(torch.float32))
 
-    def _pool_logits(self, input_ids: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
-        batch_size = input_ids.shape[0]
-        if self.pad_id_ is None:
+    def _pool_logits(self, batch_tokens: List, logits: torch.Tensor) -> torch.Tensor:
+        batch_size = logits.shape[0]
+        if batch_tokens is None or self.pad_id_ is None:
             sequence_lengths = -1
         else:
+            input_ids = torch.tensor(batch_tokens, dtype=torch.long)
             sequence_lengths = (
                 torch.eq(input_ids, self.pad_id_).int().argmax(-1) - 1).to(logits.device)
         return logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
-    def evaluate(self, input_ids: torch.Tensor,
-                 logits: torch.Tensor, labels: List) -> Tuple:
+    def evaluate(self, logits: torch.Tensor, labels: List,
+                 batch_tokens: List = None) -> Tuple:
         labels = torch.tensor(
             labels, dtype=self.label_dtype_, device=logits.device)
-        pooled_logits = self._pool_logits(input_ids, logits)
+        pooled_logits = self._pool_logits(batch_tokens, logits)
         if self.task_type_ == "regression":
             if self.num_labels_ == 1:
                 pooled_logits = pooled_logits[:, 0]
@@ -111,11 +113,11 @@ class SequenceClassification(BasicTask):
             raise ValueError(f"unknown task type {self.task_type_}")
         return pooled_logits, labels.squeeze()
 
-    def loss(self, input_ids: torch.Tensor,
-             logits: torch.Tensor, labels: List) -> torch.Tensor:
+    def loss(self, logits: torch.Tensor, labels: List,
+             batch_tokens: List = None) -> torch.Tensor:
         labels = torch.tensor(
             labels, dtype=self.label_dtype_, device=logits.device)
-        pooled_logits = self._pool_logits(input_ids, logits)
+        pooled_logits = self._pool_logits(batch_tokens, logits)
         if self.task_type_ == "regression":
             loss_fn = torch.nn.MSELoss()
             if self.num_labels_ == 1:
@@ -188,7 +190,7 @@ classification_task_dict = {
         "num_labels": 2,
         "label_dtype": torch.long,
         "dataload_function": lambda data_point: (
-            data_point["sentence1"] + " </s> " + data_point["sentence2"],
+            [data_point["sentence1"], data_point["sentence2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
@@ -289,8 +291,8 @@ def evaluate(model: LLMModel,
         batch_data_config = []
         current_configs = []
         batch_tokens = []
+        atten_masks = []
         batch_labels = []
-        tokens_len = []
         for config in configs:
             if config.batch_start_idx_ >= len(config.data_):
                 continue
@@ -300,15 +302,17 @@ def evaluate(model: LLMModel,
             for idx in range(config.batch_start_idx_, config.batch_end_idx_):
                 if idx >= len(config.data_):
                     break
-                text, label, kwargs = config.dataload(config.data_[idx])
-                batch_labels.append(label)
-                tokens = tokenizer.encode(data=text, **kwargs)
+                texts, labels, kwargs = config.dataload(config.data_[idx])
+                tokens = []
+                for text in texts:
+                    tokens.extend(tokenizer.encode(data=text, **kwargs))
                 if len(tokens) > max_seq_len:
                     tokens = tokens[:max_seq_len]
-                tokens_len.append(len(tokens))
                 while len(tokens) < max_seq_len:
                     tokens.append(tokenizer.pad_id_)
                 batch_tokens.append(tokens)
+                atten_masks.append(tokenizer.attention_mask(tokens))
+                batch_labels.append(labels.copy())
 
             config.batch_start_idx_ = config.batch_end_idx_
             current_configs.append(config)
@@ -318,17 +322,11 @@ def evaluate(model: LLMModel,
         if len(current_configs) == 0:
             break
 
-        batch_tokens = torch.tensor(
-            batch_tokens, dtype=torch.long, device=device)
-
         input_data = MultiLoraBatchData(
             lora_batch_data_config_=batch_data_config,
-            batch_seq_len_=max_seq_len,
-            expand_side_=["right"]*batch_tokens.shape[0],
             batch_tokens_=batch_tokens,
-            tokens_len_without_pad_=tokens_len,
-            checkpoint_recompute_=False,
-            inference_seq_pos_=-1)
+            attention_masks_=atten_masks,
+            gradient_checkpoint_=False)
 
         outputs = model.forward(input_data)[0]
 
@@ -338,10 +336,9 @@ def evaluate(model: LLMModel,
             metric = task_config.metric_
             start_idx = config.batch_start_idx_
             end_idx = config.batch_end_idx_
-            input_ids = batch_tokens[start_idx:end_idx]
             logits = task.forward(outputs[start_idx:end_idx])
             predictions, references = task.evaluate(
-                input_ids, logits, batch_labels[start_idx:end_idx])
+                logits, batch_labels[start_idx:end_idx], batch_tokens[start_idx:end_idx])
             metric.add_batch(predictions=predictions, references=references)
             logging.info(f"{config.adapter_name_} evaluate data:")
             logging.info(
