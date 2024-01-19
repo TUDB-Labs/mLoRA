@@ -280,7 +280,6 @@ def evaluate(model: LLMModel,
              tokenizer: Tokenizer,
              configs: List[EvaluateConfig],
              max_seq_len: int = 512):
-    device = torch.device(model.device_)
     max_iterations = 0
     for config in configs:
         config.init_task()

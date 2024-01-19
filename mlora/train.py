@@ -1,4 +1,4 @@
-from mlora.modelargs import MultiLoraBatchData, LoraConfig, MixConfig
+from mlora.modelargs import LoraConfig, MixConfig
 from mlora.dispatcher import Dispatcher
 from mlora.mix_lora import router_loss_factory
 from mlora.tasks import train_task_factory
@@ -75,8 +75,8 @@ class TrainConfig:
 
     def step_lr_scheduler(self, total_epoch, len_dataset):
         if self.lr_scheduler_ is None:
-            total_steps = (len_dataset // self.batch_size_)*total_epoch if len_dataset % self.batch_size_ == 0 else (
-                len_dataset // self.batch_size_ + 1)*total_epoch
+            total_steps = (len_dataset // self.batch_size_) * total_epoch if len_dataset % self.batch_size_ == 0 else (
+                len_dataset // self.batch_size_ + 1) * total_epoch
             warmup_steps = self.warmup_steps_ * \
                 total_steps if isinstance(
                     self.warmup_steps_, float) else self.warmup_steps_
