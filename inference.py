@@ -87,7 +87,6 @@ def main(base_model: str,
         temperature=0.1,
         top_p=0.75,
         top_k=40,
-        repetition_penalty=1.1,
         max_new_tokens=128,
         stream_output=False,
     ):
@@ -98,13 +97,12 @@ def main(base_model: str,
         generation_config.prompts_ = [(instruction, input)]
 
         generate_params = {
-            "model": model,
+            "llm_model": model,
             "tokenizer": tokenizer,
             "configs": [generation_config],
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,
-            "repetition_penalty": repetition_penalty,
             "max_gen_len": max_new_tokens,
             "device": device
         }
@@ -142,19 +140,16 @@ def main(base_model: str,
                 minimum=0, maximum=1, value=1, label="Temperature"
             ),
             gr.components.Slider(
-                minimum=0, maximum=1, value=0.9, label="Sampling Top-P"
+                minimum=0, maximum=1, value=0.9, label="Top-p"
             ),
             gr.components.Slider(
-                minimum=0, maximum=100, step=1, value=40, label="Sampling Top-K"
+                minimum=0, maximum=100, step=1, value=40, label="Top-k"
             ),
             gr.components.Slider(
-                minimum=0, maximum=2, value=1.1, label="Repetition Penalty"
-            ),
-            gr.components.Slider(
-                minimum=1, maximum=2000, step=1, value=128, label="Max Tokens"
+                minimum=1, maximum=2000, step=1, value=128, label="Max tokens"
             ),
             gr.components.Checkbox(
-                label="Stream Output", value=True
+                label="Stream output", value=True
             ),
         ],
         outputs=[
