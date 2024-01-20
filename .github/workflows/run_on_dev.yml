@@ -78,22 +78,3 @@ jobs:
         run: |
           cd /workspace/multi-lora-fine-tune
           python .github/workflows/ci_script.py "chatglm" "/data/THUDM/chatglm2-6b" "./lora_0" "Say something."
-
-  test-mixlora:
-    runs-on: self-hosted
-    steps:
-      - name: Get Branch Name
-        id: branch_name
-        run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
-
-      - name: clone repository
-        run: |
-          current_branch="${{ steps.branch_name.outputs.branch }}"
-          cd /workspace
-          rm -rf ./multi-lora-fine-tune
-          git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
-
-      - name: finetune llama-7b with mixlora
-        run: |
-          cd /workspace/multi-lora-fine-tune
-          python mlora.py --base_model /data/llama-7b-hf --config ./config/finetune_mixlora.json --load_8bit

@@ -1,4 +1,4 @@
-from mlora.modelargs import KVCache, LoraConfig, MultiLoraBatchData
+from mlora.modelargs import MultiLoraBatchData
 
 import torch
 import einops
@@ -28,16 +28,6 @@ def precompute_mask(input: MultiLoraBatchData,
                 input.batch_seq_len_, input.batch_seq_len_).cuda(device)
 
     mask.requires_grad_(False)
-    return mask.to(dtype)
-
-
-def precompute_mask_for_inference(input: MultiLoraBatchData,
-                                  seq_pos: int,
-                                  device: str,
-                                  dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    mask = torch.full((1, 1, input.batch_seq_len_,
-                      input.batch_seq_len_), float("-inf"), device=device)
-    mask = mask.to(torch.float32).triu(diagonal=(seq_pos + 1))
     return mask.to(dtype)
 
 
@@ -112,11 +102,20 @@ class RMSNorm(torch.nn.Module):
 
 class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
-    def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
+    def forward(self, input: MultiLoraBatchData):
         pass
 
     @abstractclassmethod
-    def load_adapter_weight(self, path: str, adapter_name: str = None):
+    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+        pass
+
+    @abstractclassmethod
+    def init_lora_weight(self, adapter_name: str,
+                         r: int,
+                         lora_alpha: int,
+                         lora_dropout: float,
+                         target: Dict[str, bool],
+                         weight: Optional[Dict[str, torch.Tensor]]):
         pass
 
     @abstractclassmethod
@@ -124,25 +123,5 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def save_adapter_weight(self, path: str, dir_suffix=""):
-        pass
-
-    @abstractclassmethod
-    def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
-        pass
-
-    @abstractclassmethod
     def sequential_module(self) -> torch.nn.Sequential:
-        pass
-
-    @abstractclassmethod
-    def get_generate_paramas(self) -> Dict[str, any]:
-        pass
-
-    @abstractclassmethod
-    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
-        pass
-
-    @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
         pass

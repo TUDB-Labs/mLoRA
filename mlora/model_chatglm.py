@@ -1,9 +1,8 @@
-from mlora.modelargs import LLMModelArgs, MultiLoraBatchData, LoraConfig, MixConfig, lora_config_factory
+from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import LLMModel, RMSNorm
 from mlora.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
-from mlora.lora_liner import Linear
-from mlora.generate import GenerateConfig
+from mlora.LoraLiner import Linear
 
 import torch
 import torch.nn.functional as F
@@ -11,10 +10,6 @@ import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import AutoModel
 from typing import List, Dict, Optional, Tuple
-from huggingface_hub import snapshot_download
-import os
-import json
-import logging
 
 
 def swiglu(x: torch.Tensor) -> torch.Tensor:
@@ -43,21 +38,25 @@ class Transformer:
         self.head_dim_ = args.dim_ // args.n_heads_
         self.hidden_dropout_ = args.hidden_dropout_
 
-    def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
-        assert not isinstance(config, MixConfig)
-
+    def init_lora_layer_weight(self,
+                               adapter_name: str,
+                               r: int,
+                               lora_alpha: int,
+                               lora_dropout: float,
+                               target: Dict[str, bool],
+                               weight: Optional[Dict[str, torch.Tensor]]):
         linear_layer_list = [self.query_key_value_,
                              self.dense_, self.dense_h_to_4h_, self.dense_4h_to_h_]
         linear_layer_name_list = [
             "qkv", "dense", "mlp_in", "mlp_out"]
 
         for idx, layer_name in enumerate(linear_layer_name_list):
-            if layer_name in config.target_modules_ and config.target_modules_[layer_name]:
+            if layer_name in target and target[layer_name]:
                 lora_a = None
                 lora_b = None
 
                 linear_layer_list[idx].init_lora_weight(
-                    config.adapter_name_, config.lora_r_, config.lora_alpha_, config.lora_dropout_, lora_a, lora_b)
+                    adapter_name, r, lora_alpha, lora_dropout, lora_a, lora_b)
 
     def forward(self,
                 data: torch.Tensor,
@@ -145,18 +144,11 @@ class ChatGLMModel(LLMModel):
         self.pad_token_id_ = args.pad_token_id_
         self.n_heads_ = args.n_heads_
         self.vocab_size_ = args.vocab_size_
-        self.max_seq_len_ = args.max_seq_len_
         self.dim_ = args.dim_
 
-        # adapter configs
-        self.adapter_configs_: Dict[str, LoraConfig] = {}
-
-    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
-        if isinstance(input.batch_tokens_, torch.Tensor):
-            tokens = input.batch_tokens_.to(self.device_)
-        else:
-            tokens = torch.tensor(input.batch_tokens_,
-                                  dtype=torch.int64).to(self.device_)
+    def forward(self, input: MultiLoraBatchData):
+        tokens = torch.tensor(input.batch_tokens_,
+                              dtype=torch.int64).to(self.device_)
 
         # only for train
         def create_forward_for_checkpoint(module: Transformer):
@@ -179,7 +171,7 @@ class ChatGLMModel(LLMModel):
         data = self.norm_.forward(data)
         data @= self.output_.transpose(0, 1)
 
-        return data, None
+        return data
 
     def from_pretrained(path: str,
                         device: str,
@@ -188,10 +180,11 @@ class ChatGLMModel(LLMModel):
                         bf16: bool = True,
                         double_quant: bool = True,
                         quant_type: str = 'nf4',
-                        ) -> LLMModel:
+                        log_fn=None):
         # now only support the qlora - 4bit
         if bits in [4, 8]:
-            logging.info(f"Loading model with quantization, bits = {bits}.")
+            if log_fn is not None:
+                log_fn('Loading model with quantization, bits = %i' % bits)
             from transformers import BitsAndBytesConfig
             compute_dtype = (torch.float16 if fp16 else (
                 torch.bfloat16 if bf16 else torch.float32))
@@ -264,16 +257,22 @@ class ChatGLMModel(LLMModel):
 
         return model
 
-    def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
-        self.adapter_configs_[config.adapter_name_] = config
+    def init_lora_weight(self, adapter_name: str,
+                         r: int,
+                         lora_alpha: int,
+                         lora_dropout: float,
+                         target: Dict[str, bool],
+                         weight: Optional[Dict[str, torch.Tensor]]):
         for transformer_layer in self.layers_:
-            transformer_layer.init_lora_layer_weight(config, weight)
+            transformer_layer.init_lora_layer_weight(
+                adapter_name, r, lora_alpha, lora_dropout, target, weight)
 
-    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
+    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}
 
         for transformer_layer in self.layers_:
-            for adapter_name in self.adapter_configs_.keys():
+            for lora_config in config["lora"]:
+                adapter_name = lora_config["name"]
                 if adapter_name not in train_paramas:
                     train_paramas[adapter_name] = []
 
@@ -291,16 +290,10 @@ class ChatGLMModel(LLMModel):
 
         return train_paramas
 
-    def get_generate_paramas(self) -> Dict[str, GenerateConfig]:
-        generate_paramas = {}
-        for adapter_name in self.adapter_configs_.keys():
-            generate_paramas[adapter_name] = GenerateConfig(
-                adapter_name_=adapter_name)
-        return generate_paramas
-
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         # return the lora weight and target_module's name
         lora_weight_dict = {}
+        target_modules = []
         for idx, transformer_layer in enumerate(self.layers_):
             layer_prefix_name = "model.transformer.encoder.layers." + \
                 str(idx) + "."
@@ -311,45 +304,13 @@ class ChatGLMModel(LLMModel):
 
             for idx, lora_layer in enumerate(lora_layer_list):
                 if lora_name in lora_layer.loras_:
+                    if lora_layer_name_list[idx] not in target_modules:
+                        target_modules.append(lora_layer_name_list[idx])
                     lora_weight_dict[layer_prefix_name +
                                      f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
                     lora_weight_dict[layer_prefix_name +
                                      f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
-        return lora_weight_dict
+        return lora_weight_dict, target_modules
 
     def sequential_module(self) -> torch.nn.Sequential:
         pass
-
-    def load_adapter_weight(self, path: str, adapter_name: str = None):
-        if adapter_name is None:
-            adapter_name = path
-        if not os.path.exists(path):
-            path = snapshot_download(repo_id=path, repo_type="model")
-        with open(path + os.sep + "adapter_config.json", 'r', encoding='utf8') as fp:
-            lora_config = lora_config_factory(json.load(fp))
-        lora_config.adapter_name_ = adapter_name
-        lora_weight = torch.load(
-            path + os.sep + "adapter_model.bin", map_location=self.device_)
-        self.init_lora_layer_weight(lora_config, lora_weight)
-        return adapter_name
-
-    def save_adapter_weight(self, path: str, dir_suffix=""):
-        for lora_name, lora_config in self.adapter_configs_.items():
-            lora_output_dir = path + os.sep + lora_name
-            if dir_suffix != "":
-                lora_output_dir += os.sep + \
-                    lora_name + "_" + dir_suffix
-
-            if not os.path.exists(lora_output_dir):
-                os.makedirs(lora_output_dir)
-
-            lora_weight_dict = self.get_lora_weight_dict(
-                lora_name)
-
-            lora_config_dict = lora_config.export()
-
-            torch.save(lora_weight_dict, lora_output_dir +
-                       os.sep + "adapter_model.bin")
-
-            with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
-                json.dump(lora_config_dict, f, indent=4)

@@ -8,10 +8,8 @@ import bitsandbytes
 from typing import Dict, Optional
 
 
-class Lora(torch.nn.Module):
+class Lora():
     def __init__(self, adapter_name: str):
-        super().__init__()
-
         self.adapter_name_: str = adapter_name
 
         self.lora_a_: torch.Tensor = None
@@ -36,10 +34,8 @@ class Lora(torch.nn.Module):
         return data_
 
 
-class Linear(torch.nn.Module):
+class Linear():
     def __init__(self, weight: torch.nn.Module, device: str = None):
-        super().__init__()
-
         if device is None:
             self.device_ = weight.device
         else:
@@ -53,7 +49,8 @@ class Linear(torch.nn.Module):
         else:
             weight.requires_grad_(False)
 
-        self.weight_ = weight.to(device)
+        self.weight_ = weight
+        self.weight_.to(device)
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 

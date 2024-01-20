@@ -11,8 +11,6 @@ m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning 
 
 - Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/QLoRA adapters.
 
-- LoRA based Mix-of-Expert: Support for [MixLoRA](./MixLoRA.md), which implements Mix-of-Expert architecture based on multiple LoRA adapters for frozen FFN layer.
-
 ## Contents
 
 - [Updates](#updates)
@@ -120,9 +118,6 @@ Firstly, you should clone this repository and install dependencies:
 # Clone Repository
 git clone https://github.com/TUDB-Labs/multi-lora-fine-tune
 cd multi-lora-fine-tune
-# Optional but recommended
-conda create -n mlora_env python=3.10
-conda activate mlora_env
 # Install requirements
 pip install -r requirements.txt
 ```
@@ -151,7 +146,7 @@ You can run finetune through webui by following the instructions in the ‘webui
 You can also install m-LoRA into your environment:
 ```bash
 # Optional but recommended
-conda create -n mlora_env python=3.10
+conda create -n mlora_env python=3.8
 conda activate mlora_env
 # Install requirements
 pip install mlora

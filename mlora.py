@@ -16,29 +16,26 @@
 #
 # Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
 
-import os
 import json
 import torch
 import mlora
 import random
-import logging
+import datetime
 import argparse
-from typing import Dict, Tuple, List, Union
+from typing import Dict, Tuple, List
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
-parser.add_argument('--base_model', type=str, required=True,
+parser.add_argument('--base_model', type=str,
                     help='Path to or name of base model')
 parser.add_argument('--model_type', type=str, default="llama",
                     help='The model type, support: llama, chatglm')
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
-parser.add_argument('--disable_prompter', action="store_true",
-                    help="Disable prompter when inference")
-parser.add_argument('--load_adapter', action="store_true",
-                    help="Load adapter from file instead of init randomly")
-parser.add_argument('--disable_adapter', action="store_true",
-                    help="Disable the adapter modules")
+parser.add_argument('--load_lora', action="store_true",
+                    help="Load lora from file instead of init randomly")
+parser.add_argument('--disable_lora', action="store_true",
+                    help="Disable the lora modules")
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
 parser.add_argument('--load_8bit', action="store_true",
@@ -47,18 +44,40 @@ parser.add_argument('--load_4bit', action="store_true",
                     help='Load model in 4bit mode')
 parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
-parser.add_argument('--config', type=str, required=True,
+parser.add_argument('--config', type=str,
                     help='Path to finetune configuration')
 parser.add_argument('--seed', type=int, default=42,
                     help='Random seed in integer, default is 42')
-parser.add_argument('--dir', type=str, default=".",
-                    help='Path to read or save checkpoints')
-parser.add_argument('--disable_log', action="store_true",
-                    help='Disable logging.')
-parser.add_argument('--log_file', type=str,
-                    help="Save log to specific file.")
+parser.add_argument('--log', type=bool, default=True,
+                    help='Turn on or off log, default is true')
 
 args = parser.parse_args()
+
+
+def log(msg: str):
+    if args.log:
+        print('[%s] m-LoRA: %s' %
+              (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), msg))
+
+
+if torch.cuda.is_available():
+    log('NVIDIA CUDA initialized successfully.')
+    log('Total %i GPU(s) detected.' % torch.cuda.device_count())
+else:
+    print('m-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
+    exit(-1)
+
+
+if args.base_model is None:
+    print('error: Argument --base_model are required.')
+    parser.print_help()
+    exit(-1)
+
+
+if args.config is None:
+    print('error: Argument --config are required.')
+    parser.print_help()
+    exit(-1)
 
 
 # Functions
@@ -68,121 +87,206 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
+def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     if args.model_type == "llama":
-        logging.info("Initializing LLaMA model.")
         model = mlora.LlamaModel.from_pretrained(
             path=args.base_model,
             device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+            log_fn=log
         )
     elif args.model_type == "chatglm":
-        logging.info("Initializing ChatGLM model.")
         model = mlora.ChatGLMModel.from_pretrained(
             path=args.base_model,
             device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+            log_fn=log
         )
     else:
         raise f"unkown model type {args.model_type}"
 
     tokenizer = mlora.Tokenizer(args.base_model)
 
+    model.pad_token_id_ = tokenizer.pad_id_
+
     return tokenizer, model
 
 
-def init_adapter_config(config: Dict[str, any],
-                        llm_model: mlora.LLMModel,
-                        ) -> List[Union[mlora.GenerateConfig, mlora.TrainConfig]]:
-    config_list = []
+def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel):
+    if args.disable_lora:
+        return
 
     for lora_config in config["lora"]:
         lora_weight = None
-        config_class = mlora.lora_config_factory(lora_config)
-        config_class.adapter_name_ = lora_config["name"]
-        config_class.device_ = args.device
+        if args.load_lora:
+            adapter_file_path = lora_config["output"] + "/adapter_model.bin"
+            print(f"load {adapter_file_path}")
+            lora_weight = torch.load(adapter_file_path)
 
-        if args.load_adapter:
-            adapter_file_path = args.dir + os.sep + \
-                config_class.adapter_name_ + os.sep + "adapter_model.bin"
-            logging.info(f"Load adapter: {adapter_file_path}")
-            lora_weight = torch.load(
-                adapter_file_path, map_location=args.device)
+        llm_model.init_lora_weight(lora_config["name"],
+                                   lora_config["r"],
+                                   lora_config["alpha"],
+                                   lora_config["dropout"],
+                                   lora_config["target_modules"],
+                                   lora_weight)
 
-        llm_model.init_lora_layer_weight(config_class, lora_weight)
-        if args.inference:
-            config_class = mlora.GenerateConfig(
-                adapter_name_=config_class.adapter_name_)
-            if not args.disable_prompter:
-                config_class.prompt_template_ = lora_config["prompt"]
+
+def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
+    # get optimizer per lora model
+    optimizer: Dict[str, torch.optim.Optimizer] = {}
+
+    for lora_config in config["lora"]:
+        adapter_name = lora_config["name"]
+        optim_name = lora_config["optim"]
+        lr = lora_config["lr"]
+        if optim_name == "sgd":
+            momentum = 0
+            if "momentum" in lora_config:
+                momentum = lora_config["momentum"]
+            optimizer[adapter_name] = (torch.optim.SGD(
+                train_paramas[adapter_name], lr=lr, momentum=momentum))
+        elif optim_name == "adamw":
+            optimizer[adapter_name] = (torch.optim.AdamW(
+                train_paramas[adapter_name], lr=lr))
         else:
-            config_class = mlora.TrainConfig(lora_config, config_class)
-        config_list.append(config_class)
+            raise f"unkown optimizer {optim_name}"
 
-    return config_list
-
-
-def inference_callback(cur_pos, outputs):
-    print(f"POSITION: {cur_pos}")
-    for adapter_name, output in outputs.items():
-        print(f"{adapter_name} OUTPUT: {output[0]}")
+    return optimizer
 
 
-def inference(llm_model: mlora.LLMModel,
-              tokenizer: mlora.Tokenizer,
-              adapters: List[mlora.GenerateConfig]):
+def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
+    ret_accumulation_step = {}
+    for lora_config in config["lora"]:
+        batch_size = lora_config["batch_size"]
+        micro_batch_size = lora_config["micro_batch_size"]
+        if batch_size < micro_batch_size or batch_size % micro_batch_size != 0:
+            raise f"error batch_size {batch_size} and micro batch size {micro_batch_size}"
+        ret_accumulation_step[lora_config["name"]
+                              ] = batch_size / micro_batch_size
+    return ret_accumulation_step
+
+
+# to get test result and want early stop it
+def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
+    # the train paramas per lora model
+    all_train_paramas: Dict[str, List[torch.Tensor]
+                            ] = llm_model.get_train_paramas(config)
+    all_optimizer: Dict[str, torch.optim.Optimizer] = get_optimizer(
+        config, all_train_paramas)
+    accumulation_step: Dict[str, int] = get_accumulation_steps(config)
+
+    loss_fn = torch.nn.CrossEntropyLoss()
+
+    step_cnt = 0
+    while not dispatcher.check_task_done():
+        input: mlora.MultiLoraBatchData = dispatcher.get_train_data()
+        for lora in input.lora_batch_data_config_:
+            all_optimizer[lora.adapter_name_].zero_grad()
+
+        step_cnt += 1
+
+        output = llm_model.forward(input)
+        labels = torch.tensor(input.batch_tokens_,
+                              dtype=torch.long).to(args.device)
+
+        total_loss = None
+        for lora_config in input.lora_batch_data_config_:
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
+            loss_input = output[start_idx:end_idx][..., :-1,
+                                                   :].contiguous().view(-1, llm_model.vocab_size_)
+            loss_target = labels[start_idx:end_idx][...,
+                                                    1:].contiguous().view(-1)
+            loss = loss_fn(loss_input, loss_target) / \
+                accumulation_step[lora_config.adapter_name_]
+            print(
+                f"    adapter: {lora_config.adapter_name_} loss: {loss}")
+            if total_loss is None:
+                total_loss = loss
+            else:
+                total_loss += loss
+
+        total_loss.backward()
+        for lora in input.lora_batch_data_config_:
+            if step_cnt % accumulation_step[lora.adapter_name_] == 0:
+                all_optimizer[lora.adapter_name_].step()
+
+        if step_cnt % config["save_step"] == 0:
+            mlora.save_lora_model(llm_model, config, f"{step_cnt}")
+
+    mlora.save_lora_model(llm_model, config)
+
+
+def inference(config: Dict[str, any],
+              llm_model: mlora.LLMModel,
+              tokenizer: mlora.Tokenizer):
+    lora_adapter_num = len(config["lora"])
+    batch_data_config: List[mlora.LoraBatchDataConfig] = []
+
+    for idx, lora_config in enumerate(config["lora"]):
+        adapter_name = lora_config["name"]
+        batch_data_config.append(mlora.LoraBatchDataConfig(
+            adapter_name, idx, idx + 1))
+
+    inference_max_len = 128
+
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
             return
-        for config in adapters:
-            config.prompts_ = [input_raw]
-        callback = None if args.disable_log else inference_callback
-        outputs = mlora.generate(llm_model, tokenizer, adapters,
-                                 device=args.device,
-                                 stream_callback=callback)
-        print(f"\n{'='*10}\n")
-        print(f"PROMPT: {input_raw}")
-        for adapter_name, output in outputs.items():
-            print(f"{adapter_name} OUTPUT:")
-            print(output[0])
-        print(f"\n{'='*10}\n")
+
+        tokens = tokenizer.encode(input_raw, True, False)
+        token_len = len(tokens)
+        while len(tokens) < inference_max_len:
+            tokens.append(tokenizer.pad_id_)
+
+        input_data = mlora.MultiLoraBatchData(
+            prompts_=[input_raw] * lora_adapter_num,
+            lora_batch_data_config_=batch_data_config,
+            batch_tokens_=[tokens] * lora_adapter_num,
+            tokens_len_without_pad_=[token_len] * lora_adapter_num,
+            batch_seq_len_=inference_max_len,
+            expand_side_=["right"] * lora_adapter_num,
+            inference_model_=True)
+
+        eos_flag: List[bool] = [False] * lora_adapter_num
+        for pos in range(token_len, inference_max_len):
+            with torch.no_grad():
+                # batch_size, seq_len, voc_logs
+                outputs = llm_model.forward(input_data)
+                next_token = outputs[:, pos - 1, :]
+                next_token = torch.argmax(next_token, dim=-1)
+                for idx in range(len(input_data.batch_tokens_)):
+                    input_data.batch_tokens_[idx][pos] = next_token[idx].item()
+                    # end of the sentence
+                    if next_token[idx].item() == tokenizer.eos_id_:
+                        eos_flag[idx] = True
+                    input_data.tokens_len_without_pad_[
+                        idx] = input_data.tokens_len_without_pad_[idx] + 1
+            # check if the all sentence end
+            have_all_done = all(flag for flag in eos_flag)
+            if have_all_done:
+                break
+
+        for idx, output in enumerate(input_data.batch_tokens_):
+            print(f"# LORA{idx} OUTPUT IS:")
+            print(tokenizer.decode(output))
 
 
 # Main Function
 if __name__ == "__main__":
-    if args.inference:
-        args.load_adapter = True
-
-    log_handlers = [logging.StreamHandler()]
-    if args.log_file is not None:
-        log_handlers.append(logging.FileHandler(args.log_file))
-
-    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
-                        level=logging.WARNING if args.disable_log else logging.INFO,
-                        handlers=log_handlers,
-                        force=True)
-
-    if torch.cuda.is_available():
-        logging.info('NVIDIA CUDA initialized successfully.')
-        logging.info('Total %i GPU(s) detected.' % torch.cuda.device_count())
-    else:
-        logging.error(
-            'm-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
-        exit(-1)
-
     setup_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
 
-    tokenizer, model = load_base_model()
-    adapters = init_adapter_config(config, model)
+    tokenizer, model = load_base_model(config)
+    init_lora_model(config, model)
 
     torch.cuda.empty_cache()
 
     if args.inference:
-        inference(model, tokenizer, adapters)
+        inference(config, model, tokenizer)
     else:
-        mlora.train(mlora.Dispatcher(config, tokenizer), model,
-                    adapters, args.device, args.dir, config["save_step"])
+        dispatcher = mlora.Dispatcher(config, tokenizer)
+        train(config, model, dispatcher)
