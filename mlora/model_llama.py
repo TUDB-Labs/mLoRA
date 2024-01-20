@@ -1,7 +1,8 @@
 from mlora.modelargs import LoraConfig, MixConfig, lora_config_factory
 from mlora.modelargs import KVCache, LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
-from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
+from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle
+from mlora.model import precompute_mask, precompute_mask_for_inference
 from mlora.model import LLMModel, RMSNorm
 from mlora.generate import GenerateConfig
 from mlora.feed_forward import FeedForward
@@ -82,7 +83,7 @@ class Transformer(torch.nn.Module):
         self.n_kv_heads_ = args.n_kv_heads_
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
-        self.dtype_ = args.dtype_
+        self.dtype_ = args.dtype
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         adapter_name = config.adapter_name_
@@ -147,9 +148,7 @@ class Transformer(torch.nn.Module):
                 data: torch.Tensor,
                 mask: torch.Tensor,
                 rope_angle: Tuple[torch.Tensor, torch.Tensor],
-                input_args: MultiLoraBatchData,
-                router_logits: List[List] = None,
-                kv_cache: KVCache = None):
+                input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
         attention_norm_data = self.attention_norm_.forward(data)
@@ -167,10 +166,9 @@ class Transformer(torch.nn.Module):
         xq, xk = apply_rotary_emb(xq, xk, rope_angle, self.dtype_)
 
         # apply kv cache
-        if kv_cache is not None:
-            xk, xv = kv_cache.update(
-                xk, xv, self.layer_id_, batch_size,
-                max_seq_len, input_args.inference_seq_pos_)
+        if input_args.kv_cache_ is not None:
+            xk, xv = input_args.kv_cache_.update(
+                xk, xv, self.layer_id_, batch_size, max_seq_len)
 
         # for llama2 need to repeat the heads
         # before dim: batch_size, seq_len, n_kv_head, head_dim
@@ -178,7 +176,7 @@ class Transformer(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        if input_args.inference_mode_:
+        if input_args.kv_cache_ is not None:
             xq = xq.transpose(1, 2)
             xk = xk.transpose(1, 2)
             xv = xv.transpose(1, 2)
@@ -201,7 +199,7 @@ class Transformer(torch.nn.Module):
         data = data + self.wo_.forward(attention_score, input_args)
 
         # feed forward fully connected
-        data = data + self.ffn_.forward(data, input_args, router_logits)
+        data = data + self.ffn_.forward(data, input_args)
 
         return data
 
@@ -245,52 +243,55 @@ class LlamaModel(LLMModel):
 
         # cos and sin
         self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
-            args.dim_ // args.n_heads_, args.max_seq_len_, args.device_)
+            args.dim_ // args.n_heads_, args.max_seq_len_, args.device)
 
         self.norm_eps_ = args.norm_eps_
 
-        self.device_ = args.device_
+        self.device_ = args.device
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
         self.vocab_size_ = args.vocab_size_
         self.pad_token_id_ = args.pad_token_id_
         self.max_seq_len_ = args.max_seq_len_
         self.dim_ = args.dim_
-        self.dtype_ = args.dtype_
+        self.dtype_ = args.dtype
 
         # adapter configs
         self.adapter_configs_: Dict[str, LoraConfig] = {}
 
     # train model or inference model: output is probs
-    def forward(self, input: MultiLoraBatchData, kv_cache: KVCache = None) -> torch.Tensor:
-        tokens = torch.tensor(input.batch_tokens_,
-                              dtype=torch.long, device=self.device_)
+    def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
+        if isinstance(input.batch_tokens_, torch.Tensor):
+            tokens = input.batch_tokens_.to(self.device_)
+        else:
+            tokens = torch.tensor(input.batch_tokens_,
+                                  dtype=torch.int64).to(self.device_)
 
         seq_module = self.sequential_module()
 
-        # prepare mask
-        attention_masks = precompute_mask(tokens, input.attention_masks_,
-                                          1 if input.inference_mode_ else self.n_heads_,
-                                          input.inference_seq_pos_ if input.inference_mode_ else 0,
-                                          self.device_, self.dtype_)
-
-        # store routing data when training
-        if input.output_router_logits_:
-            router_logits: List[List] = list(
-                [] for _ in range(len(input.lora_batch_data_config_)))
+        if input.inference_model_:
+            assert input.kv_cache_ is not None
+            if input.batch_seq_len_ > 1:
+                # prepare mask
+                mask = precompute_mask_for_inference(
+                    input, input.kv_cache_.seq_pos, self.device_)
+            else:
+                mask = None
+            data = (tokens, mask, self.rope_angle_, input, False)
         else:
-            router_logits = None
-
-        if input.inference_mode_:
-            input.gradient_checkpoint_ = False
-
-        data = (tokens, attention_masks, self.rope_angle_, input,
-                router_logits, kv_cache, input.gradient_checkpoint_)
+            # prepare mask
+            mask = precompute_mask(input, self.n_heads_,
+                                   self.device_).to(self.dtype_)
+            # store routing data when training
+            if input.output_router_logits_:
+                input.router_logits_: Tuple[List] = tuple([] for _ in range(
+                    len(input.lora_batch_data_config_)))
+            data = (tokens, mask, self.rope_angle_, input, True)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
 
-        return data[0], router_logits
+        return data[0], input.router_logits_
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         self.adapter_configs_[config.adapter_name_] = config
@@ -362,9 +363,9 @@ class LlamaModel(LLMModel):
         llama_args.pad_token_id_ = llama_model.config.pad_token_id
         if llama_args.pad_token_id_ is None:
             llama_args.pad_token_id_ = -1
-        llama_args.dtype_ = llama_model.dtype
+        llama_args.dtype = llama_model.dtype
 
-        llama_args.device_ = device
+        llama_args.device = device
 
         model = LlamaModel(llama_args)
 
@@ -506,6 +507,9 @@ class LlamaModel(LLMModel):
         seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
         seq_module.move_to_end("norm")
 
+        seq_module.update({"output": LlamaSequentialWrapper(self.output_)})
+        seq_module.move_to_end("output")
+
         return torch.nn.Sequential(seq_module)
 
     def load_adapter_weight(self, path: str, adapter_name: str = None):
@@ -520,3 +524,24 @@ class LlamaModel(LLMModel):
             path + os.sep + "adapter_model.bin", map_location=self.device_)
         self.init_lora_layer_weight(lora_config, lora_weight)
         return adapter_name
+
+    def save_adapter_weight(self, path: str, dir_suffix=""):
+        for lora_name, lora_config in self.adapter_configs_.items():
+            lora_output_dir = path + os.sep + lora_name
+            if dir_suffix != "":
+                lora_output_dir += os.sep + \
+                    lora_name + "_" + dir_suffix
+
+            if not os.path.exists(lora_output_dir):
+                os.makedirs(lora_output_dir)
+
+            lora_weight_dict = self.get_lora_weight_dict(
+                lora_name)
+
+            lora_config_dict = lora_config.export()
+
+            torch.save(lora_weight_dict, lora_output_dir +
+                       os.sep + "adapter_model.bin")
+
+            with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
+                json.dump(lora_config_dict, f, indent=4)

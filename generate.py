@@ -30,7 +30,8 @@ def main(base_model: str,
     generate_paramas.prompts_ = [(instruction, input)]
 
     output = mlora.generate(model, tokenizer, [generate_paramas],
-                            temperature=0.5, top_p=0.9, max_gen_len=128)
+                            temperature=0.5, top_p=0.9, max_gen_len=128,
+                            device=device)
 
     for prompt in output[adapter_name]:
         print(f"\n{'='*10}\n")

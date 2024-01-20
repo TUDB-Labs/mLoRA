@@ -7,9 +7,9 @@ from mlora.modelargs import LLMModelArgs, MultiLoraBatchData, LoraBatchDataConfi
 from mlora.dispatcher import TrainTask, Dispatcher
 from mlora.generate import GenerateConfig, generate
 from mlora.train import TrainConfig, train
-from mlora.tasks import CasualLM, SequenceClassification, EvaluateConfig, classification_task_factory, evaluate
 
 __all__ = [
+    "lora_config_factory",
     "Prompter",
     "Tokenizer",
     "LLMModel",
@@ -20,16 +20,10 @@ __all__ = [
     "LoraBatchDataConfig",
     "LoraConfig",
     "MixConfig",
-    "lora_config_factory",
     "TrainTask",
     "Dispatcher",
     "GenerateConfig",
     "generate",
     "TrainConfig",
-    "train",
-    "CasualLM",
-    "SequenceClassification",
-    "classification_task_factory",
-    "EvaluateConfig",
-    "evaluate"
+    "train"
 ]

@@ -2,7 +2,6 @@ from mlora.modelargs import LoraBatchDataConfig, MultiLoraBatchData
 from mlora.tokenizer import Tokenizer, Tokens
 from mlora.prompter import Prompter
 from mlora.model import LLMModel
-from mlora.tasks import CasualLM
 
 from typing import List, Union, Tuple
 from dataclasses import dataclass
@@ -104,7 +103,7 @@ def generate(model: LLMModel,
              repetition_penalty=1.1,
              renormalize_logits=True,
              max_gen_len=128,
-             use_cache=True,
+             device="cuda:0",
              stream_callback=None):
     process_conditions = any([repetition_penalty > 0])
     sample_conditions = any(
@@ -113,7 +112,7 @@ def generate(model: LLMModel,
         do_sample = True
         logging.warn("do_sample force to enabled.")
 
-    device = torch.device(model.device_)
+    device = torch.device(device)
     raw_prompts: List[Tokens] = []
     batch_data_config: List[LoraBatchDataConfig] = []
     for config in configs:
@@ -137,17 +136,18 @@ def generate(model: LLMModel,
         tokens[k, : len(t)] = torch.tensor(t, dtype=torch.int64, device=device)
 
     prev_pos = 0
-    lm_head = CasualLM(model)
-    kv_cache = model.prepare_kv_cache(
-        batch_size, total_len) if use_cache else None
+    kv_cache = model.prepare_kv_cache(batch_size, total_len)
     stop_reached = torch.tensor([False] * batch_size, device=device)
     input_text_mask = tokens != tokenizer.pad_id_
     for cur_pos in range(min_tokens_len, total_len):
         input_data = MultiLoraBatchData(
             lora_batch_data_config_=batch_data_config,
-            batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
-            inference_seq_pos_=prev_pos)
-        logits = lm_head.forward(model.forward(input_data, kv_cache)[0])
+            batch_seq_len_=(cur_pos - prev_pos),
+            batch_tokens_=tokens[:, prev_pos:cur_pos],
+            kv_cache_=kv_cache,
+            inference_model_=True)
+        kv_cache.seq_pos = prev_pos
+        logits, _ = model.forward(input_data)
         probs = logits[:, -1]
 
         if repetition_penalty > 0:
@@ -185,8 +185,7 @@ def generate(model: LLMModel,
                 configs, tokenizer, raw_prompts, tokens, max_gen_len))
         stop_reached |= (~input_text_mask[:, cur_pos]) & (
             next_token == tokenizer.eos_id_)
-        if kv_cache is not None:
-            prev_pos = cur_pos
+        prev_pos = cur_pos
         if all(stop_reached):
             break
 
