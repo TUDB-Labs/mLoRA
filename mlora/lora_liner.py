@@ -29,11 +29,11 @@ class Lora(torch.nn.Module):
         self.scaling_ = alpha / r
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        data_ = F.dropout(data.to(self.lora_a_.dtype), self.dropout_)
+        data_ = F.dropout(data, self.dropout_)
         data_ @= self.lora_a_.transpose(0, 1)
         data_ @= self.lora_b_.transpose(0, 1)
         data_ *= self.scaling_
-        return data_.to(data.dtype)
+        return data_
 
 
 class Linear(torch.nn.Module):
@@ -46,8 +46,10 @@ class Linear(torch.nn.Module):
             self.device_ = device
 
         if not isinstance(weight, torch.nn.Linear):
-            assert isinstance(weight, bitsandbytes.nn.Linear8bitLt) or isinstance(
-                weight, bitsandbytes.nn.Linear4bit), "error type."
+            import bitsandbytes
+            assert isinstance(weight,
+                              bitsandbytes.nn.Linear8bitLt) or isinstance(weight,
+                                                                          bitsandbytes.nn.Linear4bit), "error type."
         else:
             weight.requires_grad_(False)
 

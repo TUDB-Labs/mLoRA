@@ -1,6 +1,5 @@
 import fire
 import mlora
-import torch
 import traceback
 import gradio as gr
 
@@ -64,7 +63,6 @@ class Iteratorize:
 def main(base_model: str,
          template: str = None,
          lora_weights: str = "",
-         load_16bit: bool = False,
          load_8bit: bool = False,
          load_4bit: bool = False,
          device: str = "cuda:0",
@@ -72,9 +70,7 @@ def main(base_model: str,
          share_gradio: bool = False):
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
-                                             bits=(8 if load_8bit else (
-                                                 4 if load_4bit else None)),
-                                             load_dtype=torch.bfloat16 if load_16bit else torch.float32)
+                                             bits=(8 if load_8bit else (4 if load_4bit else None)))
     tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:

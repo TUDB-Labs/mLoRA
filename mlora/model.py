@@ -70,8 +70,7 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
-                     angle: Tuple[torch.Tensor, torch.Tensor],
-                     dtype: torch.dtype) -> Tuple[torch.Tensor, torch.Tensor]:
+                     angle: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
     # data shape is: batch_size * max_seq_len * n_head * n_dim
     _, max_seq_len, _, dim_head = xq.shape
 
@@ -80,7 +79,7 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
 
     xq = (xq * cos) + (rotate_half(xq) * sin)
     xk = (xk * cos) + (rotate_half(xk) * sin)
-    return (xq.to(dtype), xk.to(dtype))
+    return (xq, xk)
 
 
 def apply_rotary_emb_to_one(x: torch.Tensor, angle: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:

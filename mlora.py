@@ -41,8 +41,6 @@ parser.add_argument('--disable_adapter', action="store_true",
                     help="Disable the adapter modules")
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
-parser.add_argument('--load_16bit', action='store_true',
-                    help='Load model in half precision')
 parser.add_argument('--load_8bit', action="store_true",
                     help='Load model in 8bit mode')
 parser.add_argument('--load_4bit', action="store_true",
@@ -76,16 +74,14 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
         model = mlora.LlamaModel.from_pretrained(
             path=args.base_model,
             device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            load_dtype=torch.bfloat16 if args.load_16bit else torch.float32
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
         )
     elif args.model_type == "chatglm":
         logging.info("Initializing ChatGLM model.")
         model = mlora.ChatGLMModel.from_pretrained(
             path=args.base_model,
             device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            load_dtype=torch.float32
+            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
         )
     else:
         raise f"unkown model type {args.model_type}"
