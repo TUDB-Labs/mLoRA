@@ -8,15 +8,17 @@
     "lora": [
         {
             "name": "lora_0",
+            "output": "lora_0",
             "optim": "adamw",
             "lr": 3e-4,
+            "momentum": 0.9,
             "batch_size": 64,
-            "micro_batch_size": 32,
+            "micro_batch_size": 64,
             "test_batch_size": 64,
             "num_epochs": 50,
             "r": 8,
-            "lora_alpha": 16,
-            "lora_dropout": 0.05,
+            "alpha": 16,
+            "dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": true,
@@ -27,21 +29,23 @@
                 "w3_proj": true
             },
             "data": "data/dummy_data.json",
+            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
             "expand_side": "right"
         },
         {
             "name": "lora_1",
+            "output": "lora_1",
             "optim": "adamw",
             "lr": 3e-4,
             "batch_size": 64,
-            "micro_batch_size": 32,
+            "micro_batch_size": 64,
             "test_batch_size": 64,
             "num_epochs": 50,
             "r": 32,
-            "lora_alpha": 64,
-            "lora_dropout": 0.05,
+            "alpha": 64,
+            "dropout": 0.05,
             "target_modules": {
                 "q_proj": true,
                 "k_proj": true,
@@ -52,6 +56,7 @@
                 "w3_proj": false
             },
             "data": "data/dummy_data.json",
+            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
             "expand_side": "right"

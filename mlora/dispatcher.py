@@ -4,11 +4,11 @@ from mlora import LoraBatchDataConfig
 
 import sys
 import math
+import json
 import random
-import logging
 import datasets
 from dataclasses import dataclass
-from typing import Dict, List, Union, Callable
+from typing import Dict, List, Union
 
 
 Tokens = List[int]
@@ -16,19 +16,22 @@ Tokens = List[int]
 
 @dataclass
 class TrainData:
+    prompt_: str = ""
     tokens_: Tokens = None
-    labels_: List = None
+
+
+@dataclass
+class TemplateData:
+    parameter_: List[str] = None
+    prompt_: str = ""
+    prompt_without_input_: str = ""
 
 
 def load_dataset(data_path: str):
     if data_path.endswith(".json") or data_path.endswith(".jsonl"):
         return datasets.load_dataset("json", data_files=data_path)
     else:
-        if ':' in data_path:
-            result = data_path.split(':')
-            return datasets.load_dataset(result[0], result[1])
-        else:
-            return datasets.load_dataset(data_path)
+        return datasets.load_dataset(data_path)
 
 
 class TrainTask():
@@ -37,12 +40,14 @@ class TrainTask():
     adapter_name_: str = ""
     data_path_: str = ""
     test_data_path_: str = ""
-    dataload_function_: Callable = None
+    prompt_template_path_: str = ""
 
     # the token list for train and test
     val_set_size: Union[int, float] = -1
     train_token_data_: List[TrainData] = None
     test_token_data_: List[TrainData] = None
+
+    template_data_: TemplateData = None
 
     # train parameter
     total_epoch_num_: int = -1
@@ -66,7 +71,7 @@ class TrainTask():
                  data_path: str,
                  val_set_size: Union[int, float],
                  test_data_path: str,
-                 dataload_function: Callable,
+                 prompt_template_path: str,
                  total_epoch_num: int,
                  max_train_batch_size: int,
                  max_train_micro_batch_size: int,
@@ -80,7 +85,7 @@ class TrainTask():
         self.data_path_ = data_path
         self.val_set_size = val_set_size
         self.test_data_path_ = test_data_path
-        self.dataload_function_ = dataload_function
+        self.prompt_template_path_ = prompt_template_path
         self.total_epoch_num_ = total_epoch_num
         self.max_train_batch_size_ = max_train_batch_size
         self.max_train_micro_batch_size_ = max_train_micro_batch_size
@@ -90,29 +95,63 @@ class TrainTask():
         self.expand_side_ = expand_side
         self.expand_token_id_ = expand_token_id
 
-    def __encode_data(self,
-                      data: List,
-                      is_train_data: bool = True) -> List[TrainData]:
+    def __load_template_data(self):
+        assert self.template_data_ is None
+        with open(self.prompt_template_path_, "r", encoding="utf8") as fp:
+            template_config_obj = json.load(fp)
+        self.template_data_ = TemplateData(
+            parameter_=template_config_obj["parameter"],
+            prompt_=template_config_obj["prompt"],
+            prompt_without_input_=template_config_obj["prompt_no_input"]
+        )
+
+    # read from file and replace the template
+    def __parse_data_with_template(self,
+                                   data: List) -> List[str]:
+
+        ret_data_text: List[str] = []
+        for raw_data in data:
+            raw_data_obj = {}
+
+            check_without_input_flag = False
+            for para in self.template_data_.parameter_:
+                if para not in raw_data or raw_data[para] is None:
+                    check_without_input_flag = True
+                    continue
+                raw_data_obj[para] = raw_data[para]
+
+            text_data: str = ""
+            if check_without_input_flag:
+                text_data = self.template_data_.prompt_without_input_
+            else:
+                text_data = self.template_data_.prompt_
+
+            for para in self.template_data_.parameter_:
+                if para not in raw_data_obj:
+                    continue
+                text_data = text_data.replace(
+                    "{" + para + "}", raw_data[para])
+
+            ret_data_text.append(text_data)
+
+        return ret_data_text
+
+    def __encode_prompt(self,
+                        lora_text_data: List[str],
+                        is_train_data: bool = True) -> List[TrainData]:
         ret: List[TrainData] = []
-        for idx, data_point in enumerate(data):
-            inputs, labels, flags = self.dataload_function_(data_point)
-            assert isinstance(inputs, List)
-            assert isinstance(labels, List) or labels is None
+        for idx, text in enumerate(lora_text_data):
             if is_train_data:
-                tokens = []
-                for text in inputs:
-                    tokens.extend(self.tokenizer_.encode(text, **flags))
+                tokens = self.tokenizer_.encode(text, bos=True, eos=True)
                 if len(tokens) > self.train_cutoff_len_:
                     tokens = tokens[:self.train_cutoff_len_]
             else:
-                tokens = []
-                for text in inputs:
-                    tokens.extend(self.tokenizer_.encode(text, **flags))
+                tokens = self.tokenizer_.encode(text, bos=True, eos=False)
 
-            ret.append(TrainData(tokens_=tokens, labels_=labels))
+            ret.append(TrainData(prompt_=text, tokens_=tokens))
             if idx % 10000 == 0:
-                logging.info(
-                    f"Encode text data {self.adapter_name_}: {idx}/{len(data)}")
+                print(
+                    f"encode text data {self.adapter_name_}: {idx}/{len(lora_text_data)}")
 
         if is_train_data and self.group_by_length_:
             ret.sort(key=lambda x: len(x.tokens_), reverse=True)
@@ -122,24 +161,26 @@ class TrainTask():
         return ret
 
     def load_data(self):
+        self.__load_template_data()
         data = load_dataset(self.data_path_)
         if self.test_data_path_ is None:
             if self.val_set_size is None or self.val_set_size <= 0:
-                self.train_token_data_ = self.__encode_data(
-                    data["train"], True)
+                self.train_token_data_ = self.__encode_prompt(
+                    self.__parse_data_with_template(data["train"]), True)
                 self.test_token_data_ = []
             else:
                 train_val = data["train"].train_test_split(
                     test_size=self.val_set_size)
-                self.train_token_data_ = self.__encode_data(
-                    train_val["train"], True)
-                self.test_token_data_ = self.__encode_data(
-                    train_val["test"], True)
+                self.train_token_data_ = self.__encode_prompt(
+                    self.__parse_data_with_template(train_val["train"]), True)
+                self.test_token_data_ = self.__encode_prompt(
+                    self.__parse_data_with_template(train_val["test"]), True)
         else:
             train_data = load_dataset(self.test_data_path_)
-            self.train_token_data_ = self.__encode_data(data["train"], True)
-            self.test_token_data_ = self.__encode_data(
-                train_data["train"], True)
+            self.train_token_data_ = self.__encode_prompt(
+                self.__parse_data_with_template(data["train"]), True)
+            self.test_token_data_ = self.__encode_prompt(
+                self.__parse_data_with_template(train_data["train"]), True)
 
     def is_train_done(self):
         if self.epoch_cnt_ <= self.total_epoch_num_:
@@ -168,8 +209,8 @@ class TrainTask():
 
         ret_data = self.train_token_data_[start_idx:end_idx]
 
-        logging.info(f"{self.adapter_name_} train data:")
-        logging.info(
+        print(f"{self.adapter_name_} train data:")
+        print(
             f"    epoch: {self.epoch_cnt_}/{self.total_epoch_num_} \
             step in epoch: {start_idx}/{len(self.train_token_data_)}")
 
@@ -220,7 +261,7 @@ class Dispatcher():
                           data_path=lora["data"],
                           val_set_size=lora.get("val_set_size", -1),
                           test_data_path=lora.get("test_data", None),
-                          dataload_function=lora["dataloader"],
+                          prompt_template_path=lora["prompt"],
                           total_epoch_num=lora["num_epochs"],
                           max_train_batch_size=lora["batch_size"],
                           max_train_micro_batch_size=lora["micro_batch_size"],
@@ -328,9 +369,10 @@ class Dispatcher():
 
         # all prompts and tokens / config
         batch_seq_len = math.ceil(batch_seq_len / 8) * 8
+        prompts: List[str] = []
+        expand_side: List[str] = []
         batch_tokens: List[Tokens] = []
-        attention_masks: List[Tokens] = []
-        batch_labels: List[List] = []
+        tokens_len_without_pad: List[int] = []
         lora_batch_data_config: List[LoraBatchDataConfig] = []
 
         # batch the all adapter data
@@ -339,7 +381,9 @@ class Dispatcher():
             adapter_end_idx: int = adapter_start_idx + \
                 len(all_train_data[adapter])
             for data in all_train_data[adapter]:
+                prompts.append(data.prompt_)
                 tokens: Tokens = data.tokens_.copy()
+                tokens_len_without_pad.append(len(tokens))
                 # get the pad token from lora config
                 lora_config = None
                 for ilora_conf in self.config_["lora"]:
@@ -353,14 +397,8 @@ class Dispatcher():
                         tokens.append(self.tokenizer_.pad_id_)
                     else:
                         tokens.insert(0, self.tokenizer_.pad_id_)
+                expand_side.append(pad_side)
                 batch_tokens.append(tokens)
-                attention_masks.append(self.tokenizer_.attention_mask(tokens))
-                labels: List = data.labels_
-                if labels is None:
-                    labels = tokens.copy()
-                else:
-                    labels = labels.copy()
-                batch_labels.append(labels)
 
             lora_batch_data_config.append(LoraBatchDataConfig(adapter_name_=adapter,
                                                               batch_start_idx_=adapter_start_idx,
@@ -369,6 +407,9 @@ class Dispatcher():
 
         self.__dispatch_task_out()
 
-        return batch_labels, MultiLoraBatchData(lora_batch_data_config_=lora_batch_data_config,
-                                                batch_tokens_=batch_tokens,
-                                                attention_masks_=attention_masks)
+        return MultiLoraBatchData(prompts_=prompts,
+                                  lora_batch_data_config_=lora_batch_data_config,
+                                  batch_seq_len_=batch_seq_len,
+                                  expand_side_=expand_side,
+                                  batch_tokens_=batch_tokens,
+                                  tokens_len_without_pad_=tokens_len_without_pad)

@@ -1,4 +1,4 @@
-from mlora.modelargs import KVCache, LoraConfig, MultiLoraBatchData
+from mlora.modelargs import MultiLoraBatchData
 
 import torch
 import einops
@@ -7,28 +7,28 @@ from abc import ABCMeta, abstractclassmethod
 from typing import Tuple, Dict, List, Optional
 
 
-def precompute_mask(tokens: torch.Tensor,
-                    attention_masks: List[int],
-                    n_heads: int,
-                    seq_start_pos: int,
+def precompute_mask(input: MultiLoraBatchData,
+                    n_head: int,
                     device: str,
-                    dtype: torch.dtype) -> torch.Tensor:
-    batch_size, batch_seq_len = tokens.shape
+                    dtype: torch.dtype = torch.float32) -> torch.Tensor:
+    mask = torch.full((len(input.prompts_), n_head,
+                      input.batch_seq_len_, input.batch_seq_len_), float("-inf"))
+    mask = torch.triu(mask, diagonal=1).to(torch.float32).cuda(device)
 
-    mask = torch.full((batch_size, n_heads, batch_seq_len, batch_seq_len),
-                      float("-inf"), device=device, dtype=torch.float32)
-    mask = torch.triu(mask, diagonal=(seq_start_pos + 1))
+    for idx, _ in enumerate(input.prompts_):
+        zero_len = input.tokens_len_without_pad_[idx]
+        inf_len = input.batch_seq_len_ - zero_len
+        expand_side = input.expand_side_[idx]
 
-    if attention_masks is not None:
-        attention_masks = torch.tensor(
-            attention_masks, dtype=torch.bool, device=device)
-        attention_masks = attention_masks.view(batch_size, 1, 1, batch_seq_len)
-        attention_masks = attention_masks.expand(-1,
-                                                 n_heads, batch_seq_len, -1)
-        mask = torch.masked_fill(mask, attention_masks, float("-inf"))
+        if expand_side == "right":
+            mask[idx] += torch.tensor([0] * zero_len + [float("-inf")] * inf_len).expand(
+                input.batch_seq_len_, input.batch_seq_len_).cuda(device)
+        else:
+            mask[idx] += torch.tensor([float("-inf")] * inf_len + [0] * zero_len).expand(
+                input.batch_seq_len_, input.batch_seq_len_).cuda(device)
 
     mask.requires_grad_(False)
-    return mask.to(device=device, dtype=dtype)
+    return mask.to(dtype)
 
 
 def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -60,8 +60,7 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
-                     angle: Tuple[torch.Tensor, torch.Tensor],
-                     dtype: torch.dtype) -> Tuple[torch.Tensor, torch.Tensor]:
+                     angle: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
     # data shape is: batch_size * max_seq_len * n_head * n_dim
     _, max_seq_len, _, dim_head = xq.shape
 
@@ -70,7 +69,7 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
 
     xq = (xq * cos) + (rotate_half(xq) * sin)
     xk = (xk * cos) + (rotate_half(xk) * sin)
-    return (xq.to(dtype), xk.to(dtype))
+    return (xq, xk)
 
 
 def apply_rotary_emb_to_one(x: torch.Tensor, angle: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
@@ -103,11 +102,20 @@ class RMSNorm(torch.nn.Module):
 
 class LLMModel(metaclass=ABCMeta):
     @abstractclassmethod
-    def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
+    def forward(self, input: MultiLoraBatchData):
         pass
 
     @abstractclassmethod
-    def load_adapter_weight(self, path: str, adapter_name: str = None):
+    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+        pass
+
+    @abstractclassmethod
+    def init_lora_weight(self, adapter_name: str,
+                         r: int,
+                         lora_alpha: int,
+                         lora_dropout: float,
+                         target: Dict[str, bool],
+                         weight: Optional[Dict[str, torch.Tensor]]):
         pass
 
     @abstractclassmethod
@@ -115,22 +123,5 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
-        pass
-
-    @abstractclassmethod
     def sequential_module(self) -> torch.nn.Sequential:
-        pass
-
-    @abstractclassmethod
-    def get_generate_paramas(self) -> Dict[str, any]:
-        pass
-
-    @abstractclassmethod
-    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
-        pass
-
-    @abstractclassmethod
-    def forward(self, input: MultiLoraBatchData,
-                kv_cache: KVCache = None) -> torch.Tensor:
         pass

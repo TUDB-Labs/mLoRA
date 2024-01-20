@@ -8,10 +8,8 @@ import bitsandbytes
 from typing import Dict, Optional
 
 
-class Lora(torch.nn.Module):
+class Lora():
     def __init__(self, adapter_name: str):
-        super().__init__()
-
         self.adapter_name_: str = adapter_name
 
         self.lora_a_: torch.Tensor = None
@@ -29,29 +27,30 @@ class Lora(torch.nn.Module):
         self.scaling_ = alpha / r
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        data_ = F.dropout(data.to(self.lora_a_.dtype), self.dropout_)
+        data_ = F.dropout(data, self.dropout_)
         data_ @= self.lora_a_.transpose(0, 1)
         data_ @= self.lora_b_.transpose(0, 1)
         data_ *= self.scaling_
-        return data_.to(data.dtype)
+        return data_
 
 
-class Linear(torch.nn.Module):
+class Linear():
     def __init__(self, weight: torch.nn.Module, device: str = None):
-        super().__init__()
-
         if device is None:
             self.device_ = weight.device
         else:
             self.device_ = device
 
         if not isinstance(weight, torch.nn.Linear):
-            assert isinstance(weight, bitsandbytes.nn.Linear8bitLt) or isinstance(
-                weight, bitsandbytes.nn.Linear4bit), "error type."
+            import bitsandbytes
+            assert isinstance(weight,
+                              bitsandbytes.nn.Linear8bitLt) or isinstance(weight,
+                                                                          bitsandbytes.nn.Linear4bit), "error type."
         else:
             weight.requires_grad_(False)
 
-        self.weight_ = weight.to(device)
+        self.weight_ = weight
+        self.weight_.to(device)
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 

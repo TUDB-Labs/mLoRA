@@ -1,6 +1,10 @@
 {
-    "description": "A demo template to experiment with.",
-    "prompt_input": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n",
-    "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n",
-    "response_split": "### Output:"
+    "description": "",
+    "parameter": [
+        "input",
+        "output",
+        "instruction"
+    ],
+    "prompt": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n{output}\n",
+    "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n{output}\n"
 }

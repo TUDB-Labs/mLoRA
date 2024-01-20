@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlora"
-version = "0.2"
+version = "0.1"
 description = "A tool for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -17,15 +17,12 @@ dependencies = [
     "torch==2.0.1",
     "einops==0.6.1",
     "datasets==2.14.5",
-    "evaluate==0.4.1",
-    "accelerate==0.24.1",
-    "transformers==4.36.2",
-    "bitsandbytes==0.41.1",
+    "accelerate==0.21.0",
+    "transformers==4.30.2",
+    "bitsandbytes==0.40.0",
     "sentencepiece==0.1.99",
     "scipy==1.10.1",
-    "protobuf==3.20.2",
-    "xformers==0.0.21",
-    "huggingface_hub",
+    "xformers==0.0.20",
     "nltk",
     "jieba",
     "rouge",
