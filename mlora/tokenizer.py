@@ -1,7 +1,6 @@
-from transformers import AutoTokenizer
-from typing import List
+from mlora.modelargs import Tokens, Masks
 
-Tokens = List[int]
+from transformers import AutoTokenizer
 
 
 class Tokenizer:
@@ -27,3 +26,10 @@ class Tokenizer:
 
     def decode(self, data: Tokens) -> str:
         return self.tokenizer.decode(data)
+
+    # get the mask from tokens
+    #   example: tokens is [2, 3, pad, pad, 4, 5]
+    #            output is [False, False, True, True, False, False]
+    def mask_from(self, tokens: Tokens) -> Masks:
+        mask_tokens = [self.pad_id_]
+        return [tok in mask_tokens for tok in tokens]

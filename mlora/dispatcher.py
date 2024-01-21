@@ -385,17 +385,14 @@ class Dispatcher():
                         lora_config = ilora_conf
                 pad_side = lora_config.get("expand_side", "right")
                 assert pad_side == "right" or pad_side == "left"
-                mask = [False] * len(tokens)
                 # pad the tokens to align
                 while len(tokens) < batch_seq_len:
                     if pad_side == "right":
                         tokens.append(self.tokenizer_.pad_id_)
-                        mask += [True]
                     else:
                         tokens.insert(0, self.tokenizer_.pad_id_)
-                        mask = [True] + mask
                 batch_tokens.append(tokens)
-                additional_mask.append(mask)
+                additional_mask.append(self.tokenizer_.mask_from(tokens))
 
             lora_batch_data_config.append(LoraBatchDataConfig(adapter_name_=adapter,
                                                               batch_start_idx_=adapter_start_idx,
