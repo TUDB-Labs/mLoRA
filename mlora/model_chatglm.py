@@ -159,7 +159,9 @@ class ChatGLMModel(LLMModel):
         # batch_size, seq_len, dim
         data = F.embedding(tokens, self.token_embedding_,
                            padding_idx=self.pad_token_id_).requires_grad_(True)
-        mask = precompute_mask(input, self.n_heads_, self.device_, data.dtype)
+
+        mask = precompute_mask(
+            tokens, self.n_heads_, self.device_, input.additional_mask_, dtype=data.dtype)
 
         for layer in self.layers_:
             if input.inference_model_:

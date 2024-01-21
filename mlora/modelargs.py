@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List
 
 Tokens = List[int]
+Masks = List[bool]
 
 
 @dataclass
@@ -36,16 +37,9 @@ class LoraBatchDataConfig:
 
 @dataclass
 class MultiLoraBatchData:
-    prompts_: List[str] = None
-    lora_batch_data_config_: List[LoraBatchDataConfig] = None
-
-    # batch seq len
-    # the expand right and tokens without pad len
-    # be need by the mask matrix
-    batch_seq_len_: int = None
-    expand_side_: List[str] = None
-
+    # the datas: batch_size * token
     batch_tokens_: List[Tokens] = None
-    tokens_len_without_pad_: Tokens = None
+    additional_mask_: List[Masks] = None
+    lora_batch_data_config_: List[LoraBatchDataConfig] = None
 
     inference_model_: bool = False
