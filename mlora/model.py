@@ -1,4 +1,4 @@
-from mlora.modelargs import MultiLoraBatchData
+from mlora.modelargs import MultiLoraBatchData, Masks
 
 import torch
 import einops
@@ -7,28 +7,39 @@ from abc import ABCMeta, abstractclassmethod
 from typing import Tuple, Dict, List, Optional
 
 
-def precompute_mask(input: MultiLoraBatchData,
-                    n_head: int,
+# input_tokens shape is: batch_size * seq_len
+#   default: upper triangular matrix like below, i.e. diagonal = 1
+#            0 -inf -inf
+#            0    0 -inf
+#            0    0    0
+# additional_mask: batch_size * seq_len
+#   default: is None, if set true, the mask metric will be -inf
+#   example: [[True, True, False]]
+#           -inf -inf -inf
+#           -inf    0    0
+#           -inf    0    0
+def precompute_mask(input_tokens: torch.Tensor,
+                    n_heads: int,
                     device: str,
+                    additional_mask: List[Masks] = None,
+                    diagonal: int = 1,
                     dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    mask = torch.full((len(input.prompts_), n_head,
-                      input.batch_seq_len_, input.batch_seq_len_), float("-inf"))
-    mask = torch.triu(mask, diagonal=1).to(torch.float32).cuda(device)
+    batch_size, seq_len = input_tokens.shape
 
-    for idx, _ in enumerate(input.prompts_):
-        zero_len = input.tokens_len_without_pad_[idx]
-        inf_len = input.batch_seq_len_ - zero_len
-        expand_side = input.expand_side_[idx]
+    mask = torch.full((batch_size, n_heads, seq_len, seq_len),
+                      float("-inf"), device=device, dtype=dtype)
+    mask = torch.triu(mask, diagonal=diagonal)
 
-        if expand_side == "right":
-            mask[idx] += torch.tensor([0] * zero_len + [float("-inf")] * inf_len).expand(
-                input.batch_seq_len_, input.batch_seq_len_).cuda(device)
-        else:
-            mask[idx] += torch.tensor([float("-inf")] * inf_len + [0] * zero_len).expand(
-                input.batch_seq_len_, input.batch_seq_len_).cuda(device)
+    if additional_mask is not None:
+        masks_metric = torch.tensor(
+            additional_mask, dtype=torch.bool, device=device)
+        masks_metric = masks_metric.view(batch_size, 1, 1, seq_len)
+        masks_metric = masks_metric.expand(-1, n_heads, seq_len, -1)
+        mask = torch.masked_fill(mask, masks_metric, float("-inf"))
 
     mask.requires_grad_(False)
-    return mask.to(dtype)
+
+    return mask.to(device=device, dtype=dtype)
 
 
 def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:

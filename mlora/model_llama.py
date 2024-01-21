@@ -208,9 +208,10 @@ class LlamaModel(LLMModel):
                               dtype=torch.int64).to(self.device_)
 
         # only for train
-        mask = precompute_mask(input, self.n_heads_, self.device_)
-
         seq_module = self.sequential_module()
+
+        mask = precompute_mask(tokens, self.n_heads_,
+                               self.device_, input.additional_mask_)
 
         if input.inference_model_:
             data = (tokens, mask, self.rope_angle_, input, False)

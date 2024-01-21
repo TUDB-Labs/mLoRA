@@ -1,6 +1,7 @@
 from mlora import Tokenizer
 from mlora import MultiLoraBatchData
 from mlora import LoraBatchDataConfig
+from mlora.modelargs import Tokens, Masks
 
 import sys
 import math
@@ -9,9 +10,6 @@ import random
 import datasets
 from dataclasses import dataclass
 from typing import Dict, List, Union
-
-
-Tokens = List[int]
 
 
 @dataclass
@@ -369,10 +367,8 @@ class Dispatcher():
 
         # all prompts and tokens / config
         batch_seq_len = math.ceil(batch_seq_len / 8) * 8
-        prompts: List[str] = []
-        expand_side: List[str] = []
         batch_tokens: List[Tokens] = []
-        tokens_len_without_pad: List[int] = []
+        additional_mask: List[Masks] = []
         lora_batch_data_config: List[LoraBatchDataConfig] = []
 
         # batch the all adapter data
@@ -381,9 +377,7 @@ class Dispatcher():
             adapter_end_idx: int = adapter_start_idx + \
                 len(all_train_data[adapter])
             for data in all_train_data[adapter]:
-                prompts.append(data.prompt_)
                 tokens: Tokens = data.tokens_.copy()
-                tokens_len_without_pad.append(len(tokens))
                 # get the pad token from lora config
                 lora_config = None
                 for ilora_conf in self.config_["lora"]:
@@ -391,14 +385,17 @@ class Dispatcher():
                         lora_config = ilora_conf
                 pad_side = lora_config.get("expand_side", "right")
                 assert pad_side == "right" or pad_side == "left"
+                mask = [False] * len(tokens)
                 # pad the tokens to align
                 while len(tokens) < batch_seq_len:
                     if pad_side == "right":
                         tokens.append(self.tokenizer_.pad_id_)
+                        mask += [True]
                     else:
                         tokens.insert(0, self.tokenizer_.pad_id_)
-                expand_side.append(pad_side)
+                        mask = [True] + mask
                 batch_tokens.append(tokens)
+                additional_mask.append(mask)
 
             lora_batch_data_config.append(LoraBatchDataConfig(adapter_name_=adapter,
                                                               batch_start_idx_=adapter_start_idx,
@@ -407,9 +404,7 @@ class Dispatcher():
 
         self.__dispatch_task_out()
 
-        return MultiLoraBatchData(prompts_=prompts,
-                                  lora_batch_data_config_=lora_batch_data_config,
-                                  batch_seq_len_=batch_seq_len,
-                                  expand_side_=expand_side,
+        return MultiLoraBatchData(lora_batch_data_config_=lora_batch_data_config,
+                                  additional_mask_=additional_mask,
                                   batch_tokens_=batch_tokens,
-                                  tokens_len_without_pad_=tokens_len_without_pad)
+                                  inference_model_=False)
