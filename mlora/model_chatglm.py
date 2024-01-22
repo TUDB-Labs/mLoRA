@@ -4,6 +4,7 @@ from mlora.model import LLMModel, RMSNorm
 from mlora.model import apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
 from mlora.LoraLiner import Linear
 
+import logging
 import torch
 import torch.nn.functional as F
 import xformers.ops
@@ -181,12 +182,10 @@ class ChatGLMModel(LLMModel):
                         fp16: bool = True,
                         bf16: bool = True,
                         double_quant: bool = True,
-                        quant_type: str = 'nf4',
-                        log_fn=None):
+                        quant_type: str = 'nf4'):
         # now only support the qlora - 4bit
         if bits in [4, 8]:
-            if log_fn is not None:
-                log_fn('Loading model with quantization, bits = %i' % bits)
+            logging.info('Loading model with quantization, bits = %i' % bits)
             from transformers import BitsAndBytesConfig
             compute_dtype = (torch.float16 if fp16 else (
                 torch.bfloat16 if bf16 else torch.float32))
