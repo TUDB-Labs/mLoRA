@@ -4,6 +4,7 @@ from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, prec
 from mlora.model import LLMModel, RMSNorm
 from mlora.LoraLiner import Linear
 
+import logging
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -239,11 +240,9 @@ class LlamaModel(LLMModel):
                         fp16: bool = True,
                         bf16: bool = True,
                         double_quant: bool = True,
-                        quant_type: str = 'nf4',
-                        log_fn=None) -> LLMModel:
+                        quant_type: str = 'nf4') -> LLMModel:
         if bits in [4, 8]:
-            if log_fn is not None:
-                log_fn('Loading model with quantization, bits = %i' % bits)
+            logging.info('Loading model with quantization, bits = %i' % bits)
             from transformers import BitsAndBytesConfig
             compute_dtype = (torch.float16 if fp16 else (
                 torch.bfloat16 if bf16 else torch.float32))
