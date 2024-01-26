@@ -161,7 +161,7 @@ def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
 def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
     # the train paramas per lora model
     all_train_paramas: Dict[str, List[torch.Tensor]
-                            ] = llm_model.get_train_paramas(config)
+                            ] = llm_model.get_train_paramas()
     all_optimizer: Dict[str, torch.optim.Optimizer] = get_optimizer(
         config, all_train_paramas)
     accumulation_step: Dict[str, int] = get_accumulation_steps(config)
