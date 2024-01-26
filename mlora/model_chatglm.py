@@ -268,28 +268,8 @@ class ChatGLMModel(LLMModel):
             transformer_layer.init_lora_layer_weight(
                 adapter_name, r, lora_alpha, lora_dropout, target, weight)
 
-    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
-        train_paramas = {}
-
-        for transformer_layer in self.layers_:
-            for lora_config in config["lora"]:
-                adapter_name = lora_config["name"]
-                if adapter_name not in train_paramas:
-                    train_paramas[adapter_name] = []
-
-                lora_layer_list = [transformer_layer.query_key_value_.loras_,
-                                   transformer_layer.dense_.loras_,
-                                   transformer_layer.dense_h_to_4h_.loras_,
-                                   transformer_layer.dense_4h_to_h_.loras_]
-
-                for lora_layer in lora_layer_list:
-                    if adapter_name in lora_layer:
-                        train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_a_)
-                        train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_b_)
-
-        return train_paramas
+    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
+        pass
 
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
         # return the lora weight and target_module's name

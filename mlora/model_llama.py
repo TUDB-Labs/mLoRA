@@ -2,7 +2,7 @@ from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
 from mlora.model import LLMModel, RMSNorm
-from mlora.LoraLiner import Linear
+from mlora.LoraLiner import Linear, Lora
 
 import logging
 import torch
@@ -24,7 +24,6 @@ class Embedding(torch.nn.Module):
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
         data = F.embedding(tokens, self.token_embedding_,
                            padding_idx=self.padding_idx_)
-        data.requires_grad_(True)
         return data
 
 
@@ -77,6 +76,52 @@ class Transformer(torch.nn.Module):
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
         self.head_dim_ = args.dim_ // args.n_heads_
 
+    @property
+    def linear_layer_name_to_module_dict(self) -> Dict[str, Linear]:
+        # warnning: do not use the function when not init the linear layer
+        ret = {"k_proj": self.wk_,
+               "q_proj": self.wq_,
+               "v_proj": self.wv_,
+               "o_proj": self.wo_,
+               "w1_proj": self.w1_,
+               "w2_proj": self.w2_,
+               "w3_proj": self.w3_}
+        assert all([isinstance(layer, Linear) for _, layer in ret.items()])
+        return ret
+
+    def lora_layer_name(self,
+                        name: str,
+                        is_lora_a: bool = False,
+                        is_lora_b: bool = False) -> str:
+        assert is_lora_a ^ is_lora_b
+
+        LORA_A_NAME_STR = "lora_A"
+        LORA_B_NAME_STR = "lora_B"
+        lora_layer_name_fmt = "base_model.model.model.layers.{}.self_attn.{}.{}.weight"
+
+        return lora_layer_name_fmt.format(self.layer_id_, name, LORA_A_NAME_STR if is_lora_a else LORA_B_NAME_STR)
+
+    def from_pretrained(self,
+                        transformer_layer: torch.nn.Module,
+                        norm_eps: float,
+                        device: torch.device) -> None:
+        linear_dict_name = {"wq_": transformer_layer.self_attn.q_proj,
+                            "wk_": transformer_layer.self_attn.k_proj,
+                            "wv_": transformer_layer.self_attn.v_proj,
+                            "wo_": transformer_layer.self_attn.o_proj,
+                            "w1_": transformer_layer.mlp.gate_proj,
+                            "w2_": transformer_layer.mlp.down_proj,
+                            "w3_": transformer_layer.mlp.up_proj}
+        norm_dict_name = {"attention_norm_": transformer_layer.input_layernorm.weight,
+                          "ffn_norm_": transformer_layer.post_attention_layernorm.weight}
+
+        for var_dict_name, source in linear_dict_name.items():
+            self.__dict__[var_dict_name] = Linear(source, device=device)
+
+        for var_dict_name, source in norm_dict_name.items():
+            self.__dict__[var_dict_name] = RMSNorm(
+                source.to(device=device).detach().requires_grad_(False), norm_eps)
+
     def init_lora_layer_weight(self,
                                adapter_name: str,
                                r: int,
@@ -84,29 +129,27 @@ class Transformer(torch.nn.Module):
                                lora_dropout: float,
                                target: Dict[str, bool],
                                weight: Optional[Dict[str, torch.Tensor]]):
-        linear_layer_list = [self.wk_, self.wq_, self.wv_,
-                             self.wo_, self.w1_, self.w2_, self.w3_]
-        linear_layer_name_list = [
-            "k_proj", "q_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
+        # init the lora layer, if the weight state dict have already
+        # exist this lora weight, use it, otherwise init it with zero
+        name_module_dict: Dict[str,
+                               Linear] = self.linear_layer_name_to_module_dict
 
-        for idx, layer_name in enumerate(linear_layer_name_list):
-            if layer_name in target and target[layer_name]:
-                lora_a = None
-                lora_b = None
-                if weight is not None:
-                    lora_a_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_A.weight"
-                    lora_b_name = f"base_model.model.model.layers.{self.layer_id_}.self_attn.{layer_name}.lora_B.weight"
-                    if lora_a_name not in weight:
-                        raise f"can not found the layer {lora_a_name} in model"
-                    if lora_b_name not in weight:
-                        raise f"can not found the layer {lora_b_name} in model"
-                    lora_a = weight[lora_a_name]
-                    lora_b = weight[lora_b_name]
+        for name, module in name_module_dict.items():
+            assert isinstance(module, Linear)
 
-                linear_layer_list[idx].init_lora_weight(
-                    adapter_name, r, lora_alpha, lora_dropout, lora_a, lora_b)
+            if name in target and target[name]:
+                lora_weight = (None, None)
+                lora_a_name = self.lora_layer_name(name, is_lora_a=True)
+                lora_b_name = self.lora_layer_name(name, is_lora_b=True)
 
-    # @torch.compile
+                if weight is not None and lora_a_name in weight:
+                    assert lora_b_name in weight, f"can not found the layer {lora_b_name} in model."
+                    lora_weight = (weight[lora_a_name], weight[lora_b_name])
+
+                # init the lora layer
+                module.init_lora_weight(
+                    adapter_name, r, lora_alpha, lora_dropout, lora_weight)
+
     def forward(self,
                 data: torch.Tensor,
                 mask: torch.Tensor,
@@ -160,10 +203,15 @@ class LlamaSequentialWrapper(torch.nn.Module):
         return type(self.wrapper_module_).__name__
 
     def forward(self, input: Tuple) -> Tuple:
+        assert isinstance(input, Tuple)
+        assert len(input) == 5
+
         module_name = self.name()
 
-        if module_name == "Embedding" or module_name == "RMSNormLayer" or module_name == "OutputLayer":
+        if module_name == "Embedding":
             output = self.wrapper_module_.forward(input[0])
+            if input[-1]:
+                output = output.requires_grad_(True)
             return (output, ) + input[1:]
         elif module_name == "Transformer":
             if input[-1]:
@@ -171,6 +219,9 @@ class LlamaSequentialWrapper(torch.nn.Module):
                     self.wrapper_module_.forward, *input[:-1])
             else:
                 output = self.wrapper_module_.forward(*input[:-1])
+            return (output, ) + input[1:]
+        elif module_name == "RMSNormLayer" or module_name == "OutputLayer":
+            output = self.wrapper_module_.forward(input[0])
             return (output, ) + input[1:]
         else:
             raise f"module invalid: {module_name}"
@@ -187,6 +238,9 @@ class LlamaModel(LLMModel):
 
         self.norm_: RMSNormLayer = None    # dim
         self.output_: OutputLayer = None   # vocab size * dim
+
+        # sequential model
+        self.seq_module_: torch.nn.Sequential = None
 
         # cos and sin
         self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
@@ -208,9 +262,6 @@ class LlamaModel(LLMModel):
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int64).to(self.device_)
 
-        # only for train
-        seq_module = self.sequential_module()
-
         mask = precompute_mask(tokens, self.n_heads_,
                                self.device_, input.additional_mask_)
 
@@ -219,12 +270,13 @@ class LlamaModel(LLMModel):
         else:
             data = (tokens, mask, self.rope_angle_, input, True)
 
-        for seq_layer in seq_module:
+        for seq_layer in self.seq_module_:
             data = seq_layer.forward(data)
 
         return data[0]
 
-    def init_lora_weight(self, adapter_name: str,
+    def init_lora_weight(self,
+                         adapter_name: str,
                          r: int,
                          lora_alpha: int,
                          lora_dropout: float,
@@ -282,100 +334,109 @@ class LlamaModel(LLMModel):
 
         model = LlamaModel(llama_args)
 
-        embedding_weight = llama_model.model.embed_tokens.weight.to(
-            device=device).requires_grad_(False)
+        # plm - pretrained large model
+        def get_tensor_from_plm(name: str) -> torch.Tensor:
+            origin_weight_map = {"embedding": llama_model.model.embed_tokens.weight,
+                                 "norm": llama_model.model.norm.weight,
+                                 "output": llama_model.lm_head.weight}
+            assert name in origin_weight_map
+            origin_weight = origin_weight_map[name]
+            assert isinstance(origin_weight, torch.Tensor)
+            return origin_weight.to(device=device).detach().requires_grad_(False)
+
         model.token_embedding_ = Embedding(
-            embedding_weight, llama_args.pad_token_id_)
+            get_tensor_from_plm("embedding"), llama_args.pad_token_id_)
 
-        output_weight = llama_model.lm_head.weight.to(
-            dtype=torch.float32, device=device).requires_grad_(False)
-        model.output_ = OutputLayer(output_weight)
+        for idx, target_layer in enumerate(llama_model.model.layers):
+            assert isinstance(model.layers_[idx], Transformer)
+            target_transformer: Transformer = model.layers_[idx]
+            target_transformer.from_pretrained(
+                target_layer, model.norm_eps_, device=device)
 
-        norm_weight = llama_model.model.norm.weight.to(
-            device=device).requires_grad_(False)
-        model.norm_ = RMSNormLayer(norm_weight, model.norm_eps_)
+        model.norm_ = RMSNormLayer(
+            get_tensor_from_plm("norm"), model.norm_eps_)
 
-        for idx, layer in enumerate(llama_model.model.layers):
-            model.layers_[idx].wq_ = Linear(
-                layer.self_attn.q_proj, device=device)
-            model.layers_[idx].wk_ = Linear(
-                layer.self_attn.k_proj, device=device)
-            model.layers_[idx].wv_ = Linear(
-                layer.self_attn.v_proj, device=device)
-            model.layers_[idx].wo_ = Linear(
-                layer.self_attn.o_proj, device=device)
-            model.layers_[idx].w1_ = Linear(layer.mlp.gate_proj, device=device)
-            model.layers_[idx].w2_ = Linear(layer.mlp.down_proj, device=device)
-            model.layers_[idx].w3_ = Linear(layer.mlp.up_proj, device=device)
-            model.layers_[idx].attention_norm_ = RMSNorm(
-                layer.input_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
-            model.layers_[idx].ffn_norm_ = RMSNorm(
-                layer.post_attention_layernorm.weight.to(device=device).requires_grad_(False), model.norm_eps_)
+        model.output_ = OutputLayer(get_tensor_from_plm("output"))
+
+        model.seq_module_ = model.sequential_module()
 
         return model
 
-    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
+        # warnning: this will return all the lora's parameters
+
+        # the lora layer inside the linear layer
+        all_linear_layer_name = ["wq_", "wk_",
+                                 "wv_", "wo_", "w1_", "w2_", "w3_"]
+
+        def get_all_linear_layer(layer: Transformer):
+            assert isinstance(layer, Transformer), f"error type {type(layer)}"
+            # all linear layer from this transformer layer
+            all_linear_layer: List[Linear] = [layer.__dict__[linear_layer_name]
+                                              for linear_layer_name in all_linear_layer_name]
+            return all_linear_layer
+
+        def get_all_loras_layer(layer: Linear):
+            assert isinstance(layer, Linear), f"error type {type(layer)}"
+            # all lora adapter from this linear layer
+            return layer.loras_
+
+        all_linear_layer = [linear_layer
+                            for transformer_layer in self.layers_
+                            for linear_layer in get_all_linear_layer(transformer_layer)]
+
+        all_loras_layer: List[Dict[str, Lora]] = [get_all_loras_layer(
+            linear_layer) for linear_layer in all_linear_layer]
+
         train_paramas = {}
-
-        for transformer_layer in self.layers_:
-            for lora_config in config["lora"]:
-                adapter_name = lora_config["name"]
-                if adapter_name not in train_paramas:
-                    train_paramas[adapter_name] = []
-
-                lora_layer_list = [transformer_layer.wq_.loras_, transformer_layer.wk_.loras_,
-                                   transformer_layer.wv_.loras_, transformer_layer.wo_.loras_,
-                                   transformer_layer.w1_.loras_, transformer_layer.w2_.loras_,
-                                   transformer_layer.w3_.loras_]
-
-                for lora_layer in lora_layer_list:
-                    if adapter_name in lora_layer:
-                        train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_a_)
-                        train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_b_)
+        for loras in all_loras_layer:
+            for adatper_name, lora in loras.items():
+                if adatper_name not in train_paramas:
+                    train_paramas[adatper_name] = []
+                train_paramas[adatper_name].extend(
+                    (lora.lora_a_, lora.lora_b_))
 
         return train_paramas
 
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
-        # return the lora weight and target_module's name
+        # return the lora weight dict and target lora module's name
+        #   for example, lora_weight_dict = {"self_atten.q_proj.lora_A.weight", tensor}
+        #                target_modules   = ["q_proj", "k_proj"]
         lora_weight_dict = {}
         target_modules = []
-        for idx, transformer_layer in enumerate(self.layers_):
-            layer_prefix_name = "base_model.model.model.layers." + \
-                str(idx) + "." + "self_attn."
-            lora_layer_list = [transformer_layer.wq_, transformer_layer.wk_,
-                               transformer_layer.wv_, transformer_layer.wo_,
-                               transformer_layer.w1_, transformer_layer.w2_,
-                               transformer_layer.w3_]
-            lora_layer_name_list = [
-                "q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
-            for idx, lora_layer in enumerate(lora_layer_list):
-                if lora_name in lora_layer.loras_:
-                    if lora_layer_name_list[idx] not in target_modules:
-                        target_modules.append(lora_layer_name_list[idx])
-                    lora_weight_dict[layer_prefix_name +
-                                     f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
-                    lora_weight_dict[layer_prefix_name +
-                                     f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
+
+        # each transformer layer
+        for transformer_layer in self.layers_:
+            name_module_dict: Dict[str,
+                                   Linear] = transformer_layer.linear_layer_name_to_module_dict
+            # each linear layer in transformer layer
+            for name, module in name_module_dict.items():
+                loras: Dict[str, Lora] = module.loras_
+                if lora_name not in loras:
+                    continue
+                if name not in target_modules:
+                    target_modules.append(name)
+                lora: Lora = loras[lora_name]
+                lora_weight_dict[transformer_layer.lora_layer_name(
+                    lora_name, is_lora_a=True)] = lora.lora_a_
+                lora_weight_dict[transformer_layer.lora_layer_name(
+                    lora_name, is_lora_b=True)] = lora.lora_b_
+
         return lora_weight_dict, target_modules
 
     def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()
 
+        # must ensure the follow order
         seq_module.update(
             {"embedding": LlamaSequentialWrapper(self.token_embedding_)})
-        seq_module.move_to_end("embedding")
 
         for index, layer in enumerate(self.layers_):
             layer_name = f"layer{index}"
             seq_module.update({layer_name: LlamaSequentialWrapper(layer)})
-            seq_module.move_to_end(layer_name)
 
         seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
-        seq_module.move_to_end("norm")
 
         seq_module.update({"output": LlamaSequentialWrapper(self.output_)})
-        seq_module.move_to_end("output")
 
         return torch.nn.Sequential(seq_module)

@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 import bitsandbytes
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 
 class Lora():
@@ -35,6 +35,7 @@ class Lora():
 
 
 class Linear():
+    # the weight just wrapper the module from LlamaForCausalLM
     def __init__(self, weight: torch.nn.Module, device: str = None):
         if device is None:
             self.device_ = weight.device
@@ -54,35 +55,52 @@ class Linear():
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
-    def init_lora_weight(self, adapter_name: str, r: int, alpha: int, dropout: float,
-                         lora_a: Optional[torch.Tensor] = None,
-                         lora_b: Optional[torch.Tensor] = None):
+    def init_lora_weight(self,
+                         adapter_name: str,
+                         r: int,
+                         alpha: int,
+                         dropout: float,
+                         lora_tensor: Tuple[Optional[torch.Tensor],
+                                            Optional[torch.Tensor]] = (None, None)):
+        # if the lora_tensor is not (None, None), use it to init the lora weight
+        assert isinstance(lora_tensor, Tuple)
+        assert len(lora_tensor) == 2
+        assert ((lora_tensor[0] is None) and (lora_tensor[1] is None)) or (isinstance(
+            lora_tensor[0], torch.Tensor) and isinstance(lora_tensor[1], torch.Tensor))
+
         if adapter_name not in self.loras_:
             self.loras_[adapter_name] = Lora(adapter_name)
+        self.loras_[adapter_name].set_parameter(r, alpha, dropout)
 
         if isinstance(self.weight_, bitsandbytes.nn.Linear4bit):
-            out_dim = self.weight_.out_features
-            in_dim = self.weight_.in_features
+            out_dim, in_dim = self.weight_.out_features, self.weight_.in_features
         else:
             out_dim, in_dim = self.weight_.weight.shape
 
-        self.loras_[adapter_name].set_parameter(r, alpha, dropout)
-
-        if lora_a is not None:
-            self.loras_[adapter_name].lora_a_ = lora_a.to(
-                device=self.device_).to(torch.float32).requires_grad_(True)
-        else:
-            self.loras_[adapter_name].lora_a_ = torch.zeros(
+        def random_init_lora_a_tensor(lora: Lora):
+            lora.__dict__["lora_a_"] = torch.zeros(
                 size=(r, in_dim), device=self.device_, requires_grad=True, dtype=torch.float32)
-            torch.nn.init.kaiming_normal_(
-                self.loras_[adapter_name].lora_a_, a=math.sqrt(5))
+            torch.nn.init.kaiming_normal_(lora.lora_a_, a=math.sqrt(5))
 
-        if lora_b is not None:
-            self.loras_[adapter_name].lora_b_ = lora_b.to(
-                device=self.device_).to(torch.float32).requires_grad_(True)
-        else:
-            self.loras_[adapter_name].lora_b_ = torch.zeros(
+        def zero_init_lora_b_tensor(lora: Lora):
+            lora.__dict__["lora_b_"] = torch.zeros(
                 size=(out_dim, r), device=self.device_, requires_grad=True, dtype=torch.float32)
+
+        def replace_init_lora_tensor(lora: Lora, lora_a: torch.Tensor, lora_b: torch.Tensor):
+            lora.__dict__["lora_a_"] = lora_a.to(device=self.device_).to(
+                torch.float32).detach().requires_grad_(True)
+            lora.__dict__["lora_b_"] = lora_b.to(device=self.device_).to(
+                torch.float32).detach().requires_grad_(True)
+
+        # ensuer it's none, so we can use the __dict__ to init it
+        assert self.loras_[adapter_name].lora_a_ is None
+        assert self.loras_[adapter_name].lora_b_ is None
+
+        if lora_tensor == (None, None):
+            random_init_lora_a_tensor(self.loras_[adapter_name])
+            zero_init_lora_b_tensor(self.loras_[adapter_name])
+        else:
+            replace_init_lora_tensor(self.loras_[adapter_name], *lora_tensor)
 
         self.enable_lora_ = True
 

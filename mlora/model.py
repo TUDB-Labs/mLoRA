@@ -117,11 +117,12 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def get_train_paramas(self, config: Dict[str, str]) -> Dict[str, List[torch.Tensor]]:
+    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
         pass
 
     @abstractclassmethod
-    def init_lora_weight(self, adapter_name: str,
+    def init_lora_weight(self,
+                         adapter_name: str,
                          r: int,
                          lora_alpha: int,
                          lora_dropout: float,
