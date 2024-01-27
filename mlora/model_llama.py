@@ -418,9 +418,9 @@ class LlamaModel(LLMModel):
                     target_modules.append(name)
                 lora: Lora = loras[lora_name]
                 lora_weight_dict[transformer_layer.lora_layer_name(
-                    lora_name, is_lora_a=True)] = lora.lora_a_
+                    name, is_lora_a=True)] = lora.lora_a_
                 lora_weight_dict[transformer_layer.lora_layer_name(
-                    lora_name, is_lora_b=True)] = lora.lora_b_
+                    name, is_lora_b=True)] = lora.lora_b_
 
         return lora_weight_dict, target_modules
 
