@@ -194,6 +194,16 @@ class Transformer(torch.nn.Module):
         return data
 
 
+LlamaSequentialModuleIO = Tuple[torch.Tensor,                         # the input batch tokens
+                                torch.Tensor,                         # the mask matrics
+                                # the cos and sin angle for position embedding
+                                Tuple[torch.Tensor, torch.Tensor],
+                                MultiLoraBatchData,                   # batch data config
+                                bool                                  # whether to use checkpoint
+                                ]
+LEN_LLAMA_SEQUENTIAL_MODULE_IO = 5
+
+
 class LlamaSequentialWrapper(torch.nn.Module):
     def __init__(self, module: torch.nn.Module):
         super().__init__()
@@ -202,29 +212,49 @@ class LlamaSequentialWrapper(torch.nn.Module):
     def name(self) -> str:
         return type(self.wrapper_module_).__name__
 
-    def forward(self, input: Tuple) -> Tuple:
+    def forward(self, input: LlamaSequentialModuleIO) -> LlamaSequentialModuleIO:
         assert isinstance(input, Tuple)
-        assert len(input) == 5
+        assert len(input) == LEN_LLAMA_SEQUENTIAL_MODULE_IO
+        assert isinstance(input[0], torch.Tensor)
+        assert isinstance(input[1], torch.Tensor)
+        assert isinstance(input[2], Tuple)
+        assert isinstance(input[3], MultiLoraBatchData)
+        assert isinstance(input[4], bool)
 
-        module_name = self.name()
-
-        if module_name == "Embedding":
+        # auto catch the input argument
+        def embedding_forward():
             output = self.wrapper_module_.forward(input[0])
             if input[-1]:
                 output = output.requires_grad_(True)
             return (output, ) + input[1:]
-        elif module_name == "Transformer":
+
+        def transformer_forward():
             if input[-1]:
                 output = CheckpointRecomputeFunction.apply(
                     self.wrapper_module_.forward, *input[:-1])
             else:
                 output = self.wrapper_module_.forward(*input[:-1])
             return (output, ) + input[1:]
-        elif module_name == "RMSNormLayer" or module_name == "OutputLayer":
+
+        def rmsnorm_forward():
             output = self.wrapper_module_.forward(input[0])
             return (output, ) + input[1:]
-        else:
-            raise f"module invalid: {module_name}"
+
+        def output_layer_forward():
+            output = self.wrapper_module_.forward(input[0])
+            return (output, ) + input[1:]
+
+        forward_func_dict = {
+            "Embedding": embedding_forward,
+            "Transformer": transformer_forward,
+            "RMSNormLayer": rmsnorm_forward,
+            "OutputLayer": output_layer_forward,
+        }
+
+        module_name = self.name()
+        assert module_name in forward_func_dict, f"error module name {module_name}"
+
+        return forward_func_dict[module_name]()
 
 
 class LlamaModel(LLMModel):
@@ -329,19 +359,11 @@ class LlamaModel(LLMModel):
         llama_model = LlamaForCausalLM.from_pretrained(
             path, **additional_load_args)
 
-        llama_args = LLMModelArgs()
-        llama_args.dim_ = llama_model.config.hidden_size
-        llama_args.n_heads_ = llama_model.config.num_attention_heads
-        llama_args.n_kv_heads_ = llama_args.n_heads_ if not hasattr(
-            llama_model.config, "num_key_value_heads") else llama_model.config.num_key_value_heads
-        llama_args.n_layers_ = llama_model.config.num_hidden_layers
-        llama_args.norm_eps_ = llama_model.config.rms_norm_eps
-        llama_args.vocab_size_ = llama_model.config.vocab_size
-        llama_args.max_seq_len_ = 4096 if not hasattr(
-            llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
+        llama_args = LLMModelArgs(llama_model.config)
         llama_args.pad_token_id_ = -1
         llama_args.device = device
 
+        # load model from pretrained large model
         model = LlamaModel(llama_args)
 
         # plm - pretrained large model
@@ -368,6 +390,7 @@ class LlamaModel(LLMModel):
 
         model.output_ = OutputLayer(get_tensor_from_plm("output"))
 
+        # convert to sequential module for use
         model.seq_module_ = model.sequential_module()
 
         return model
