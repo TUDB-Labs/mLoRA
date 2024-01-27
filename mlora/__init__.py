@@ -1,4 +1,4 @@
-from mlora.utils import convert_hf_to_pth, save_lora_model
+from mlora.utils import convert_hf_to_pth, save_lora_model, setup_seed, setup_logging, setup_cuda_check
 from mlora.tokenizer import Tokenizer
 from mlora.model import LLMModel
 from mlora.model_llama import LlamaModel
@@ -14,8 +14,12 @@ __all__ = [
     "LLMModelArgs",
     "MultiLoraBatchData",
     "LoraBatchDataConfig",
+    "TrainTask",
+    "Dispatcher",
+    # utils function
     "convert_hf_to_pth",
     "save_lora_model",
-    "TrainTask",
-    "Dispatcher"
+    "setup_seed",
+    "setup_logging",
+    "setup_cuda_check"
 ]
