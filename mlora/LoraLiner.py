@@ -37,21 +37,18 @@ class Lora():
 class Linear():
     # the weight just wrapper the module from LlamaForCausalLM
     def __init__(self, weight: torch.nn.Module, device: str = None):
+        if not isinstance(weight, torch.nn.Linear):
+            assert isinstance(weight, bitsandbytes.nn.Linear8bitLt) or isinstance(
+                weight, bitsandbytes.nn.Linear4bit), f"error type - {type(weight)}."
+        else:
+            weight.requires_grad_(False)
+
         if device is None:
             self.device_ = weight.device
         else:
             self.device_ = device
 
-        if not isinstance(weight, torch.nn.Linear):
-            import bitsandbytes
-            assert isinstance(weight,
-                              bitsandbytes.nn.Linear8bitLt) or isinstance(weight,
-                                                                          bitsandbytes.nn.Linear4bit), "error type."
-        else:
-            weight.requires_grad_(False)
-
-        self.weight_ = weight
-        self.weight_.to(device)
+        self.weight_ = weight.to(device=device)
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
