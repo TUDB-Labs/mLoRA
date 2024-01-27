@@ -80,21 +80,23 @@ def setup_seed(seed):
     random.seed(seed)
 
 
-def load_base_model(config: Dict[str, any]) -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
-    if args.model_type == "llama":
-        model = mlora.LlamaModel.from_pretrained(
-            path=args.base_model,
-            device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-        )
-    elif args.model_type == "chatglm":
-        model = mlora.ChatGLMModel.from_pretrained(
-            path=args.base_model,
-            device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None))
-        )
-    else:
-        raise f"unkown model type {args.model_type}"
+def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
+    assert not (args.load_4bit and args.load_8bit)
+
+    model_type_dict: Dict[str, mlora.LLMModel] = {
+        "llama": mlora.LlamaModel,
+        "chatglm": mlora.ChatGLMModel
+    }
+
+    assert args.model_type in model_type_dict, f"unkown model type {args.model_type}"
+
+    bits = None
+    bits = 8 if args.load_8bit else bits
+    bits = 4 if args.load_4bit else bits
+
+    model = model_type_dict[args.model_type].from_pretrained(path=args.base_model,
+                                                             device=args.device,
+                                                             bits=bits)
 
     tokenizer = mlora.Tokenizer(args.base_model)
 
@@ -290,7 +292,7 @@ if __name__ == "__main__":
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
 
-    tokenizer, model = load_base_model(config)
+    tokenizer, model = load_base_model()
     init_lora_model(config, model)
 
     torch.cuda.empty_cache()
