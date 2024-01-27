@@ -289,35 +289,45 @@ class LlamaModel(LLMModel):
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
-                        fp16: bool = True,
-                        bf16: bool = True,
-                        double_quant: bool = True,
-                        quant_type: str = 'nf4') -> LLMModel:
-        if bits in [4, 8]:
+                        # below argument just for qlora (4-bit quant)
+                        qlora_4bit_fp16: bool = True,
+                        qlora_4bit_bf16: bool = False,
+                        qlora_4bit_double_quant: bool = True,
+                        qlora_4_bit_quant_type: str = "nf4") -> LLMModel:
+        assert qlora_4bit_fp16 ^ qlora_4bit_bf16
+        assert (bits is None) or (bits in [4, 8])
+        assert qlora_4_bit_quant_type in ["nf4", "fp4"]
+
+        # the argument for the LlamaForCausalLM load the pretrained large model
+        additional_load_args = {
+            "device_map": device,
+            "torch_dtype": torch.float32
+        }
+
+        if bits is not None:
             logging.info('Loading model with quantization, bits = %i' % bits)
             from transformers import BitsAndBytesConfig
-            compute_dtype = (torch.float16 if fp16 else (
-                torch.bfloat16 if bf16 else torch.float32))
-            llama_model = LlamaForCausalLM.from_pretrained(
-                path,
-                load_in_4bit=bits == 4,
-                load_in_8bit=bits == 8,
-                device_map=device,
-                quantization_config=BitsAndBytesConfig(
-                    load_in_4bit=bits == 4,
-                    load_in_8bit=bits == 8,
-                    llm_int8_threshold=6.0,
-                    llm_int8_has_fp16_weight=False,
-                    bnb_4bit_compute_dtype=compute_dtype,
-                    bnb_4bit_use_double_quant=double_quant,
-                    bnb_4bit_quant_type=quant_type,
-                ),
-                torch_dtype=(torch.float32 if fp16 else (torch.bfloat16 if bf16 else torch.float32)))
-        else:
-            llama_model = LlamaForCausalLM.from_pretrained(
-                path,
-                device_map=device,
-                torch_dtype=torch.float32)
+            qlora_4bit_compute_dtype = torch.float32
+            # if set the compute type, then change it, otherwise hold the default
+            qlora_4bit_compute_dtype = torch.float16 if qlora_4bit_fp16 else qlora_4bit_compute_dtype
+            qlora_4bit_compute_dtype = torch.bfloat16 if qlora_4bit_bf16 else qlora_4bit_compute_dtype
+
+            torch_dtype = torch.float32
+            torch_dtype = torch.bfloat16 if qlora_4bit_bf16 else torch_dtype
+            additional_load_args["torch_dtype"] = torch_dtype
+            additional_load_args["load_in_4bit"] = True if bits == 4 else False
+            additional_load_args["load_in_8bit"] = True if bits == 8 else False
+            additional_load_args["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True if bits == 4 else False,
+                load_in_8bit=True if bits == 8 else False,
+                # only for qlora 4bit
+                bnb_4bit_compute_dtype=qlora_4bit_compute_dtype,
+                bnb_4bit_use_double_quant=qlora_4bit_double_quant,
+                bnb_4bit_quant_type=qlora_4_bit_quant_type,
+            )
+
+        llama_model = LlamaForCausalLM.from_pretrained(
+            path, **additional_load_args)
 
         llama_args = LLMModelArgs()
         llama_args.dim_ = llama_model.config.hidden_size
