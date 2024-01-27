@@ -19,8 +19,6 @@
 import json
 import torch
 import mlora
-import random
-import logging
 import argparse
 from typing import Dict, Tuple, List
 
@@ -34,25 +32,25 @@ parser.add_argument('--model_type', type=str, default="llama",
                     help='The model type, support: llama, chatglm')
 parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
-
+# load quant
 parser.add_argument('--load_8bit', action="store_true",
                     help='Load model in 8bit mode')
 parser.add_argument('--load_4bit', action="store_true",
                     help='Load model in 4bit mode')
-
+# inference model
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
-
+# whether to enable the lora
 parser.add_argument('--load_lora', action="store_true",
                     help="Load lora from file instead of init randomly")
 parser.add_argument('--disable_lora', action="store_true",
                     help="Disable the lora modules")
-
+# configuration
 parser.add_argument('--config', type=str,
                     help='Path to finetune configuration')
 parser.add_argument('--seed', type=int, default=42,
                     help='Random seed in integer, default is 42')
-
+# configuration about log
 parser.add_argument('--log_level', type=str, default="INFO",
                     help="Set the log level.")
 parser.add_argument('--log_file', type=str,
@@ -71,13 +69,6 @@ if args.config is None:
     print('error: Argument --config are required.')
     parser.print_help()
     exit(-1)
-
-
-# Functions
-def setup_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    random.seed(seed)
 
 
 def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
@@ -268,26 +259,9 @@ def inference(config: Dict[str, any],
 # Main Function
 if __name__ == "__main__":
     # set the random seed
-    setup_seed(args.seed)
-
-    # set the logger
-    log_handlers = [logging.StreamHandler()]
-    if args.log_file is not None:
-        log_handlers.append(logging.FileHandler(args.log_file))
-
-    logging.basicConfig(format="[%(asctime)s] m-LoRA: %(message)s",
-                        level=args.log_level,
-                        handlers=log_handlers,
-                        force=True)
-
-    # check the enviroment
-    if torch.cuda.is_available():
-        logging.info('NVIDIA CUDA initialized successfully.')
-        logging.info('Total %i GPU(s) detected.' % torch.cuda.device_count())
-    else:
-        logging.error(
-            'm-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
-        exit(1)
+    mlora.setup_seed(args.seed)
+    mlora.setup_logging(args.log_level, args.log_file)
+    mlora.setup_cuda_check()
 
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)

@@ -23,11 +23,7 @@ dependencies = [
     "sentencepiece==0.1.99",
     "scipy==1.10.1",
     "protobuf==3.20.2",
-    "xformers==0.0.21",
-    "nltk",
-    "jieba",
-    "rouge",
-    "rouge_chinese"
+    "xformers==0.0.21"
 ]
 
 [project.urls]
