@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import List
 
+from transformers import PretrainedConfig
+
 Tokens = List[int]
 Masks = List[bool]
 
@@ -24,8 +26,22 @@ class LLMModelArgs:
     hidden_dropout_: float = 0.0
     vocab_size_: int = -1
     pad_token_id_: int = -1
-    max_seq_len_: int = 2048
+    max_seq_len_: int = 4096
     device: str = ""
+
+    def __init__(self, config: PretrainedConfig):
+        self.from_pretrained_config(config)
+
+    def from_pretrained_config(self, config: PretrainedConfig):
+        self.dim_ = config.hidden_size
+        self.n_heads_ = config.num_attention_heads
+        if hasattr(config, "num_key_value_heads"):
+            self.n_kv_heads_ = config.num_key_value_heads
+        self.n_layers_ = config.num_hidden_layers
+        self.norm_eps_ = config.rms_norm_eps
+        self.vocab_size_ = config.vocab_size
+        if hasattr(config, "max_sequence_length"):
+            self.max_seq_len_ = config.max_sequence_length
 
 
 @dataclass
