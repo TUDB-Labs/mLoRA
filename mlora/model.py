@@ -1,7 +1,6 @@
 from mlora.modelargs import MultiLoraBatchData, Masks
 
 import torch
-import einops
 
 from abc import ABCMeta, abstractclassmethod
 from typing import Tuple, Dict, List, Optional
@@ -26,8 +25,9 @@ def precompute_mask(input_tokens: torch.Tensor,
                     dtype: torch.dtype = torch.float32) -> torch.Tensor:
     batch_size, seq_len = input_tokens.shape
 
+    TORCH_MIN_VALUE = torch.finfo(dtype).min
     mask = torch.full((batch_size, n_heads, seq_len, seq_len),
-                      float("-inf"), device=device, dtype=dtype)
+                      TORCH_MIN_VALUE, device=device, dtype=dtype)
     mask = torch.triu(mask, diagonal=diagonal)
 
     if additional_mask is not None:
@@ -35,62 +35,54 @@ def precompute_mask(input_tokens: torch.Tensor,
             additional_mask, dtype=torch.bool, device=device)
         masks_metric = masks_metric.view(batch_size, 1, 1, seq_len)
         masks_metric = masks_metric.expand(-1, n_heads, seq_len, -1)
-        mask = torch.masked_fill(mask, masks_metric, float("-inf"))
+        mask = torch.masked_fill(mask, masks_metric, TORCH_MIN_VALUE)
 
     mask.requires_grad_(False)
 
     return mask.to(device=device, dtype=dtype)
 
 
-def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:
-    angles = 1.0 / (theta ** (torch.arange(0, dim, 2).to(device)
-                              [: (dim // 2)].to(torch.float) / dim))
-    seq = torch.arange(seq_len, device=angles.device)
-    emb = torch.outer(seq, angles).float()
-    emb = einops.repeat(emb, "... n -> ... (n r)", r=2)
+def precompute_rope_angle(dim: int, seq_len: int, theta: float, device: str) -> Tuple[torch.Tensor, torch.Tensor]:
+    # this implement is different with facebooksearch/llama
+    #   ref: https://github.com/huggingface/transformers/issues/25199
+    angles = 1.0 / \
+        (theta ** (torch.arange(0, dim, 2).float().to(device) / dim))
+    seq = torch.arange(seq_len, device=device, dtype=angles.dtype)
+    emb = torch.outer(seq, angles)
+    emb = torch.cat((emb, emb), dim=-1)
 
     emb.requires_grad_(False)
     # cos(angle), sin(angle)
-    return (emb.cos().to(torch.float32), emb.sin().to(torch.float32))
+    return (emb.cos(), emb.sin())
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x = einops.rearrange(x, "... (d r) -> ... d r", r=2)
-    x1, x2 = x.unbind(dim=-1)
-    x = torch.stack((-x2, x1), dim=-1)
-    return einops.rearrange(x, "... d r -> ... (d r)")
-
-
-def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
-    batch_size, seq_len, n_kv_heads, head_dim = x.shape
-    if n_rep == 1:
-        return x
-    return x[:, :, :, None, :].expand(
-        batch_size, seq_len, n_kv_heads, n_rep, head_dim).reshape(
-            batch_size, seq_len, n_kv_heads * n_rep, head_dim)
+    # see the above ref
+    left_part = x[..., :x.shape[-1] // 2]
+    right_part = x[..., x.shape[-1] // 2:]
+    return torch.cat((-right_part, left_part), dim=-1)
 
 
 def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
-                     angle: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-    # data shape is: batch_size * max_seq_len * n_head * n_dim
-    _, max_seq_len, _, dim_head = xq.shape
-
-    cos = angle[0][:max_seq_len].view(max_seq_len, 1, dim_head)
-    sin = angle[1][:max_seq_len].view(max_seq_len, 1, dim_head)
-
-    xq = (xq * cos) + (rotate_half(xq) * sin)
-    xk = (xk * cos) + (rotate_half(xk) * sin)
-    return (xq, xk)
+                     cos: torch.Tensor, sin: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    # data shape is: batch_size * n_head * seq_len * n_dim
+    xq_embed = (xq * cos) + (rotate_half(xq) * sin)
+    xk_embed = (xk * cos) + (rotate_half(xk) * sin)
+    return (xq_embed, xk_embed)
 
 
-def apply_rotary_emb_to_one(x: torch.Tensor, angle: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+def apply_rotary_emb_to_one(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
     # x: batch_size, seq_len, num_head, head_dim
-    _, seq_len, _, dim_head = x.shape
+    return (x * cos) + (rotate_half(x) * sin)
 
-    cos = angle[0][:seq_len].view(seq_len, 1, dim_head)
-    sin = angle[1][:seq_len].view(seq_len, 1, dim_head)
 
-    x = (x * cos) + (rotate_half(x) * sin)
+def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
+    batch, n_kv_heads, seq_len, head_dim = x.shape
+    if n_rep == 1:
+        return x
+    x = x[:, :, None, :, :].expand(
+        batch, n_kv_heads, n_rep, seq_len, head_dim)
+    x = x.reshape(batch, n_kv_heads * n_rep, seq_len, head_dim)
     return x
 
 
