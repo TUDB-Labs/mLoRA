@@ -68,6 +68,10 @@ class Transformer(torch.nn.Module):
         # norm
         self.attention_norm_: RMSNorm = None  # dim
         self.ffn_norm_: RMSNorm = None        # dim
+        # rope angle cos and sin
+        self.cos_, self.sin_ = precompute_rope_angle(
+            args.dim_ // args.n_heads_, args.max_seq_len_,
+            args.rope_theta_, args.device)
         # other arg
         self.layer_id_ = layer_id
         self.norm_eps_ = args.norm_eps_
@@ -153,7 +157,6 @@ class Transformer(torch.nn.Module):
     def forward(self,
                 data: torch.Tensor,
                 mask: torch.Tensor,
-                rope_angle: Tuple[torch.Tensor, torch.Tensor],
                 input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
@@ -164,19 +167,30 @@ class Transformer(torch.nn.Module):
         xv = self.wv_.forward(attention_norm_data, input_args)
 
         # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_)
+        # the shape is batch_size * number_of_head * seq_len * dim_of_head
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
+                     self.head_dim_).transpose(1, 2)
+        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
+                     self.head_dim_).transpose(1, 2)
+        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
+                     self.head_dim_).transpose(1, 2)
 
         # apply rotary embedding
-        xq, xk = apply_rotary_emb(xq, xk, rope_angle)
+        assert xq.dtype == xk.dtype
+        cos = self.cos_[:max_seq_len].to(xq.dtype)
+        sin = self.sin_[:max_seq_len].to(xq.dtype)
+        xq, xk = apply_rotary_emb(xq, xk, cos, sin)
 
         # for llama2 need to repeat the heads
-        # before dim: batch_size, seq_len, n_kv_head, head_dim
-        # after dim: batch_size, seq_len, n_head, head_dim
+        # before dim: batch_size, n_kv_head, seq_len, head_dim
+        # after dim: batch_size, n_head, seq_len, head_dim
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
+        # must align with xformers memory efficient attention
+        xq = xq.transpose(1, 2)
+        xk = xk.transpose(1, 2)
+        xv = xv.transpose(1, 2)
         attention_score = xformers.ops.memory_efficient_attention(
             xq, xk, xv, mask)
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
@@ -196,12 +210,10 @@ class Transformer(torch.nn.Module):
 
 LlamaSequentialModuleIO = Tuple[torch.Tensor,                         # the input batch tokens
                                 torch.Tensor,                         # the mask matrics
-                                # the cos and sin angle for position embedding
-                                Tuple[torch.Tensor, torch.Tensor],
                                 MultiLoraBatchData,                   # batch data config
                                 bool                                  # whether to use checkpoint
                                 ]
-LEN_LLAMA_SEQUENTIAL_MODULE_IO = 5
+LEN_LLAMA_SEQUENTIAL_MODULE_IO = 4
 
 
 class LlamaSequentialWrapper(torch.nn.Module):
@@ -217,9 +229,8 @@ class LlamaSequentialWrapper(torch.nn.Module):
         assert len(input) == LEN_LLAMA_SEQUENTIAL_MODULE_IO
         assert isinstance(input[0], torch.Tensor)
         assert isinstance(input[1], torch.Tensor)
-        assert isinstance(input[2], Tuple)
-        assert isinstance(input[3], MultiLoraBatchData)
-        assert isinstance(input[4], bool)
+        assert isinstance(input[2], MultiLoraBatchData)
+        assert isinstance(input[3], bool)
 
         # auto catch the input argument
         def embedding_forward():
@@ -272,10 +283,6 @@ class LlamaModel(LLMModel):
         # sequential model
         self.seq_module_: torch.nn.Sequential = None
 
-        # cos and sin
-        self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
-            args.dim_ // args.n_heads_, args.max_seq_len_, args.device)
-
         self.norm_eps_ = args.norm_eps_
 
         self.device_ = args.device
@@ -287,8 +294,8 @@ class LlamaModel(LLMModel):
         # need to set
         self.eos_token_id_ = -1
 
-    # train model or inference model: output is probs
     def forward(self, input: MultiLoraBatchData) -> torch.Tensor:
+        # train model or inference model: output is probs
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int64).to(self.device_)
 
@@ -296,9 +303,9 @@ class LlamaModel(LLMModel):
                                self.device_, input.additional_mask_)
 
         if input.inference_model_:
-            data = (tokens, mask, self.rope_angle_, input, False)
+            data = (tokens, mask, input, False)
         else:
-            data = (tokens, mask, self.rope_angle_, input, True)
+            data = (tokens, mask, input, True)
 
         for seq_layer in self.seq_module_:
             data = seq_layer.forward(data)

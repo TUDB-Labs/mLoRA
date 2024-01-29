@@ -21,6 +21,11 @@ jobs:
           rm -rf ./multi-lora-fine-tune
           git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
 
+      - name: install dependencies
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          pip install -r requirements.txt --force
+
       - name: finetune llama-7b
         run: |
           cd /workspace/multi-lora-fine-tune

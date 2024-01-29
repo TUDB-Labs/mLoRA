@@ -22,6 +22,7 @@ class LLMModelArgs:
     n_heads_: int = 32
     n_kv_heads_: int = 32
     n_layers_: int = 32
+    rope_theta_: float = 10000.0
     norm_eps_: float = 1e-06
     hidden_dropout_: float = 0.0
     vocab_size_: int = -1
@@ -42,6 +43,7 @@ class LLMModelArgs:
         self.vocab_size_ = config.vocab_size
         if hasattr(config, "max_sequence_length"):
             self.max_seq_len_ = config.max_sequence_length
+        self.rope_theta_ = config.rope_theta
 
 
 @dataclass
