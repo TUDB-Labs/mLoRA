@@ -40,6 +40,11 @@ parser.add_argument('--load_4bit', action="store_true",
 # inference model
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
+# mmlu evaluate model
+parser.add_argument('--evaluate', type=str,
+                    help='Enable the evaluate mode.')
+parser.add_argument('--evaluate_data', type=str,
+                    help='The evaluate dataset name or path.')
 # whether to enable the lora
 parser.add_argument('--load_lora', action="store_true",
                     help="Load lora from file instead of init randomly")
@@ -57,18 +62,6 @@ parser.add_argument('--log_file', type=str,
                     help="Save log to specific file.")
 
 args = parser.parse_args()
-
-
-if args.base_model is None:
-    print('error: Argument --base_model are required.')
-    parser.print_help()
-    exit(-1)
-
-
-if args.config is None:
-    print('error: Argument --config are required.')
-    parser.print_help()
-    exit(-1)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
@@ -219,18 +212,28 @@ if __name__ == "__main__":
     mlora.setup_logging(args.log_level, args.log_file)
     mlora.setup_cuda_check()
 
-    with open(args.config, 'r', encoding='utf8') as fp:
-        config = json.load(fp)
+    # check the input argument
+    assert args.base_model is not None, "error: Argument --base_model are required."
 
     tokenizer, model = mlora.load_base_model(args.base_model,
                                              args.model_type,
                                              args.device,
                                              args.load_4bit,
                                              args.load_8bit)
-    mlora.init_lora_model(config, model, args.disable_lora, args.load_lora)
+
+    if not args.disable_lora:
+        assert args.config is not None, "error: Argument --config are required."
+
+        with open(args.config, 'r', encoding='utf8') as fp:
+            config = json.load(fp)
+        mlora.init_lora_model(config, model, args.load_lora)
 
     if args.inference:
         inference(config, model, tokenizer)
+    elif args.evaluate:
+        evaluator: mlora.Evaluator = mlora.EvaluatorFactory().create(
+            model, tokenizer, args.evaluate, args.evaluate_data)
+        evaluator.evaluate()
     else:
         dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)

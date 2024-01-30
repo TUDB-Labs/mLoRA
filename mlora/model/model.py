@@ -12,10 +12,10 @@ from typing import Tuple, Dict, List, Optional
 #            0    0 -inf
 #            0    0    0
 # additional_mask: batch_size * seq_len
-#   default: is None, if set true, the mask metric will be -inf
-#   example: [[True, True, False]]
+#   default: is None the matrix like default, if set true, the mask metric will be -inf
+#   example: [[True, False, False]]
 #           -inf -inf -inf
-#           -inf    0    0
+#           -inf    0 -inf
 #           -inf    0    0
 def precompute_mask(input_tokens: torch.Tensor,
                     n_heads: int,

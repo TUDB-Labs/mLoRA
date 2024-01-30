@@ -6,6 +6,8 @@ from mlora.model.model import LLMModel
 from mlora.model.model_llama import LlamaModel
 from mlora.model.model_chatglm import ChatGLMModel
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData, LoraBatchDataConfig
+from mlora.evaluator.evaluator_factory import EvaluatorFactory
+from mlora.evaluator.evaluator import Evaluator
 from mlora.dispatcher import TrainTask, Dispatcher
 
 __all__ = [
@@ -25,5 +27,8 @@ __all__ = [
     "setup_logging",
     "setup_cuda_check",
     "load_base_model",
-    "init_lora_model"
+    "init_lora_model",
+    # evaluateor
+    "EvaluatorFactory",
+    "Evaluator"
 ]
