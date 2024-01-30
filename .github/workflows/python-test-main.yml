@@ -28,9 +28,12 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest
+        pip install flake8 pytest lizard
         pip install -e .
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: CCN with Lizard
+      run: |
+        lizard -l python ./mlora -C 12
     - name: Lint with flake8
       run: |
         flake8 . --count --show-source --statistics --max-line-length=127 --max-complexity 15 --ignore=E722,W504
