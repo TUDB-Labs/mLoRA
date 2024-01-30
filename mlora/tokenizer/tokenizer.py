@@ -1,4 +1,4 @@
-from mlora.modelargs import Tokens, Masks
+from mlora.model.modelargs import Tokens, Masks
 
 from transformers import AutoTokenizer
 

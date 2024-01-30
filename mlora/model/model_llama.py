@@ -1,30 +1,18 @@
-from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
-from mlora.checkpoint import CheckpointRecomputeFunction
-from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
-from mlora.model import LLMModel, RMSNorm
-from mlora.LoraLiner import Linear, Lora
+from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.model.model import LLMModel, repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
+from mlora.model.LoraLiner import Linear, Lora
+from mlora.model.RMSNorm import RMSNorm
+from mlora.model.Embedding import Embedding
+from mlora.checkpoint.recompute import CheckpointRecomputeFunction
 
 import logging
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 from transformers import LlamaForCausalLM
 from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
-
-
-class Embedding(torch.nn.Module):
-    def __init__(self, embedding: torch.Tensor, pad_token: int):
-        super().__init__()
-        self.token_embedding_: torch.Tensor = embedding
-        self.padding_idx_: int = pad_token
-
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        data = F.embedding(tokens, self.token_embedding_,
-                           padding_idx=self.padding_idx_)
-        return data
 
 
 class OutputLayer(torch.nn.Module):
@@ -34,23 +22,6 @@ class OutputLayer(torch.nn.Module):
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         return data @ self.weight_.transpose(0, 1)
-
-
-class RMSNormLayer(torch.nn.Module):
-    def __init__(self, weight: torch.Tensor, eps: float = 1e-6):
-        super().__init__()
-        self.norm_eps_ = eps
-        self.weight_ = weight
-
-    def _norm(self, data: torch.Tensor) -> torch.Tensor:
-        return data * torch.rsqrt(+ self.norm_eps_)
-
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
-        input_dtype = data.dtype
-        v = data.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        data = data * torch.rsqrt(v + self.norm_eps_)
-
-        return (self.weight_ * data).to(input_dtype)
 
 
 class Transformer(torch.nn.Module):
@@ -258,7 +229,7 @@ class LlamaSequentialWrapper(torch.nn.Module):
         forward_func_dict = {
             "Embedding": embedding_forward,
             "Transformer": transformer_forward,
-            "RMSNormLayer": rmsnorm_forward,
+            "RMSNorm": rmsnorm_forward,
             "OutputLayer": output_layer_forward,
         }
 
@@ -277,7 +248,7 @@ class LlamaModel(LLMModel):
         for layer_id in range(args.n_layers_):
             self.layers_.append(Transformer(layer_id, args))
 
-        self.norm_: RMSNormLayer = None    # dim
+        self.norm_: RMSNorm = None         # dim
         self.output_: OutputLayer = None   # vocab size * dim
 
         # sequential model
@@ -323,6 +294,7 @@ class LlamaModel(LLMModel):
             transformer_layer.init_lora_layer_weight(
                 adapter_name, r, lora_alpha, lora_dropout, target, weight)
 
+    @staticmethod
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
@@ -371,6 +343,18 @@ class LlamaModel(LLMModel):
         llama_args.device = device
 
         # load model from pretrained large model
+        model = LlamaModel.convert_model_from_huggingface(
+            llama_model, llama_args, device)
+
+        # convert to sequential module for use
+        model.seq_module_ = model.sequential_module()
+
+        return model
+
+    @staticmethod
+    def convert_model_from_huggingface(llama_model: LlamaForCausalLM,
+                                       llama_args: LLMModelArgs,
+                                       device: str):
         model = LlamaModel(llama_args)
 
         # plm - pretrained large model
@@ -392,13 +376,10 @@ class LlamaModel(LLMModel):
             target_transformer.from_pretrained(
                 target_layer, model.norm_eps_, device=device)
 
-        model.norm_ = RMSNormLayer(
+        model.norm_ = RMSNorm(
             get_tensor_from_plm("norm"), model.norm_eps_)
 
         model.output_ = OutputLayer(get_tensor_from_plm("output"))
-
-        # convert to sequential module for use
-        model.seq_module_ = model.sequential_module()
 
         return model
 
