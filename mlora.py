@@ -20,7 +20,7 @@ import json
 import torch
 import mlora
 import argparse
-from typing import Dict, Tuple, List
+from typing import Dict, List
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
@@ -69,50 +69,6 @@ if args.config is None:
     print('error: Argument --config are required.')
     parser.print_help()
     exit(-1)
-
-
-def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
-    assert not (args.load_4bit and args.load_8bit)
-
-    model_type_dict: Dict[str, mlora.LLMModel] = {
-        "llama": mlora.LlamaModel,
-        "chatglm": mlora.ChatGLMModel
-    }
-
-    assert args.model_type in model_type_dict, f"unkown model type {args.model_type}"
-
-    bits = None
-    bits = 8 if args.load_8bit else bits
-    bits = 4 if args.load_4bit else bits
-
-    model = model_type_dict[args.model_type].from_pretrained(path=args.base_model,
-                                                             device=args.device,
-                                                             bits=bits)
-
-    tokenizer = mlora.Tokenizer(args.base_model)
-
-    model.pad_token_id_ = tokenizer.pad_id_
-
-    return tokenizer, model
-
-
-def init_lora_model(config: Dict[str, any], llm_model: mlora.LLMModel):
-    if args.disable_lora:
-        return
-
-    for lora_config in config["lora"]:
-        lora_weight = None
-        if args.load_lora:
-            adapter_file_path = lora_config["output"] + "/adapter_model.bin"
-            print(f"load {adapter_file_path}")
-            lora_weight = torch.load(adapter_file_path)
-
-        llm_model.init_lora_weight(lora_config["name"],
-                                   lora_config["r"],
-                                   lora_config["alpha"],
-                                   lora_config["dropout"],
-                                   lora_config["target_modules"],
-                                   lora_weight)
 
 
 def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
@@ -266,10 +222,12 @@ if __name__ == "__main__":
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
 
-    tokenizer, model = load_base_model()
-    init_lora_model(config, model)
-
-    torch.cuda.empty_cache()
+    tokenizer, model = mlora.load_base_model(args.base_model,
+                                             args.model_type,
+                                             args.device,
+                                             args.load_4bit,
+                                             args.load_8bit)
+    mlora.init_lora_model(config, model, args.disable_lora, args.load_lora)
 
     if args.inference:
         inference(config, model, tokenizer)

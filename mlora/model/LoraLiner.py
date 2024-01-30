@@ -1,4 +1,4 @@
-from mlora.modelargs import MultiLoraBatchData
+from mlora.model.modelargs import MultiLoraBatchData
 
 import math
 import torch

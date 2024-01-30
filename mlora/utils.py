@@ -1,5 +1,7 @@
-from typing import Dict
-from mlora.model_llama import LlamaModel
+from mlora.model.model import LLMModel
+from mlora.tokenizer.tokenizer import Tokenizer
+from mlora.model.model_llama import LlamaModel
+from mlora.model.model_chatglm import ChatGLMModel
 from transformers import LlamaForCausalLM
 
 import os
@@ -7,6 +9,8 @@ import json
 import torch
 import random
 import logging
+
+from typing import Tuple, Dict
 
 
 def setup_seed(seed):
@@ -44,7 +48,7 @@ def convert_hf_to_pth(source: str, dest: str):
     torch.save(src_model.state_dict(), dest)
 
 
-def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
+def save_lora_model(model: LLMModel, config: Dict[str, str], dir_suffix=""):
     # save lora model
     for lora_config in config["lora"]:
         lora_name = lora_config["name"]
@@ -73,3 +77,56 @@ def save_lora_model(model: LlamaModel, config: Dict[str, str], dir_suffix=""):
 
         with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)
+
+
+def load_base_model(base_model: str,
+                    model_type: str,
+                    device: str,
+                    load_4bit: bool = False,
+                    load_8bit: bool = False) -> Tuple[Tokenizer, LLMModel]:
+    # base_model: the base model name from huggingface or the path of the base model
+    assert not (load_4bit and load_8bit)
+
+    model_type_dict: Dict[str, LLMModel] = {
+        "llama": LlamaModel,
+        "chatglm": ChatGLMModel
+    }
+
+    assert model_type in model_type_dict, f"unkown model type {model_type}"
+
+    bits = None
+    bits = 8 if load_8bit else bits
+    bits = 4 if load_4bit else bits
+
+    model = model_type_dict[model_type].from_pretrained(path=base_model,
+                                                        device=device,
+                                                        bits=bits)
+
+    tokenizer = Tokenizer(base_model)
+
+    model.pad_token_id_ = tokenizer.pad_id_
+
+    return tokenizer, model
+
+
+def init_lora_model(config: Dict[str, any],
+                    llm_model: LLMModel,
+                    disable_lora: bool = False,
+                    load_lora: bool = False):
+    if disable_lora:
+        return
+
+    for lora_config in config["lora"]:
+        lora_weight = None
+        if load_lora:
+            adapter_file_path = lora_config["output"] + "/adapter_model.bin"
+            print(f"load {adapter_file_path}")
+            lora_weight = torch.load(adapter_file_path)
+
+        logging.info(f'init the lora adapter {lora_config["name"]} weight.')
+        llm_model.init_lora_weight(lora_config["name"],
+                                   lora_config["r"],
+                                   lora_config["alpha"],
+                                   lora_config["dropout"],
+                                   lora_config["target_modules"],
+                                   lora_weight)
