@@ -26,12 +26,17 @@ jobs:
           cd /workspace/multi-lora-fine-tune
           pip install -r requirements.txt --force
 
+      - name: evaluate llama-7b (mmlu)
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python .github/workflows/ci_eval.py
+
       - name: finetune llama-7b
         run: |
           cd /workspace/multi-lora-fine-tune
           python mlora.py --base_model /data/llama-7b-hf --config ./config/dummy.json --load_8bit
 
-      - name: test inference with lora
+      - name: inference llama-7b with lora (peft)
         run: |
           cd /workspace/multi-lora-fine-tune
           python .github/workflows/ci_script.py "llama" "/data/llama-7b-hf" "./lora_1" "What is m-LoRA?" "Multi-LoRA"

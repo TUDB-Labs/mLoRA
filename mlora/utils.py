@@ -111,11 +111,7 @@ def load_base_model(base_model: str,
 
 def init_lora_model(config: Dict[str, any],
                     llm_model: LLMModel,
-                    disable_lora: bool = False,
                     load_lora: bool = False):
-    if disable_lora:
-        return
-
     for lora_config in config["lora"]:
         lora_weight = None
         if load_lora:
