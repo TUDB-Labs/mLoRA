@@ -127,6 +127,12 @@ def train(dispatcher: Dispatcher,
             loss = output.loss / config_dict[adapter_name].accumulation_step_
             logging.info(
                 f"    adapter: {adapter_name} loss: {loss}")
+            if output.aux_loss:
+                aux_loss = output.aux_loss / \
+                    config_dict[adapter_name].accumulation_step_
+                logging.info(
+                    f"    adapter: {adapter_name}  aux: {aux_loss}")
+                loss += aux_loss
             if total_loss is None:
                 total_loss = loss
             else:
