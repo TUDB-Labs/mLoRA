@@ -328,7 +328,7 @@ class Dispatcher():
     def __dispatch_task_out(self):
         for task in self.running_train_task_:
             if task.is_train_done():
-                self.train_task_in_event_.activate(task=task)
+                self.train_task_out_event_.activate(task=task)
                 self.done_train_task_.append(task)
 
         self.running_train_task_ = [
