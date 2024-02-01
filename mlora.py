@@ -106,6 +106,7 @@ def init_adapter_config(config: Dict[str, any],
         lora_weight = None
         config_class = mlora.lora_config_factory(lora_config)
         config_class.adapter_name_ = lora_config["name"]
+        config_class.task_type_ = lora_config.get("task_type", "casual")
         config_class.device_ = args.device
 
         if args.load_adapter:
@@ -123,13 +124,11 @@ def init_adapter_config(config: Dict[str, any],
                 config_class.prompt_template_ = lora_config["prompt"]
         elif args.evaluate:
             config_class = mlora.EvaluateConfig(
-                adapter_name_=config_class.adapter_name_, task_type_=lora_config["task_type"],
-                task_=mlora.classification_task_factory(
-                    model, lora_config["task_type"], lora_weight),
+                adapter_name_=config_class.adapter_name_,
+                task_type_=config_class.task_type_,
                 batch_size_=lora_config["micro_batch_size"])
         else:
-            config_class = mlora.TrainConfig(
-                llm_model, lora_config, config_class, lora_weight)
+            config_class = mlora.TrainConfig(lora_config, config_class)
         config_list.append(config_class)
 
     return config_list

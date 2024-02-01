@@ -1,5 +1,5 @@
 from transformers import AutoTokenizer
-from typing import List
+from typing import List, Union
 
 Tokens = List[int]
 
@@ -17,12 +17,17 @@ class Tokenizer:
         if self.pad_id_ is None and self.unk_id_ is not None:
             self.pad_id_ = self.unk_id_
 
-    def encode(self, data: str, bos: bool, eos: bool) -> Tokens:
-        ret = self.tokenizer.encode(data, add_special_tokens=False)
-        if bos and self.bos_id_ is not None:
-            ret = [self.bos_id_] + ret
+    def encode(self, data: Union[str, List[str]],
+               bos: bool = True, eos: bool = False) -> Tokens:
+        if isinstance(data, str):
+            data = [data]
+        ret = []
+        for dat in data:
+            if bos and self.bos_id_ is not None:
+                ret.append(self.bos_id_)
+            ret.extend(self.tokenizer.encode(dat, add_special_tokens=False))
         if eos and self.eos_id_ is not None:
-            ret = ret + [self.eos_id_]
+            ret.append(self.eos_id_)
         return ret
 
     def attention_mask(self, tokens: Tokens) -> Tokens:

@@ -1,5 +1,5 @@
 #!/bin/bash
 
-flake8 . --count --show-source --statistics --max-line-length=127 --max-complexity 15 --ignore=E722,W504
+flake8 . --count --show-source --statistics --max-line-length=127 --max-complexity 15 --ignore=E722,W504,W503
 
 pytest

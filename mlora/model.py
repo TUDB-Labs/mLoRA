@@ -1,7 +1,6 @@
-from mlora.modelargs import KVCache, LoraConfig, MultiLoraBatchData
+from mlora.modelargs import LoraConfig, MultiLoraBatchData, LLMModelOutput
 
 import torch
-import einops
 
 from abc import ABCMeta, abstractclassmethod
 from typing import Tuple, Dict, List, Optional
@@ -16,7 +15,7 @@ def precompute_mask(tokens: torch.Tensor,
     batch_size, batch_seq_len = tokens.shape
 
     mask = torch.full((batch_size, n_heads, batch_seq_len, batch_seq_len),
-                      float("-inf"), device=device, dtype=torch.float32)
+                      torch.finfo(dtype).min, device=device, dtype=torch.float32)
     mask = torch.triu(mask, diagonal=(seq_start_pos + 1))
 
     if attention_masks is not None:
@@ -25,52 +24,46 @@ def precompute_mask(tokens: torch.Tensor,
         attention_masks = attention_masks.view(batch_size, 1, 1, batch_seq_len)
         attention_masks = attention_masks.expand(-1,
                                                  n_heads, batch_seq_len, -1)
-        mask = torch.masked_fill(mask, attention_masks, float("-inf"))
+        mask = torch.masked_fill(mask, attention_masks, torch.finfo(dtype).min)
 
     mask.requires_grad_(False)
     return mask.to(device=device, dtype=dtype)
 
 
-def precompute_rope_angle(dim: int, seq_len: int, device: str, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:
-    angles = 1.0 / (theta ** (torch.arange(0, dim, 2).to(device)
-                              [: (dim // 2)].to(torch.float) / dim))
-    seq = torch.arange(seq_len, device=angles.device)
-    emb = torch.outer(seq, angles).float()
-    emb = einops.repeat(emb, "... n -> ... (n r)", r=2)
-
+def precompute_rope_angle(dim: int, seq_len: int,
+                          theta: float = 10000.0,
+                          device: str = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    inv_freq = 1.0 / \
+        (theta ** (torch.arange(0, dim, 2).float().to(device) / dim))
+    t = torch.arange(seq_len, device=device, dtype=inv_freq.dtype)
+    freqs = torch.outer(t, inv_freq)
+    emb = torch.cat((freqs, freqs), dim=-1)
     emb.requires_grad_(False)
+
     # cos(angle), sin(angle)
-    return (emb.cos().to(torch.float32), emb.sin().to(torch.float32))
+    return (emb.cos(), emb.sin())
 
 
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x = einops.rearrange(x, "... (d r) -> ... d r", r=2)
-    x1, x2 = x.unbind(dim=-1)
-    x = torch.stack((-x2, x1), dim=-1)
-    return einops.rearrange(x, "... d r -> ... (d r)")
+def rotate_half(x):
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2:]
+    return torch.cat((-x2, x1), dim=-1)
 
 
-def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
-    batch_size, seq_len, n_kv_heads, head_dim = x.shape
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
-        return x
-    return x[:, :, :, None, :].expand(
-        batch_size, seq_len, n_kv_heads, n_rep, head_dim).reshape(
-            batch_size, seq_len, n_kv_heads * n_rep, head_dim)
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
-                     angle: Tuple[torch.Tensor, torch.Tensor],
-                     dtype: torch.dtype) -> Tuple[torch.Tensor, torch.Tensor]:
-    # data shape is: batch_size * max_seq_len * n_head * n_dim
-    _, max_seq_len, _, dim_head = xq.shape
-
-    cos = angle[0][:max_seq_len].view(max_seq_len, 1, dim_head)
-    sin = angle[1][:max_seq_len].view(max_seq_len, 1, dim_head)
-
-    xq = (xq * cos) + (rotate_half(xq) * sin)
-    xk = (xk * cos) + (rotate_half(xk) * sin)
-    return (xq.to(dtype), xk.to(dtype))
+                     cos: torch.Tensor, sin: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    q_embed = (xq * cos) + (rotate_half(xq) * sin)
+    k_embed = (xk * cos) + (rotate_half(xk) * sin)
+    return q_embed, k_embed
 
 
 def apply_rotary_emb_to_one(x: torch.Tensor, angle: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
@@ -87,18 +80,30 @@ def apply_rotary_emb_to_one(x: torch.Tensor, angle: Tuple[torch.Tensor, torch.Te
 class RMSNorm(torch.nn.Module):
     def __init__(self, weight: torch.Tensor, eps: float = 1e-6):
         super().__init__()
-        self.norm_eps_ = eps
+        self.variance_epsilon_ = eps
         self.weight_ = weight
 
-    def _norm(self, data: torch.Tensor) -> torch.Tensor:
-        return data * torch.rsqrt(+ self.norm_eps_)
+    def forward(self, hidden_states: torch.Tensor):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * \
+            torch.rsqrt(variance + self.variance_epsilon_)
+        return self.weight_ * hidden_states.to(input_dtype)
 
+
+class LLMOutput(metaclass=ABCMeta):
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        input_dtype = data.dtype
-        v = data.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        data = data * torch.rsqrt(v + self.norm_eps_)
+        pass
 
-        return (self.weight_ * data).to(input_dtype)
+    def loss(self,
+             input_ids: torch.Tensor,
+             output_logits: torch.Tensor,
+             labels: List[List[int]]) -> torch.Tensor:
+        pass
+
+    def state_dict(self):
+        return {}
 
 
 class LLMModel(metaclass=ABCMeta):
@@ -115,10 +120,6 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
-        pass
-
-    @abstractclassmethod
     def sequential_module(self) -> torch.nn.Sequential:
         pass
 
@@ -132,5 +133,5 @@ class LLMModel(metaclass=ABCMeta):
 
     @abstractclassmethod
     def forward(self, input: MultiLoraBatchData,
-                kv_cache: KVCache = None) -> torch.Tensor:
+                labels: List[List[int]] = None) -> List[LLMModelOutput]:
         pass

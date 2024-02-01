@@ -3,7 +3,7 @@ from mlora.tokenizer import Tokenizer
 from mlora.prompter import Prompter
 from mlora.model import LLMModel
 
-from typing import List, Dict, Tuple, Callable
+from typing import Dict, List, Tuple, Callable
 from dataclasses import dataclass
 import datasets as hf_datasets
 import evaluate as hf_evaluate
@@ -15,53 +15,30 @@ class BasicTask():
     def __init__(self) -> None:
         pass
 
-    def dataload_function(self, data_point):
+    def dataload_function(self, data_point) -> Tuple:
         return None, None, {"bos": True, "eos": True}
 
-    def load_state_dict(self, weight: Dict[str, torch.Tensor]):
-        pass
-
-    def state_dict(self):
+    def init_kwargs(self) -> Dict:
         return {}
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        pass
-
-    def loss(self, logits: torch.Tensor, labels: List,
-             batch_tokens: List = None) -> torch.Tensor:
-        pass
 
 
 # Casual Fine-tuning Tasks
-class CasualLM(BasicTask):
-    def __init__(self, model: LLMModel, prompter: Prompter = None) -> None:
+class CasualTask(BasicTask):
+    def __init__(self, prompter: Prompter = None) -> None:
         super().__init__()
-        self.vocab_size_ = model.vocab_size_
-        self.lm_head_ = model.output_
         self.prompter_ = prompter
 
-    def dataload_function(self, data_point):
-        return ([self.prompter_.generate_prompt(
+    def dataload_function(self, data_point) -> Tuple:
+        return (self.prompter_.generate_prompt(
             data_point["instruction"],
             data_point.get("input", None),
-            data_point.get("output", None))],
+            data_point.get("output", None)),
             None, {"bos": True, "eos": True})
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.lm_head_(hidden_states)
-
-    def loss(self, logits: torch.Tensor, labels: List,
-             batch_tokens: List = None) -> torch.Tensor:
-        labels = torch.tensor(labels, dtype=torch.long, device=logits.device)
-        loss_fn = torch.nn.CrossEntropyLoss()
-        return loss_fn(logits[..., :-1, :].contiguous().view(-1, self.vocab_size_),
-                       labels[..., 1:].contiguous().view(-1))
 
 
 # Sequence Classification
 class SequenceClassification(BasicTask):
     def __init__(self,
-                 model: LLMModel,
                  task_type: str,
                  label_dtype: torch.dtype,
                  num_labels: int,
@@ -71,196 +48,116 @@ class SequenceClassification(BasicTask):
         self.label_dtype_ = label_dtype
         self.num_labels_ = num_labels
         self.task_type_ = task_type
-        self.pad_id_ = model.pad_token_id_
-        self.score_ = torch.nn.Linear(
-            model.dim_, self.num_labels_, bias=False, dtype=torch.float32, device=model.device_)
 
-    def dataload_function(self, data_point):
+    def dataload_function(self, data_point) -> Tuple:
         return self.dataload_function_(data_point)
 
-    def load_state_dict(self, weight: Dict[str, torch.Tensor]):
-        with torch.no_grad():
-            self.score_.weight.copy_(weight["classifier"])
-
-    def state_dict(self):
-        return {"classifier": self.score_.weight}
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.score_(hidden_states.to(torch.float32))
-
-    def _pool_logits(self, batch_tokens: List, logits: torch.Tensor) -> torch.Tensor:
-        batch_size = logits.shape[0]
-        if batch_tokens is None or self.pad_id_ is None:
-            sequence_lengths = -1
-        else:
-            input_ids = torch.tensor(batch_tokens, dtype=torch.long)
-            sequence_lengths = (
-                torch.eq(input_ids, self.pad_id_).int().argmax(-1) - 1).to(logits.device)
-        return logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
-
-    def evaluate(self, logits: torch.Tensor, labels: List,
-                 batch_tokens: List = None) -> Tuple:
-        labels = torch.tensor(
-            labels, dtype=self.label_dtype_, device=logits.device)
-        pooled_logits = self._pool_logits(batch_tokens, logits)
-        if self.task_type_ == "regression":
-            if self.num_labels_ == 1:
-                pooled_logits = pooled_logits[:, 0]
-        elif self.task_type_ == "single_label_classification":
-            pooled_logits = torch.argmax(
-                pooled_logits, dim=-1).to(self.label_dtype_)
-        elif self.task_type_ != "multi_label_classification":
-            raise ValueError(f"unknown task type {self.task_type_}")
-        return pooled_logits, labels.squeeze()
-
-    def loss(self, logits: torch.Tensor, labels: List,
-             batch_tokens: List = None) -> torch.Tensor:
-        labels = torch.tensor(
-            labels, dtype=self.label_dtype_, device=logits.device)
-        pooled_logits = self._pool_logits(batch_tokens, logits)
-        if self.task_type_ == "regression":
-            loss_fn = torch.nn.MSELoss()
-            if self.num_labels_ == 1:
-                return loss_fn(pooled_logits.squeeze(), labels.squeeze())
-            else:
-                return loss_fn(pooled_logits, labels)
-        elif self.task_type_ == "single_label_classification":
-            loss_fn = torch.nn.CrossEntropyLoss()
-            return loss_fn(pooled_logits.view(-1, self.num_labels_), labels.view(-1))
-        elif self.task_type_ == "multi_label_classification":
-            loss_fn = torch.nn.BCEWithLogitsLoss()
-            return loss_fn(pooled_logits, labels)
-        else:
-            raise ValueError(f"unknown task type {self.task_type_}")
+    def init_kwargs(self) -> Dict:
+        return {
+            "task_type": self.task_type_,
+            "num_labels": self.num_labels_,
+            "label_dtype": self.label_dtype_,
+        }
 
 
-classification_task_dict = {
-    "glue:cola": {
-        "task_type": "single_label_classification",
-        "num_labels": 2,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
+classification_tasks = {
+    "glue:cola": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=2,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
             [data_point["sentence"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True}
         ),
-    },
-    "glue:mnli": {
-        "task_type": "single_label_classification",
-        "num_labels": 3,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
+    ),
+    "glue:mnli": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=3,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
             [data_point["premise"], data_point["hypothesis"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
-    },
-    "glue:mrpc": {
-        "task_type": "single_label_classification",
-        "num_labels": 2,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
+    ),
+    "glue:mrpc": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=2,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
             [data_point["sentence1"], data_point["sentence2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
-    },
-    "glue:qnli": {
-        "task_type": "single_label_classification",
-        "num_labels": 2,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
+    ),
+    "glue:qnli": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=2,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
             [data_point["question"], data_point["sentence"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
-    },
-    "glue:qqp": {
-        "task_type": "single_label_classification",
-        "num_labels": 2,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
+    ),
+    "glue:qqp": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=2,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
             [data_point["question1"], data_point["question2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
-    },
-    "glue:rte": {
-        "task_type": "single_label_classification",
-        "num_labels": 2,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
+    ),
+    "glue:rte": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=2,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
             [data_point["sentence1"], data_point["sentence2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
-    },
-    "glue:sst2": {
-        "task_type": "single_label_classification",
-        "num_labels": 2,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
+    ),
+    "glue:sst2": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=2,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
             [data_point["sentence"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
-    },
-    "glue:stsb": {
-        "task_type": "regression",
-        "num_labels": 1,
-        "label_dtype": torch.float,
-        "dataload_function": lambda data_point: (
-            [data_point["sentence1"], data_point["sentence2"]],
+    ),
+    "glue:wnli": SequenceClassification(
+        task_type="single_label_classification",
+        num_labels=2,
+        label_dtype=torch.long,
+        dataload_function=lambda data_point: (
+            [data_point["sentence1"] + " </s> " + data_point["sentence2"]],
             [int(data_point["label"])],
             {"bos": True, "eos": True},
         ),
-    },
-    "glue:wnli": {
-        "task_type": "single_label_classification",
-        "num_labels": 2,
-        "label_dtype": torch.long,
-        "dataload_function": lambda data_point: (
-            data_point["sentence1"] + " </s> " + data_point["sentence2"],
-            [int(data_point["label"])],
-            {"bos": True, "eos": True},
-        ),
-    },
+    ),
 }
-
-
-def train_task_factory(model: LLMModel, train_config: Dict[str, any], weight: Dict[str, torch.Tensor]) -> BasicTask:
-    task_type = train_config.get("task_type", "casual")
-    if task_type == "casual":
-        task = CasualLM(model, Prompter(train_config["prompt"]))
-    else:
-        task = SequenceClassification(
-            model, **classification_task_dict[task_type])
-    if weight is not None:
-        task.load_state_dict(weight)
-    return task
-
-
-def classification_task_factory(model: LLMModel, task_type: str, weight: Dict[str, torch.Tensor]) -> SequenceClassification:
-    task = SequenceClassification(model, **classification_task_dict[task_type])
-    if weight is not None:
-        task.load_state_dict(weight)
-    return task
 
 
 @dataclass
 class EvaluateConfig:
     adapter_name_: str = None
     task_type_: str = None
-    task_: SequenceClassification = None
-    batch_size_: int = 16,
-    batch_seq_len_: int = 512
+    batch_size_: int = 16
     # Do not set these manually
+    task_: SequenceClassification = None
     data_: hf_datasets.Dataset = None
     metric_: hf_evaluate.EvaluationModule = None
     batch_start_idx_: int = 0
     batch_end_idx_: int = 0
 
     def init_task(self):
+        self.task_ = classification_tasks[self.task_type_]
         if ':' in self.task_type_:
             result = self.task_type_.split(':')
             self.data_ = hf_datasets.load_dataset(
@@ -272,7 +169,48 @@ class EvaluateConfig:
             self.metric_ = hf_evaluate.load(self.task_type_)
 
     def dataload(self, data_point):
-        return self.task_.dataload_function(data_point)
+        return self.task_.dataload_function_(data_point)
+
+
+def _dispatch_task_in(tokenizer: Tokenizer, configs: List[EvaluateConfig], max_seq_len: int):
+    batch_data_config = []
+    current_configs = []
+    batch_tokens = []
+    batch_labels = []
+    atten_masks = []
+    for config in configs:
+        if config.batch_start_idx_ >= len(config.data_):
+            continue
+        config.batch_end_idx_ = min(
+            config.batch_start_idx_ + config.batch_size_, len(config.data_))
+        batch_start_idx = len(batch_tokens)
+        for idx in range(config.batch_start_idx_, config.batch_end_idx_):
+            if idx >= len(config.data_):
+                break
+            texts, labels, kwargs = config.dataload(config.data_[idx])
+            if "eos" in kwargs:
+                kwargs["eos"] = False
+            tokens = tokenizer.encode(texts, **kwargs)
+            if len(tokens) > max_seq_len:
+                tokens = tokens[:max_seq_len]
+            while len(tokens) < max_seq_len:
+                tokens.append(tokenizer.pad_id_)
+            batch_tokens.append(tokens)
+            atten_masks.append(tokenizer.attention_mask(tokens))
+            batch_labels.append(labels.copy())
+
+        config.batch_start_idx_ = config.batch_end_idx_
+        current_configs.append(config)
+        batch_data_config.append(LoraBatchDataConfig(adapter_name_=config.adapter_name_,
+                                                     batch_start_idx_=batch_start_idx, batch_end_idx_=len(batch_tokens)))
+
+    return (current_configs,
+            batch_labels,
+            MultiLoraBatchData(
+                lora_batch_data_config_=batch_data_config,
+                batch_tokens_=batch_tokens,
+                attention_masks_=atten_masks,
+                gradient_checkpoint_=False))
 
 
 @torch.inference_mode()
@@ -287,61 +225,42 @@ def evaluate(model: LLMModel,
             max_iterations = len(config.data_)
 
     while True:
-        batch_data_config = []
-        current_configs = []
-        batch_tokens = []
-        atten_masks = []
-        batch_labels = []
-        for config in configs:
-            if config.batch_start_idx_ >= len(config.data_):
-                continue
-            config.batch_end_idx_ = min(
-                config.batch_start_idx_ + config.batch_size_, len(config.data_))
-            batch_start_idx = len(batch_tokens)
-            for idx in range(config.batch_start_idx_, config.batch_end_idx_):
-                if idx >= len(config.data_):
-                    break
-                texts, labels, kwargs = config.dataload(config.data_[idx])
-                tokens = []
-                for text in texts:
-                    tokens.extend(tokenizer.encode(data=text, **kwargs))
-                if len(tokens) > max_seq_len:
-                    tokens = tokens[:max_seq_len]
-                while len(tokens) < max_seq_len:
-                    tokens.append(tokenizer.pad_id_)
-                batch_tokens.append(tokens)
-                atten_masks.append(tokenizer.attention_mask(tokens))
-                batch_labels.append(labels.copy())
-
-            config.batch_start_idx_ = config.batch_end_idx_
-            current_configs.append(config)
-            batch_data_config.append(LoraBatchDataConfig(adapter_name_=config.adapter_name_,
-                                     batch_start_idx_=batch_start_idx, batch_end_idx_=len(batch_tokens)))
+        current_configs, batch_labels, input_args = _dispatch_task_in(
+            tokenizer, configs, max_seq_len)
 
         if len(current_configs) == 0:
             break
 
-        input_data = MultiLoraBatchData(
-            lora_batch_data_config_=batch_data_config,
-            batch_tokens_=batch_tokens,
-            attention_masks_=atten_masks,
-            gradient_checkpoint_=False)
+        outputs = model.forward(input_args)
 
-        outputs = model.forward(input_data)[0]
+        input_ids = torch.tensor(input_args.batch_tokens_, dtype=torch.long)
 
-        for idx, config in enumerate(batch_data_config):
-            task_config = current_configs[idx]
-            task = task_config.task_
-            metric = task_config.metric_
-            start_idx = config.batch_start_idx_
-            end_idx = config.batch_end_idx_
-            logits = task.forward(outputs[start_idx:end_idx])
-            predictions, references = task.evaluate(
-                logits, batch_labels[start_idx:end_idx], batch_tokens[start_idx:end_idx])
-            metric.add_batch(predictions=predictions, references=references)
+        for idx, output in enumerate(outputs):
+            config: EvaluateConfig = current_configs[idx]
+            task: SequenceClassification = config.task_
+            metric = config.metric_
+            start_idx = output.batch_start_idx_
+            end_idx = output.batch_end_idx_
+            logits = output.logits
+
+            batch_size = logits.shape[0]
+            sequence_lengths = (torch.eq(input_ids[start_idx:end_idx],
+                                         tokenizer.pad_id_).int().argmax(-1) - 1).to(logits.device)
+            pooled_logits = logits[torch.arange(batch_size,
+                                                device=logits.device), sequence_lengths]
+            labels = torch.tensor(batch_labels[start_idx:end_idx],
+                                  dtype=task.label_dtype_, device=logits.device)
+            if task.task_type_ == "single_label_classification":
+                pooled_logits = torch.argmax(
+                    pooled_logits, dim=-1).to(task.label_dtype_)
+            elif task.task_type_ != "multi_label_classification":
+                raise ValueError(f"unknown task type {task.task_type_}")
+
+            metric.add_batch(predictions=pooled_logits.detach().cpu(),
+                             references=labels.detach().cpu())
             logging.info(f"{config.adapter_name_} evaluate data:")
             logging.info(
-                f"    step: {task_config.batch_start_idx_}/{len(task_config.data_)}")
+                f"    step: {config.batch_start_idx_}/{len(config.data_)}")
 
     for config in configs:
         logging.info(f"{config.adapter_name_} evaluate result:")

@@ -11,6 +11,24 @@ from dataclasses import dataclass
 from typing import Dict, List, Union, Callable
 
 
+class Event():
+    __callback_list: List[Callable] = None
+
+    def __init__(self):
+        self.__callback_list = []
+
+    def register(self, func: Callable) -> "Event":
+        self.__callback_list = [func] + self.__callback_list
+        return self
+
+    def activate(self, **kwargs) -> bool:
+        for func in self.__callback_list:
+            if func(**kwargs):
+                return True
+
+        return False
+
+
 Tokens = List[int]
 
 
@@ -94,25 +112,26 @@ class TrainTask():
                       data: List,
                       is_train_data: bool = True) -> List[TrainData]:
         ret: List[TrainData] = []
+        max_train_tokens_len = 0
         for idx, data_point in enumerate(data):
             inputs, labels, flags = self.dataload_function_(data_point)
-            assert isinstance(inputs, List)
             assert isinstance(labels, List) or labels is None
             if is_train_data:
-                tokens = []
-                for text in inputs:
-                    tokens.extend(self.tokenizer_.encode(text, **flags))
+                tokens = self.tokenizer_.encode(inputs, **flags)
+                max_train_tokens_len = max(max_train_tokens_len, len(tokens))
                 if len(tokens) > self.train_cutoff_len_:
                     tokens = tokens[:self.train_cutoff_len_]
             else:
-                tokens = []
-                for text in inputs:
-                    tokens.extend(self.tokenizer_.encode(text, **flags))
+                tokens = self.tokenizer_.encode(inputs, **flags)
 
             ret.append(TrainData(tokens_=tokens, labels_=labels))
             if idx % 10000 == 0:
                 logging.info(
                     f"Encode text data {self.adapter_name_}: {idx}/{len(data)}")
+
+        if is_train_data:
+            logging.info(
+                f"Max train tokens length: {max_train_tokens_len}/{self.train_cutoff_len_}")
 
         if is_train_data and self.group_by_length_:
             ret.sort(key=lambda x: len(x.tokens_), reverse=True)
@@ -190,6 +209,10 @@ class Dispatcher():
     running_train_task_: List[TrainTask] = None
     done_train_task_: List[TrainTask] = None
 
+    # train task in event
+    train_task_in_event_: Event = None
+    train_task_out_event_: Event = None
+
     # the number of max candidate training lora model
     # can chose train data from this dataset
     train_lora_candidate_num_: int = 0
@@ -207,6 +230,9 @@ class Dispatcher():
         self.ready_train_task_ = []
         self.running_train_task_ = []
         self.done_train_task_ = []
+
+        self.train_task_in_event_ = Event()
+        self.train_task_out_event_ = Event()
 
         self.train_lora_candidate_num_ = config["train_lora_candidate_num"]
         self.train_lora_simultaneously_num_ = config["train_lora_simultaneously_num"]
@@ -295,15 +321,18 @@ class Dispatcher():
             task = self.ready_train_task_.pop(0)
             # to lazy load data
             task.load_data()
+            self.train_task_in_event_.activate(task=task)
             self.running_train_task_.append(task)
 
     # running task -> done task
     def __dispatch_task_out(self):
-        done_task = [
-            task for task in self.running_train_task_ if task.is_train_done()]
+        for task in self.running_train_task_:
+            if task.is_train_done():
+                self.train_task_in_event_.activate(task=task)
+                self.done_train_task_.append(task)
+
         self.running_train_task_ = [
             task for task in self.running_train_task_ if not task.is_train_done()]
-        self.done_train_task_.extend(done_task)
 
     def get_test_data(self) -> MultiLoraBatchData:
         pass

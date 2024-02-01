@@ -5,6 +5,7 @@ from mlora.model import RMSNorm
 
 from typing import List, Optional
 import torch
+import math
 
 
 class FeedForward(torch.nn.Module):
@@ -58,7 +59,10 @@ class FeedForward(torch.nn.Module):
     def init_moe_weight(self, in_features: int, config: MixConfig, gate: Optional[torch.Tensor] = None):
         self.moes_[config.adapter_name_] = moe_layer_factory(
             in_features, config)
-        if gate is not None:
+        if gate is None:
+            torch.nn.init.kaiming_normal_(
+                self.moes_[config.adapter_name_].gate_.weight, a=math.sqrt(5))
+        else:
             with torch.no_grad():
                 self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
 

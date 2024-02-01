@@ -1,11 +1,13 @@
+from mlora.modelargs import LLMModelArgs, LLMModelOutput, MultiLoraBatchData
 from mlora.modelargs import LoraConfig, MixConfig, lora_config_factory
-from mlora.modelargs import KVCache, LLMModelArgs, MultiLoraBatchData
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
-from mlora.model import LLMModel, RMSNorm
-from mlora.generate import GenerateConfig
+from mlora.model import RMSNorm, LLMOutput, LLMModel
 from mlora.feed_forward import FeedForward
 from mlora.lora_liner import Linear
+from mlora.generate import GenerateConfig
+from mlora.mix_lora import router_loss_factory
+from mlora.tasks import classification_tasks
 
 import torch
 import torch.nn.functional as F
@@ -36,38 +38,109 @@ class Embedding(torch.nn.Module):
         return data
 
 
+class CasualOutputLayer(LLMOutput):
+    def __init__(self, vocab_size: int, weight: torch.nn.Linear):
+        super().__init__()
+        self.vocab_size_: int = vocab_size
+        self.lm_head_: torch.nn.Linear = weight
+
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
+        return self.lm_head_(data).float()
+
+    def loss(self,
+             input_ids: torch.Tensor,
+             output_logits: torch.Tensor,
+             labels: List[List[int]]) -> torch.Tensor:
+        labels = torch.tensor(labels, dtype=torch.long,
+                              device=output_logits.device)
+        loss_fn = torch.nn.CrossEntropyLoss()
+        return loss_fn(output_logits[..., :-1, :].contiguous().view(-1, self.vocab_size_),
+                       labels[..., 1:].contiguous().view(-1))
+
+
+class ClassificationOutputLayer(LLMOutput):
+    def __init__(self,
+                 task_type: str,
+                 num_labels: int,
+                 label_dtype: torch.dtype,
+                 hidden_size: int,
+                 pad_token_id: int,
+                 device: str,
+                 weight: Optional[torch.Tensor]):
+        super().__init__()
+        self.label_dtype_ = label_dtype
+        self.num_labels_ = num_labels
+        self.task_type_ = task_type
+        self.pad_id_ = pad_token_id
+        self.score_ = torch.nn.Linear(
+            hidden_size, self.num_labels_, bias=False, dtype=torch.float32, device=device)
+        if weight is None:
+            torch.nn.init.kaiming_normal_(
+                self.score_.weight, a=math.sqrt(5))
+        else:
+            with torch.no_grad():
+                self.score_.weight.copy_(weight["classifier"])
+
+    def state_dict(self):
+        return {"classifier": self.score_.weight}
+
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
+        return self.score_(data.to(torch.float32))
+
+    def loss(self,
+             input_ids: torch.Tensor,
+             output_logits: torch.Tensor,
+             labels: List[List[int]]) -> torch.Tensor:
+        labels = torch.tensor(
+            labels, dtype=self.label_dtype_, device=output_logits.device)
+        batch_size = input_ids.shape[0]
+        sequence_lengths = (torch.eq(
+            input_ids, self.pad_id_).int().argmax(-1) - 1).to(output_logits.device)
+        pooled_logits = output_logits[torch.arange(
+            batch_size, device=output_logits.device), sequence_lengths]
+        if self.task_type_ == "single_label_classification":
+            loss_fn = torch.nn.CrossEntropyLoss()
+            return loss_fn(pooled_logits.view(-1, self.num_labels_), labels.view(-1))
+        elif self.task_type_ == "multi_label_classification":
+            loss_fn = torch.nn.BCEWithLogitsLoss()
+            return loss_fn(pooled_logits, labels)
+        else:
+            raise ValueError(f"unknown task type {self.task_type_}")
+
+
 class OutputLayer(torch.nn.Module):
-    def __init__(self, weight: torch.Tensor):
+    def __init__(self):
         super().__init__()
-        self.weight_: torch.Tensor = weight
+        self.layers_: torch.ModuleDict = {}
 
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
-        data_ = data.to(self.weight_.dtype) @ self.weight_.transpose(0, 1)
-        return data_.to(data.dtype)
+    def forward(self, data: torch.Tensor,
+                input_args: MultiLoraBatchData) -> List[LLMModelOutput]:
+        outputs = []
+        for lora_config in input_args.lora_batch_data_config_:
+            adapter_name = lora_config.adapter_name_
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
 
+            assert adapter_name != "" and adapter_name in self.layers_
+            layer = self.layers_[adapter_name]
+            outputs.append(LLMModelOutput(adapter_name=adapter_name,
+                                          logits=layer.forward(
+                                              data[start_idx:end_idx]),
+                                          loss_fn_=layer.loss))
 
-class RMSNormLayer(torch.nn.Module):
-    def __init__(self, weight: torch.Tensor, eps: float = 1e-6):
-        super().__init__()
-        self.norm_eps_ = eps
-        self.weight_ = weight
-
-    def _norm(self, data: torch.Tensor) -> torch.Tensor:
-        return data * torch.rsqrt(+ self.norm_eps_)
-
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
-        input_dtype = data.dtype
-        v = data.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        data = data * torch.rsqrt(v + self.norm_eps_)
-
-        return (self.weight_ * data).to(input_dtype)
+        return outputs
 
 
 class Transformer(torch.nn.Module):
     def __init__(self, layer_id: int, args: LLMModelArgs):
         super().__init__()
+        # cos and sin
+        self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
+            args.dim_ // args.n_heads_, args.max_seq_len_, args.rope_theta_, args.device_)
         # attention
         self.attention_norm_: RMSNorm = None  # dim
+        self.attention_cos_: torch.Tensor = None
+        self.attention_sin_: torch.Tensor = None
         self.wq_: Linear = None  # dim * dim
         self.wk_: Linear = None  # dim * dim
         self.wv_: Linear = None  # dim * dim
@@ -145,11 +218,9 @@ class Transformer(torch.nn.Module):
     # @torch.compile
     def forward(self,
                 data: torch.Tensor,
-                mask: torch.Tensor,
-                rope_angle: Tuple[torch.Tensor, torch.Tensor],
                 input_args: MultiLoraBatchData,
-                router_logits: List[List] = None,
-                kv_cache: KVCache = None):
+                mask: torch.Tensor,
+                router_logits: List[List] = None):
         batch_size, max_seq_len, _ = data.shape
 
         attention_norm_data = self.attention_norm_.forward(data)
@@ -159,31 +230,27 @@ class Transformer(torch.nn.Module):
         xv = self.wv_.forward(attention_norm_data, input_args)
 
         # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_)
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
+                     self.head_dim_).transpose(1, 2)
+        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
+                     self.head_dim_).transpose(1, 2)
+        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
+                     self.head_dim_).transpose(1, 2)
 
         # apply rotary embedding
-        xq, xk = apply_rotary_emb(xq, xk, rope_angle, self.dtype_)
-
-        # apply kv cache
-        if kv_cache is not None:
-            xk, xv = kv_cache.update(
-                xk, xv, self.layer_id_, batch_size,
-                max_seq_len, input_args.inference_seq_pos_)
+        cos = self.rope_angle_[0][:max_seq_len].to(xv.dtype)
+        sin = self.rope_angle_[1][:max_seq_len].to(xv.dtype)
+        xq, xk = apply_rotary_emb(xq, xk, cos, sin)
 
         # for llama2 need to repeat the heads
-        # before dim: batch_size, seq_len, n_kv_head, head_dim
-        # after dim: batch_size, seq_len, n_head, head_dim
+        # before dim: batch_size, n_kv_head, seq_len, head_dim
+        # after dim: batch_size, n_head, seq_len, head_dim
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
         if input_args.inference_mode_:
-            xq = xq.transpose(1, 2)
-            xk = xk.transpose(1, 2)
-            xv = xv.transpose(1, 2)
-            attention_score = torch.matmul(xq, xk.transpose(2, 3)
-                                           ) / math.sqrt(self.head_dim_)
+            attention_score = torch.matmul(
+                xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim_)
             if mask is not None:
                 attention_score = attention_score + mask
             attention_score = F.softmax(
@@ -191,11 +258,13 @@ class Transformer(torch.nn.Module):
             attention_score = torch.matmul(attention_score, xv)
             attention_score = attention_score.transpose(1, 2).contiguous()
         else:
-            # use xformers when training
+            xq = xq.transpose(1, 2)
+            xk = xk.transpose(1, 2)
+            xv = xv.transpose(1, 2)
             attention_score = xformers.ops.memory_efficient_attention(
                 xq, xk, xv, mask)
 
-        attention_score = attention_score.view(batch_size, max_seq_len, -1)
+        attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
 
         # get output attention score
         data = data + self.wo_.forward(attention_score, input_args)
@@ -217,8 +286,11 @@ class LlamaSequentialWrapper(torch.nn.Module):
     def forward(self, input: Tuple) -> Tuple:
         module_name = self.name()
 
-        if module_name == "Embedding" or module_name == "RMSNormLayer" or module_name == "OutputLayer":
+        if module_name == "Embedding" or module_name == "RMSNorm":
             output = self.wrapper_module_.forward(input[0])
+            return (output, ) + input[1:]
+        elif module_name == "OutputLayer":
+            output = self.wrapper_module_.forward(*input[:2])
             return (output, ) + input[1:]
         elif module_name == "Transformer":
             if input[-1]:
@@ -240,12 +312,10 @@ class LlamaModel(LLMModel):
         for layer_id in range(args.n_layers_):
             self.layers_.append(Transformer(layer_id, args))
 
-        self.norm_: RMSNormLayer = None    # dim
-        self.output_: OutputLayer = None   # vocab size * dim
-
-        # cos and sin
-        self.rope_angle_: Tuple[torch.Tensor, torch.Tensor] = precompute_rope_angle(
-            args.dim_ // args.n_heads_, args.max_seq_len_, args.device_)
+        self.norm_: RMSNorm = None    # dim
+        self.lm_head_ = torch.nn.Linear(
+            args.dim_, args.vocab_size_, bias=False, device=args.device_, dtype=args.dtype_)
+        self.output_: OutputLayer = OutputLayer()
 
         self.norm_eps_ = args.norm_eps_
 
@@ -262,7 +332,8 @@ class LlamaModel(LLMModel):
         self.adapter_configs_: Dict[str, LoraConfig] = {}
 
     # train model or inference model: output is probs
-    def forward(self, input: MultiLoraBatchData, kv_cache: KVCache = None) -> torch.Tensor:
+    def forward(self, input: MultiLoraBatchData,
+                labels: List[List[int]] = None) -> List[LLMModelOutput]:
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.long, device=self.device_)
 
@@ -274,26 +345,61 @@ class LlamaModel(LLMModel):
                                           input.inference_seq_pos_ if input.inference_mode_ else 0,
                                           self.device_, self.dtype_)
 
-        # store routing data when training
-        if input.output_router_logits_:
-            router_logits: List[List] = list(
-                [] for _ in range(len(input.lora_batch_data_config_)))
-        else:
-            router_logits = None
+        # routing data
+        router_logits: List[List] = list(
+            [] for _ in range(len(input.lora_batch_data_config_)))
 
         if input.inference_mode_:
             input.gradient_checkpoint_ = False
 
-        data = (tokens, attention_masks, self.rope_angle_, input,
-                router_logits, kv_cache, input.gradient_checkpoint_)
+        data = (tokens, input, attention_masks,
+                router_logits, input.gradient_checkpoint_)
 
         for seq_layer in seq_module:
             data = seq_layer.forward(data)
 
-        return data[0], router_logits
+        output = data[0]
+        assert isinstance(output, List)
+        for idx, lora_config in enumerate(input.lora_batch_data_config_):
+            output_data = output[idx]
+            assert isinstance(output_data, LLMModelOutput)
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
+            output_data.batch_start_idx_ = start_idx
+            output_data.batch_end_idx_ = end_idx
+            if labels is None:
+                continue
+            # compute loss when labels provided
+            output_data.loss = output_data.loss_fn_(
+                tokens[start_idx:end_idx], output_data.logits, labels[start_idx:end_idx])
+            output_data.loss_fn_ = None
+            if len(router_logits[idx]) == 0:
+                continue
+            # compute router loss when router logits is available
+            loss_fn = router_loss_factory(
+                self.adapter_configs_[output_data.adapter_name])
+            output_data.loss += loss_fn(router_logits[idx])
+
+        return output
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         self.adapter_configs_[config.adapter_name_] = config
+        # init output layer
+        if config.task_type_ == "casual":
+            output_layer = CasualOutputLayer(
+                vocab_size=self.vocab_size_,
+                weight=self.lm_head_)
+        else:
+            output_layer = ClassificationOutputLayer(
+                **classification_tasks[config.task_type_].init_kwargs(),
+                hidden_size=self.dim_,
+                pad_token_id=self.pad_token_id_,
+                device=self.device_,
+                weight=weight)
+        self.output_.layers_[config.adapter_name_] = output_layer
+        if config.adapter_name_ == "default":
+            return
+        # init transformer layers
         for transformer_layer in self.layers_:
             transformer_layer.init_lora_layer_weight(config, weight)
 
@@ -360,6 +466,7 @@ class LlamaModel(LLMModel):
         llama_args.max_seq_len_ = 4096 if not hasattr(
             llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
         llama_args.pad_token_id_ = llama_model.config.pad_token_id
+        llama_args.rope_theta_ = llama_model.config.rope_theta
         if llama_args.pad_token_id_ is None:
             llama_args.pad_token_id_ = -1
         llama_args.dtype_ = llama_model.dtype
@@ -373,13 +480,13 @@ class LlamaModel(LLMModel):
         model.token_embedding_ = Embedding(
             embedding_weight, llama_args.pad_token_id_)
 
-        output_weight = llama_model.lm_head.weight.to(
-            dtype=torch.float32, device=device).detach()
-        model.output_ = OutputLayer(output_weight)
+        with torch.no_grad():
+            model.lm_head_.weight.copy_(llama_model.lm_head.weight)
+        model.lm_head_.requires_grad_(False)
 
         norm_weight = llama_model.model.norm.weight.to(
             device=device).detach()
-        model.norm_ = RMSNormLayer(norm_weight, model.norm_eps_)
+        model.norm_ = RMSNorm(norm_weight, model.norm_eps_)
 
         for idx, layer in enumerate(llama_model.model.layers):
             model.layers_[idx].wq_ = Linear(
@@ -406,11 +513,11 @@ class LlamaModel(LLMModel):
     def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
         train_paramas = {}
 
+        for name, layer in self.output_.layers_.items():
+            train_paramas[name] = list(layer.state_dict().values())
+
         for transformer_layer in self.layers_:
             for adapter_name, lora_config in self.adapter_configs_.items():
-                if adapter_name not in train_paramas:
-                    train_paramas[adapter_name] = []
-
                 if adapter_name in transformer_layer.ffn_.moes_:
                     train_paramas[adapter_name].append(transformer_layer.ffn_.moes_[
                                                        adapter_name].gate_.weight)
@@ -446,7 +553,7 @@ class LlamaModel(LLMModel):
 
     def get_lora_weight_dict(self, lora_name: str) -> Dict[str, torch.Tensor]:
         # return the lora weight and target_module's name
-        lora_weight_dict = {}
+        lora_weight_dict = self.output_.layers_[lora_name].state_dict()
         for idx, transformer_layer in enumerate(self.layers_):
             if isinstance(self.adapter_configs_[lora_name], MixConfig):
                 layer_prefix_name = f"mixlora.layers.{idx}.self_attn."
@@ -487,10 +594,6 @@ class LlamaModel(LLMModel):
 
         return lora_weight_dict
 
-    def prepare_kv_cache(self, batch_size, max_seq_len) -> KVCache:
-        return KVCache(batch_size, max_seq_len, self.n_kv_heads_,
-                       self.dim_ // self.n_heads_, len(self.layers_), self.device_, self.dtype_)
-
     def sequential_module(self) -> torch.nn.Sequential:
         seq_module = OrderedDict()
 
@@ -506,17 +609,24 @@ class LlamaModel(LLMModel):
         seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
         seq_module.move_to_end("norm")
 
+        seq_module.update({"output": LlamaSequentialWrapper(self.output_)})
+        seq_module.move_to_end("output")
+
         return torch.nn.Sequential(seq_module)
 
     def load_adapter_weight(self, path: str, adapter_name: str = None):
         if adapter_name is None:
             adapter_name = path
-        if not os.path.exists(path):
-            path = snapshot_download(repo_id=path, repo_type="model")
-        with open(path + os.sep + "adapter_config.json", 'r', encoding='utf8') as fp:
-            lora_config = lora_config_factory(json.load(fp))
-        lora_config.adapter_name_ = adapter_name
-        lora_weight = torch.load(
-            path + os.sep + "adapter_model.bin", map_location=self.device_)
+        if path != "default":
+            if not os.path.exists(path):
+                path = snapshot_download(repo_id=path, repo_type="model")
+            with open(path + os.sep + "adapter_config.json", 'r', encoding='utf8') as fp:
+                lora_config = lora_config_factory(json.load(fp))
+            lora_config.adapter_name_ = adapter_name
+            lora_weight = torch.load(
+                path + os.sep + "adapter_model.bin", map_location=self.device_)
+        else:
+            lora_config = LoraConfig(adapter_name_=path)
+            lora_weight = None
         self.init_lora_layer_weight(lora_config, lora_weight)
         return adapter_name

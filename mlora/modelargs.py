@@ -1,5 +1,5 @@
 from transformers.activations import ACT2FN
-from typing import List, Dict, Tuple
+from typing import List, Dict, Callable
 from dataclasses import dataclass
 
 import torch
@@ -27,9 +27,21 @@ class LLMModelArgs:
     hidden_dropout_: float = 0.0
     vocab_size_: int = -1
     pad_token_id_: int = -1
+    rope_theta_: float = 10000.0
     max_seq_len_: int = 2048
     device_: str = ""
     dtype_: torch.dtype = None
+
+
+@dataclass
+class LLMModelOutput:
+    adapter_name: str = None
+    logits: torch.Tensor = None
+    loss: torch.Tensor = None
+    # for internal use
+    batch_start_idx_: int = -1
+    batch_end_idx_: int = -1
+    loss_fn_: Callable = None
 
 
 @dataclass
@@ -39,26 +51,6 @@ class LoraBatchDataConfig:
     batch_end_idx_: int = -1
 
 
-class KVCache:
-    def __init__(self, max_batch_size, max_seq_len, n_local_kv_heads, head_dim,
-                 n_layers, device="cuda:0", dtype=torch.float32) -> None:
-        self.cache_k: List[torch.Tensor] = []
-        self.cache_v: List[torch.Tensor] = []
-        for _ in range(n_layers):
-            self.cache_k.append(torch.zeros(
-                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device, dtype=dtype))
-            self.cache_v.append(torch.zeros(
-                (max_batch_size, max_seq_len, n_local_kv_heads, head_dim), device=device, dtype=dtype))
-
-    def update(self, xk: torch.Tensor, xv: torch.Tensor, layer_idx: int,
-               bsz: int, seq_len: int, seq_pos: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.cache_k[layer_idx][:bsz, seq_pos: seq_pos + seq_len] = xk
-        self.cache_v[layer_idx][:bsz, seq_pos: seq_pos + seq_len] = xv
-
-        return self.cache_k[layer_idx][:bsz, :seq_pos + seq_len], \
-            self.cache_v[layer_idx][:bsz, :seq_pos + seq_len]
-
-
 @dataclass
 class MultiLoraBatchData:
     lora_batch_data_config_: List[LoraBatchDataConfig] = None
@@ -66,7 +58,6 @@ class MultiLoraBatchData:
     batch_tokens_: List[Tokens] = None
     attention_masks_: List[Tokens] = None
 
-    output_router_logits_: bool = False
     gradient_checkpoint_: bool = True
     inference_seq_pos_: int = -1
 
@@ -78,6 +69,7 @@ class MultiLoraBatchData:
 @dataclass
 class LoraConfig:
     adapter_name_: str = ""
+    task_type_: str = "casual"
     device_: str = "cuda:0"
     dtype_: torch.dtype = None
     lora_r_: int = None
