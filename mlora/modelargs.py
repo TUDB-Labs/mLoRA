@@ -211,7 +211,6 @@ class MixConfig(LoraConfig):
         elif self.routing_strategy_ == "switch":
             config["expert_capacity"] = self.expert_capacity_
             config["jitter_noise"] = self.jitter_noise_
-            config["ffn_dropout"] = self.dropout_rate_
 
         return config
 
