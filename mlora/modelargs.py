@@ -38,6 +38,7 @@ class LLMModelOutput:
     adapter_name: str = None
     logits: torch.Tensor = None
     loss: torch.Tensor = None
+    aux_loss: torch.Tensor = None
     # for internal use
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
@@ -146,6 +147,7 @@ class MixConfig(LoraConfig):
     # router config
     router_aux_loss_coef_: float = None
     routing_strategy_: str = None
+    dropout_rate_: float = None
     num_experts_: int = None
     act_fn_: str = None
     # mixtral config
@@ -154,7 +156,6 @@ class MixConfig(LoraConfig):
     router_z_loss_coef_: float = None
     expert_capacity_: int = None
     jitter_noise_: float = None
-    dropout_rate_: float = None
 
     def check(self) -> "MixConfig":
         super().check()
@@ -162,6 +163,8 @@ class MixConfig(LoraConfig):
                           float) and self.router_aux_loss_coef_ >= 0
         assert isinstance(self.routing_strategy_,
                           str) and self.routing_strategy_ in available_routing_strategies
+        assert isinstance(self.dropout_rate_,
+                          float) and self.dropout_rate_ >= 0
         assert isinstance(self.num_experts_, int) and self.num_experts_ > 0
         assert isinstance(self.act_fn_, str) and self.act_fn_ in ACT2FN
         if self.routing_strategy_ == "mixtral":
@@ -173,8 +176,6 @@ class MixConfig(LoraConfig):
                               int) and self.expert_capacity_ > 0
             assert isinstance(self.jitter_noise_,
                               float) and self.jitter_noise_ >= 0
-            assert isinstance(self.dropout_rate_,
-                              float) and self.dropout_rate_ >= 0
 
         return self
 
@@ -183,9 +184,10 @@ class MixConfig(LoraConfig):
         self.router_aux_loss_coef_ = config.get(
             "router_aux_loss_coef", 0.001)  # for training
         self.routing_strategy_ = config["routing_strategy"]
+        self.dropout_rate_ = config.get("ffn_dropout", 0.0)
         self.num_experts_ = config["num_experts"]
         # silu for mixtral or gelu_new for switch transformers
-        self.act_fn_ = config["act_fn"]
+        self.act_fn_ = config.get("act_fn", "silu")
         if self.routing_strategy_ == "mixtral":
             self.top_k_ = config.get("top_k", 2)
         elif self.routing_strategy_ == "switch":
@@ -195,7 +197,6 @@ class MixConfig(LoraConfig):
             # common values of capacity_factor: 1.0, 1.25, 2.0
             self.expert_capacity_ = config.get("expert_capacity", 64)
             self.jitter_noise_ = config.get("jitter_noise", 0.1)
-            self.dropout_rate_ = config.get("ffn_dropout", 0.1)
 
         return self
 

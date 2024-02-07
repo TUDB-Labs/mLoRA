@@ -1,7 +1,6 @@
 from mlora.modelargs import MixConfig, MultiLoraBatchData
 from mlora.lora_liner import Linear
 from mlora.mix_lora import moe_layer_factory
-from mlora.model import RMSNorm
 
 from typing import List, Optional
 import torch
@@ -9,11 +8,10 @@ import math
 
 
 class FeedForward(torch.nn.Module):
-    def __init__(self, norm: RMSNorm, w1: Linear, w2: Linear, w3: Linear, device: str) -> None:
+    def __init__(self, w1: Linear, w2: Linear, w3: Linear, device: str) -> None:
         super().__init__()
 
         # feed forward
-        self.norm_: RMSNorm = norm  # dim
         self.w1_: Linear = w1       # also gate FNN * dim
         self.w2_: Linear = w2       # also down dim * FNN
         self.w3_: Linear = w3       # also up   FNN * dim
@@ -26,27 +24,26 @@ class FeedForward(torch.nn.Module):
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData,
                 router_logits: List[List] = None) -> torch.Tensor:
         if len(self.moes_) == 0:
-            score_norm_data = self.norm_.forward(data)
-            w1 = self.w1_.forward(score_norm_data, input_args)
-            w3 = self.w3_.forward(score_norm_data, input_args)
+            w1 = self.w1_.forward(data, input_args)
+            w3 = self.w3_.forward(data, input_args)
             return self.w2_.forward(self.act_(w1) * w3, input_args)
         else:
             return self._mixlora_forward(data, input_args, router_logits)
 
     # LoRA
-    def _lora_forward(self, lora_name, act_fn, norm_data):
+    def _lora_forward(self, lora_name, act_fn, data):
         # Applying LoRA weights to FFN weights
         if lora_name in self.w1_.loras_:
-            w1 = self.w1_.weight_.forward(norm_data) + \
-                self.w1_.loras_[lora_name].forward(norm_data)
+            w1 = self.w1_.weight_.forward(data) + \
+                self.w1_.loras_[lora_name].forward(data)
         else:
-            w1 = self.w1_.weight_.forward(norm_data)
+            w1 = self.w1_.weight_.forward(data)
 
         if lora_name in self.w3_.loras_:
-            w3 = self.w3_.weight_.forward(norm_data) + \
-                self.w3_.loras_[lora_name].forward(norm_data)
+            w3 = self.w3_.weight_.forward(data) + \
+                self.w3_.loras_[lora_name].forward(data)
         else:
-            w3 = self.w3_.weight_.forward(norm_data)
+            w3 = self.w3_.weight_.forward(data)
 
         act_result = act_fn(w1) * w3
         if lora_name in self.w2_.loras_:
@@ -66,9 +63,9 @@ class FeedForward(torch.nn.Module):
             with torch.no_grad():
                 self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
 
-    def _expert_forward_callback(self, moe_name, act_fn, expert_idx, norm_data):
+    def _expert_forward_callback(self, moe_name, act_fn, expert_idx, data):
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
-        return self._lora_forward(lora_name, act_fn, norm_data)
+        return self._lora_forward(lora_name, act_fn, data)
 
     def _mixlora_forward(self, data: torch.Tensor, input_args: MultiLoraBatchData,
                          router_logits: List[List] = None):
@@ -80,14 +77,13 @@ class FeedForward(torch.nn.Module):
 
             if moe_name in self.moes_:
                 current_hidden_states, current_router_outputs = self.moes_[
-                    moe_name].forward(self.norm_, self._expert_forward_callback, data[start_idx:end_idx])
+                    moe_name].forward(self._expert_forward_callback, data[start_idx:end_idx])
 
                 if router_logits is not None and current_router_outputs is not None:
                     router_logits[idx].append(current_router_outputs)
             else:
-                score_norm_data = self.norm_(data[start_idx:end_idx])
                 current_hidden_states = self._lora_forward(
-                    moe_name, self.act_, score_norm_data)
+                    moe_name, self.act_, data[start_idx:end_idx])
 
             if final_hidden_states is None:
                 final_hidden_states = current_hidden_states

@@ -146,6 +146,7 @@ class Transformer(torch.nn.Module):
         self.wv_: Linear = None  # dim * dim
         self.wo_: Linear = None  # dim * dim
         # feed forward
+        self.ffn_norm_: RMSNorm = None  # dim
         self.ffn_: FeedForward = None
 
         # other arg
@@ -270,7 +271,9 @@ class Transformer(torch.nn.Module):
         data = data + self.wo_.forward(attention_score, input_args)
 
         # feed forward fully connected
-        data = data + self.ffn_.forward(data, input_args, router_logits)
+        ffn_norm_data = self.ffn_norm_.forward(data)
+        data = data + \
+            self.ffn_.forward(ffn_norm_data, input_args, router_logits)
 
         return data
 
@@ -378,7 +381,7 @@ class LlamaModel(LLMModel):
             # compute router loss when router logits is available
             loss_fn = router_loss_factory(
                 self.adapter_configs_[output_data.adapter_name])
-            output_data.loss += loss_fn(router_logits[idx])
+            output_data.aux_loss = loss_fn(router_logits[idx])
 
         return output
 
@@ -498,8 +501,6 @@ class LlamaModel(LLMModel):
             model.layers_[idx].wo_ = Linear(
                 layer.self_attn.o_proj, device=device)
             model.layers_[idx].ffn_ = FeedForward(
-                norm=RMSNorm(layer.post_attention_layernorm.weight.to(
-                    device=device).detach(), model.norm_eps_),
                 w1=Linear(layer.mlp.gate_proj, device=device),
                 w2=Linear(layer.mlp.down_proj, device=device),
                 w3=Linear(layer.mlp.up_proj, device=device),
@@ -507,6 +508,8 @@ class LlamaModel(LLMModel):
             )
             model.layers_[idx].attention_norm_ = RMSNorm(
                 layer.input_layernorm.weight.to(device=device).detach(), model.norm_eps_)
+            model.layers_[idx].ffn_norm_ = RMSNorm(
+                layer.post_attention_layernorm.weight.to(device=device).detach(), model.norm_eps_)
 
         return model
 
