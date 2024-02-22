@@ -24,7 +24,7 @@ from typing import Dict, List
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
-parser.add_argument('--base_model', type=str,
+parser.add_argument('--base_model', type=str, required=True,
                     help='Path to or name of base model')
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
@@ -211,9 +211,6 @@ if __name__ == "__main__":
     mlora.setup_seed(args.seed)
     mlora.setup_logging(args.log_level, args.log_file)
     mlora.setup_cuda_check()
-
-    # check the input argument
-    assert args.base_model is not None, "error: Argument --base_model are required."
 
     tokenizer, model = mlora.load_base_model(args.base_model,
                                              args.model_type,
