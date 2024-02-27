@@ -133,7 +133,7 @@ class RpcTransport(Transport):
             assert msg.tensor_data_.device == torch.device("cpu")
             logging.debug(
                 f"RpcTransport async send the message: {str(msg.msg_id_)[:8]} to {msg.dst_}.")
-            torch.distributed.rpc.rpc_async(
+            torch.distributed.rpc.rpc_sync(
                 msg.dst_, rpc_push_queue, args=(msg,))
 
     def stop_send_loop(self):
