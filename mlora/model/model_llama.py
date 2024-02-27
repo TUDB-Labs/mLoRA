@@ -10,7 +10,8 @@ import torch
 import torch.nn.functional as F
 import xformers.ops
 import xformers.ops.fmha.attn_bias
-from transformers import LlamaForCausalLM
+
+from transformers import LlamaForCausalLM, AutoConfig
 from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
 
@@ -94,8 +95,7 @@ class Transformer(torch.nn.Module):
             self.__dict__[var_dict_name] = Linear(source, device=device)
 
         for var_dict_name, source in norm_dict_name.items():
-            self.__dict__[var_dict_name] = RMSNorm(
-                source.to(device=device).detach().requires_grad_(False), norm_eps)
+            self.__dict__[var_dict_name] = RMSNorm(source, norm_eps)
 
     def init_lora_layer_weight(self,
                                adapter_name: str,
@@ -302,15 +302,32 @@ class LlamaModel(LLMModel):
                         qlora_4bit_fp16: bool = True,
                         qlora_4bit_bf16: bool = False,
                         qlora_4bit_double_quant: bool = True,
-                        qlora_4_bit_quant_type: str = "nf4") -> LLMModel:
+                        qlora_4_bit_quant_type: str = "nf4",
+                        partial_model_to_device: List[int] = None) -> LLMModel:
         assert qlora_4bit_fp16 ^ qlora_4bit_bf16
         assert (bits is None) or (bits in [4, 8])
         assert qlora_4_bit_quant_type in ["nf4", "fp4"]
 
+        # create the device map for parallelism
+        def create_device_map():
+            if partial_model_to_device is None:
+                device_map = device
+            else:
+                config = AutoConfig.from_pretrained(path)
+                # Be careful, this is hard coded.
+                weight_map = ["model.embed_tokens",
+                              *[f"model.layers.{layer_id}" for layer_id in range(0, config.num_hidden_layers)],
+                              "model.norm",
+                              "lm_head"]
+                device_map = {map_item: "disk" for map_item in weight_map}
+                for partial_weight in partial_model_to_device:
+                    device_map[weight_map[partial_weight]] = device
+            return device_map
+
         # the argument for the LlamaForCausalLM load the pretrained large model
         additional_load_args = {
-            "device_map": device,
-            "torch_dtype": torch.float32
+            "device_map": create_device_map(),
+            "torch_dtype": torch.float32,
         }
 
         if bits is not None:
@@ -329,6 +346,7 @@ class LlamaModel(LLMModel):
             additional_load_args["quantization_config"] = BitsAndBytesConfig(
                 load_in_4bit=True if bits == 4 else False,
                 load_in_8bit=True if bits == 8 else False,
+                llm_int8_enable_fp32_cpu_offload=True,
                 # only for qlora 4bit
                 bnb_4bit_compute_dtype=qlora_4bit_compute_dtype,
                 bnb_4bit_use_double_quant=qlora_4bit_double_quant,
@@ -357,6 +375,8 @@ class LlamaModel(LLMModel):
                                        device: str):
         model = LlamaModel(llama_args)
 
+        llama_model.requires_grad_(False)
+
         # plm - pretrained large model
         def get_tensor_from_plm(name: str) -> torch.Tensor:
             origin_weight_map = {"embedding": llama_model.model.embed_tokens.weight,
@@ -365,7 +385,7 @@ class LlamaModel(LLMModel):
             assert name in origin_weight_map
             origin_weight = origin_weight_map[name]
             assert isinstance(origin_weight, torch.Tensor)
-            return origin_weight.to(device=device).detach().requires_grad_(False)
+            return origin_weight
 
         model.token_embedding_ = Embedding(
             get_tensor_from_plm("embedding"), llama_args.pad_token_id_)

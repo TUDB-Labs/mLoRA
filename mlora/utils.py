@@ -10,7 +10,7 @@ import torch
 import random
 import logging
 
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 
 
 def setup_seed(seed):
@@ -83,7 +83,8 @@ def load_base_model(base_model: str,
                     model_type: str,
                     device: str,
                     load_4bit: bool = False,
-                    load_8bit: bool = False) -> Tuple[Tokenizer, LLMModel]:
+                    load_8bit: bool = False,
+                    partial_model_to_device: List[int] = None) -> Tuple[Tokenizer, LLMModel]:
     # base_model: the base model name from huggingface or the path of the base model
     assert not (load_4bit and load_8bit)
 
@@ -100,7 +101,8 @@ def load_base_model(base_model: str,
 
     model = model_type_dict[model_type].from_pretrained(path=base_model,
                                                         device=device,
-                                                        bits=bits)
+                                                        bits=bits,
+                                                        partial_model_to_device=partial_model_to_device)
 
     tokenizer = Tokenizer(base_model)
 

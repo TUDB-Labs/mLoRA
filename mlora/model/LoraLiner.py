@@ -48,7 +48,7 @@ class Linear():
         else:
             self.device_ = device
 
-        self.weight_ = weight.to(device=device)
+        self.weight_ = weight
         self.enable_lora_: bool = False
         self.loras_: Dict[str, Lora] = {}
 
