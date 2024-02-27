@@ -20,6 +20,8 @@ import json
 import torch
 import mlora
 import argparse
+import logging
+
 from typing import Dict, List
 
 # Command Line Arguments
@@ -60,6 +62,14 @@ parser.add_argument('--log_level', type=str, default="INFO",
                     help="Set the log level.")
 parser.add_argument('--log_file', type=str,
                     help="Save log to specific file.")
+# the argument about pipeline
+parser.add_argument('--pipeline', action="store_true",
+                    help="Train the LoRA model use the pipeline parallelism")
+parser.add_argument('--rank', type=int, default=-1,
+                    help="The device's rank number")
+parser.add_argument('--balance', type=int, nargs="+",
+                    help="The model's balance")
+
 
 args = parser.parse_args()
 
@@ -212,11 +222,23 @@ if __name__ == "__main__":
     mlora.setup_logging(args.log_level, args.log_file)
     mlora.setup_cuda_check()
 
+    # load part of model to device
+    partial_model_to_device = None
+    if args.pipeline:
+        assert args.rank != -1
+        assert len(args.balance) >= args.rank
+        logging.info(
+            f"Pipeline parallelism, rank is {args.rank} and balance is {args.balance}.")
+
+        partial_model_to_device = [
+            index + sum(args.balance[:args.rank])for index in range(0, args.balance[args.rank])]
+
     tokenizer, model = mlora.load_base_model(args.base_model,
                                              args.model_type,
                                              args.device,
                                              args.load_4bit,
-                                             args.load_8bit)
+                                             args.load_8bit,
+                                             partial_model_to_device)
 
     if not args.disable_lora:
         assert args.config is not None, "error: Argument --config are required."
@@ -224,6 +246,9 @@ if __name__ == "__main__":
         with open(args.config, 'r', encoding='utf8') as fp:
             config = json.load(fp)
         mlora.init_lora_model(config, model, args.load_lora)
+
+    if args.pipeline:
+        raise NotImplementedError
 
     if args.inference:
         inference(config, model, tokenizer)
