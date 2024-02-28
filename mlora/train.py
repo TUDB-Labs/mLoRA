@@ -21,6 +21,10 @@ class TrainConfig:
         self.micro_batch_size_ = train_config["micro_batch_size"]
         self.optimizer_name_ = train_config["optim"]
         self.learning_rate_ = train_config["lr"]
+        self.lora_a_learning_rate_ = train_config.get(
+            "lora_a_lr", self.learning_rate_)
+        self.lora_b_learning_rate_ = train_config.get(
+            "lora_b_lr", self.learning_rate_)
         self.momentum_ = train_config.get("momentum", 0)
         self.weight_decay_ = train_config.get("weight_decay", 0.01)
         # Scheduler Types
@@ -43,22 +47,29 @@ class TrainConfig:
         if "task_type" in train_config and "data" not in train_config:
             train_config["data"] = train_config["task_type"]
 
-    def prepare(self, train_paramas: List[torch.Tensor]):
+    def prepare(self, train_paramas: tuple):
         if self.batch_size_ < self.micro_batch_size_ or self.batch_size_ % self.micro_batch_size_ != 0:
             raise ValueError(
                 f"error batch_size {self.batch_size_} and micro batch size {self.micro_batch_size_}")
         self.accumulation_step_ = self.batch_size_ / self.micro_batch_size_
-        paramas_count = sum(t.numel()
-                            for t in train_paramas if t.requires_grad)
+        paramas_count = 0
+        for paramas in train_paramas:
+            paramas_count = paramas_count + sum(t.numel()
+                                                for t in paramas if t.requires_grad)
         logging.info(
             f"{self.adapter_name_} total trainable params: {paramas_count}")
         if self.optimizer_name_ == "sgd":
-            self.optimizer_ = torch.optim.SGD(
-                train_paramas, lr=self.learning_rate_,
-                momentum=self.momentum_, weight_decay=self.weight_decay_)
+            self.optimizer_ = torch.optim.SGD([
+                {'params': train_paramas[0], 'lr': self.lora_a_learning_rate_},
+                {'params': train_paramas[1], 'lr': self.lora_b_learning_rate_},
+                {'params': train_paramas[2], 'lr': self.learning_rate_},
+            ], momentum=self.momentum_, weight_decay=self.weight_decay_)
         elif self.optimizer_name_ == "adamw":
-            self.optimizer_ = torch.optim.AdamW(
-                train_paramas, lr=self.learning_rate_, weight_decay=self.weight_decay_)
+            self.optimizer_ = torch.optim.AdamW([
+                {'params': train_paramas[0], 'lr': self.lora_a_learning_rate_},
+                {'params': train_paramas[1], 'lr': self.lora_b_learning_rate_},
+                {'params': train_paramas[2], 'lr': self.learning_rate_},
+            ], weight_decay=self.weight_decay_)
         else:
             raise ValueError(f"unkown optimizer {self.optimizer_name_}")
 
@@ -105,7 +116,9 @@ def train(dispatcher: Dispatcher,
         adapter_name = task.adapter_name_
         logging.info(f"Loading training task {adapter_name}")
         config = config_dict[adapter_name]
-        config.prepare(train_paramas[adapter_name])
+        config.prepare((train_paramas[0][adapter_name],
+                        train_paramas[1][adapter_name],
+                        train_paramas[2][adapter_name]))
         config.step_lr_scheduler(
             task.total_epoch_num_, len(task.train_token_data_))
 
