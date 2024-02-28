@@ -8,8 +8,10 @@ import math
 import json
 import random
 import datasets
+
 from dataclasses import dataclass
 from typing import Dict, List, Union
+from collections.abc import Iterable
 
 
 @dataclass
@@ -405,3 +407,8 @@ class Dispatcher():
                                   additional_mask_=additional_mask,
                                   batch_tokens_=batch_tokens,
                                   inference_model_=False)
+
+    def train_data(self) -> Iterable[MultiLoraBatchData]:
+        while not self.check_task_done():
+            yield self.get_train_data()
+        return
