@@ -24,7 +24,12 @@ def precompute_mask(input_tokens: torch.Tensor,
                     additional_mask: List[Masks] = None,
                     diagonal: int = 1,
                     dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    batch_size, seq_len = input_tokens.shape
+    if input_tokens.dim() == 2:
+        batch_size, seq_len = input_tokens.shape
+    elif input_tokens.dim() == 3:
+        batch_size, seq_len, _ = input_tokens.shape
+    else:
+        raise Exception("input dim is not correct {input_tokens.dim}")
 
     TORCH_MIN_VALUE = torch.finfo(dtype).min
     mask = torch.full((batch_size, n_heads, seq_len, seq_len),
@@ -89,6 +94,7 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 class LLMModel(metaclass=ABCMeta):
     vocab_size_: int = -1
+    n_heads_: int = -1
 
     @abstractclassmethod
     def forward(self, input: MultiLoraBatchData):

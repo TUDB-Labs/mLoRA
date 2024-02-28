@@ -9,7 +9,8 @@ from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData, LoraBatchDat
 from mlora.evaluator.evaluator_factory import EvaluatorFactory
 from mlora.evaluator.evaluator import Evaluator
 from mlora.trainer.trainer import Trainer
-from mlora.dispatcher.dispatcher import Dispatcher
+from mlora.dispatcher.dispatcher import Dispatcher, TrainTask
+from mlora.pipeline.pipe import Pipe
 
 __all__ = [
     "Tokenizer",
@@ -31,5 +32,7 @@ __all__ = [
     "EvaluatorFactory",
     "Evaluator",
     # Trainer
-    "Trainer"
+    "Trainer",
+    # pipeline parallelism
+    "Pipe"
 ]

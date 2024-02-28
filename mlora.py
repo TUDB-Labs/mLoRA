@@ -103,13 +103,20 @@ if __name__ == "__main__":
         config = mlora.MLoRAConfig(args.config)
         mlora.init_lora_model(model, config.lora_configs_)
 
+    dispatcher = mlora.Dispatcher(config, tokenizer)
+
     if args.pipeline:
-        raise NotImplementedError
+        pipe = mlora.Pipe(model,
+                          config,
+                          dispatcher,
+                          args.device,
+                          args.rank,
+                          args.balance)
+        exit(pipe.run())
 
     if args.evaluate:
         evaluator: mlora.Evaluator = mlora.EvaluatorFactory().create(
             model, tokenizer, args.evaluate, args.evaluate_data)
         evaluator.evaluate()
     else:
-        dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)
