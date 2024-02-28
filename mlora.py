@@ -121,9 +121,7 @@ def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.D
     loss_fn = torch.nn.CrossEntropyLoss()
 
     step_cnt = 0
-    while not dispatcher.check_task_done():
-        input: mlora.MultiLoraBatchData = dispatcher.get_train_data()
-
+    for input in dispatcher.train_data():
         step_cnt += 1
 
         output = llm_model.forward(input)
