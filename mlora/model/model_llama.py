@@ -1,3 +1,4 @@
+from mlora.common import nvtx_wrapper
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.model.model import LLMModel, repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
 from mlora.model.LoraLiner import Linear, Lora
@@ -227,10 +228,10 @@ class LlamaSequentialWrapper(torch.nn.Module):
             return (output, ) + input[1:]
 
         forward_func_dict = {
-            "Embedding": embedding_forward,
-            "Transformer": transformer_forward,
-            "RMSNorm": rmsnorm_forward,
-            "OutputLayer": output_layer_forward,
+            "Embedding": nvtx_wrapper(embedding_forward, "embedding"),
+            "Transformer": nvtx_wrapper(transformer_forward, "transformer"),
+            "RMSNorm": nvtx_wrapper(rmsnorm_forward, "rmsnorm"),
+            "OutputLayer": nvtx_wrapper(output_layer_forward, "output"),
         }
 
         module_name = self.name()
