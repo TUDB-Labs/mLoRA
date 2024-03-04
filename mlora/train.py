@@ -33,6 +33,7 @@ class TrainConfig:
         self.all_training_steps_: int = -1
         self.lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
         self.accumulation_step_: int = None
+        self.accumulation_step_cnt_: int = 0
         self.optimizer_: torch.optim.Optimizer = None
         task_type = train_config.get("task_type", "casual")
         if task_type == "casual":
@@ -48,6 +49,7 @@ class TrainConfig:
             raise ValueError(
                 f"error batch_size {self.batch_size_} and micro batch size {self.micro_batch_size_}")
         self.accumulation_step_ = self.batch_size_ / self.micro_batch_size_
+        self.accumulation_step_cnt_ = 0
         paramas_count = sum(t.numel()
                             for t in train_paramas if t.requires_grad)
         logging.info(
@@ -62,7 +64,7 @@ class TrainConfig:
         else:
             raise ValueError(f"unkown optimizer {self.optimizer_name_}")
 
-    def step_lr_scheduler(self, total_epoch, len_dataset):
+    def prepare_lr_scheduler(self, total_epoch, len_dataset):
         if self.lr_scheduler_ is None:
             total_steps = (len_dataset // self.batch_size_) * total_epoch if len_dataset % self.batch_size_ == 0 else (
                 len_dataset // self.batch_size_ + 1) * total_epoch
@@ -71,6 +73,15 @@ class TrainConfig:
                     self.warmup_steps_, float) else self.warmup_steps_
             self.lr_scheduler_ = get_scheduler(
                 self.scheduler_type_, self.optimizer_, warmup_steps, total_steps)
+
+    def step(self):
+        self.accumulation_step_cnt_ += 1
+        if self.accumulation_step_cnt_ % self.accumulation_step_ == 0:
+            self.optimizer_.step()
+            self.lr_scheduler_.step()
+            logging.info(f"    adapter: {self.adapter_name_}" +
+                         f"   lr: {self.lr_scheduler_.get_last_lr()[-1]}")
+            self.optimizer_.zero_grad()
 
 
 def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suffix=""):
@@ -106,7 +117,7 @@ def train(dispatcher: Dispatcher,
         logging.info(f"Loading training task {adapter_name}")
         config = config_dict[adapter_name]
         config.prepare(train_paramas[adapter_name])
-        config.step_lr_scheduler(
+        config.prepare_lr_scheduler(
             task.total_epoch_num_, len(task.train_token_data_))
 
     dispatcher.train_task_in_event_.register(task_in_callback)
@@ -141,16 +152,10 @@ def train(dispatcher: Dispatcher,
         total_loss.backward()
 
         for output in outputs:
-            adapter_name = output.adapter_name
-            config = config_dict[adapter_name]
-            if step_cnt % config.accumulation_step_ == 0:
-                config.optimizer_.step()
-                config.lr_scheduler_.step()
-                logging.info(f"    adapter: {adapter_name}" +
-                             f"   lr: {config.lr_scheduler_.get_last_lr()[-1]}")
-                config.optimizer_.zero_grad()
+            config = config_dict[output.adapter_name]
+            config.step()
 
-            if step_cnt % save_step == 0:
+            if config.accumulation_step_cnt_ % save_step == 0:
                 save_adapter_weight(model, config, save_dir, f"{step_cnt}")
 
     for config in configs:
