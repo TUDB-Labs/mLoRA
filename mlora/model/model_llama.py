@@ -127,11 +127,17 @@ class Transformer(torch.nn.Module):
                 input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
-        attention_norm_data = self.attention_norm_.forward(data)
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_attention_norm"):
+            attention_norm_data = self.attention_norm_.forward(data)
 
-        xq = self.wq_.forward(attention_norm_data, input_args)
-        xk = self.wk_.forward(attention_norm_data, input_args)
-        xv = self.wv_.forward(attention_norm_data, input_args)
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_xq"):
+            xq = self.wq_.forward(attention_norm_data, input_args)
+
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_xk"):
+            xk = self.wk_.forward(attention_norm_data, input_args)
+
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_xv"):
+            xv = self.wv_.forward(attention_norm_data, input_args)
 
         # conver shape to multi head
         # the shape is batch_size * number_of_head * seq_len * dim_of_head
@@ -146,7 +152,9 @@ class Transformer(torch.nn.Module):
         assert xq.dtype == xk.dtype
         cos = self.cos_[:max_seq_len].to(xq.dtype)
         sin = self.sin_[:max_seq_len].to(xq.dtype)
-        xq, xk = apply_rotary_emb(xq, xk, cos, sin)
+
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_rotray_emb"):
+            xq, xk = apply_rotary_emb(xq, xk, cos, sin)
 
         # for llama2 need to repeat the heads
         # before dim: batch_size, n_kv_head, seq_len, head_dim
@@ -158,19 +166,28 @@ class Transformer(torch.nn.Module):
         xq = xq.transpose(1, 2)
         xk = xk.transpose(1, 2)
         xv = xv.transpose(1, 2)
-        attention_score = xformers.ops.memory_efficient_attention(
-            xq, xk, xv, mask)
+
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_attention"):
+            attention_score = xformers.ops.memory_efficient_attention(
+                xq, xk, xv, mask)
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
 
         # get output attention score
-        data = data + self.wo_.forward(attention_score, input_args)
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_wo"):
+            data = data + self.wo_.forward(attention_score, input_args)
 
         # feed forward fully connected
-        score_norm_data = self.ffn_norm_.forward(data)
-        w1 = self.w1_.forward(score_norm_data, input_args)
-        w3 = self.w3_.forward(score_norm_data, input_args)
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_ffn_norm"):
+            score_norm_data = self.ffn_norm_.forward(data)
 
-        data = data + self.w2_.forward(F.silu(w1) * w3, input_args)
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_w1"):
+            w1 = self.w1_.forward(score_norm_data, input_args)
+
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_w3"):
+            w3 = self.w3_.forward(score_norm_data, input_args)
+
+        with torch.cuda.nvtx.range(f"layer_{self.layer_id_}_add_w2"):
+            data = data + self.w2_.forward(F.silu(w1) * w3, input_args)
 
         return data
 

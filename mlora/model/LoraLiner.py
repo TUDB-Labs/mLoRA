@@ -107,11 +107,13 @@ class Linear():
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
         # data shape is: batch_size * max_seq_len * dim
         # result = data @ self.weight_.transpose(0, 1)
-        result = self.weight_.forward(data)
+        with torch.cuda.nvtx.range("liner_base"):
+            result = self.weight_.forward(data)
 
         if not self.enable_lora_:
             return result
 
+        torch.cuda.nvtx.range_push("linear_lora")
         for lora_config in input_args.lora_batch_data_config_:
             adapter_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
@@ -122,5 +124,6 @@ class Linear():
 
             result[start_idx: end_idx] += self.loras_[
                 adapter_name].forward(data[start_idx:end_idx])
+        torch.cuda.nvtx.range_pop()
 
         return result
