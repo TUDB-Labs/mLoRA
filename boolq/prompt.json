@@ -1,0 +1,4 @@
+{
+    "description": "BoolQ Benchmark",
+    "prompt_input": "Read the passage and answer the question in \"Yes\" or \"No\".\nQuestion: {instruction}?\nPassage: {input}\nAnswer:"
+}
