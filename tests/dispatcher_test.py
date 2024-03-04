@@ -1,4 +1,4 @@
-from mlora.dispatcher import TrainTask
+from mlora.dispatcher.dispatcher import TrainTask
 
 import json
 import unittest
