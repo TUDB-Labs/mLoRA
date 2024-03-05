@@ -74,87 +74,10 @@ parser.add_argument('--balance', type=int, nargs="+",
 args = parser.parse_args()
 
 
-def get_optimizer(config: Dict[str, any], train_paramas: Dict[str, torch.Tensor]) -> Dict[str, torch.optim.Optimizer]:
-    # get optimizer per lora model
-    optimizer: Dict[str, torch.optim.Optimizer] = {}
-
-    for lora_config in config["lora"]:
-        adapter_name = lora_config["name"]
-        optim_name = lora_config["optim"]
-        lr = lora_config["lr"]
-        if optim_name == "sgd":
-            momentum = 0
-            if "momentum" in lora_config:
-                momentum = lora_config["momentum"]
-            optimizer[adapter_name] = (torch.optim.SGD(
-                train_paramas[adapter_name], lr=lr, momentum=momentum))
-        elif optim_name == "adamw":
-            optimizer[adapter_name] = (torch.optim.AdamW(
-                train_paramas[adapter_name], lr=lr))
-        else:
-            raise f"unkown optimizer {optim_name}"
-
-    return optimizer
-
-
-def get_accumulation_steps(config: Dict[str, any]) -> Dict[str, int]:
-    ret_accumulation_step = {}
-    for lora_config in config["lora"]:
-        batch_size = lora_config["batch_size"]
-        micro_batch_size = lora_config["micro_batch_size"]
-        if batch_size < micro_batch_size or batch_size % micro_batch_size != 0:
-            raise f"error batch_size {batch_size} and micro batch size {micro_batch_size}"
-        ret_accumulation_step[lora_config["name"]
-                              ] = batch_size / micro_batch_size
-    return ret_accumulation_step
-
-
 # to get test result and want early stop it
 def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
-    # the train paramas per lora model
-    all_train_paramas: Dict[str, List[torch.Tensor]
-                            ] = llm_model.get_train_paramas()
-    all_optimizer: Dict[str, torch.optim.Optimizer] = get_optimizer(
-        config, all_train_paramas)
-    accumulation_step: Dict[str, int] = get_accumulation_steps(config)
-
-    loss_fn = torch.nn.CrossEntropyLoss()
-
-    step_cnt = 0
-    for input in dispatcher.train_data():
-        step_cnt += 1
-
-        output = llm_model.forward(input)
-        labels = torch.tensor(input.batch_tokens_,
-                              dtype=torch.long).to(args.device)
-
-        total_loss = None
-        for lora_config in input.lora_batch_data_config_:
-            start_idx = lora_config.batch_start_idx_
-            end_idx = lora_config.batch_end_idx_
-            loss_input = output[start_idx:end_idx][..., :-1,
-                                                   :].contiguous().view(-1, llm_model.vocab_size_)
-            loss_target = labels[start_idx:end_idx][...,
-                                                    1:].contiguous().view(-1)
-            loss = loss_fn(loss_input, loss_target) / \
-                accumulation_step[lora_config.adapter_name_]
-            print(
-                f"    adapter: {lora_config.adapter_name_} loss: {loss}")
-            if total_loss is None:
-                total_loss = loss
-            else:
-                total_loss += loss
-
-        total_loss.backward()
-        for lora in input.lora_batch_data_config_:
-            if step_cnt % accumulation_step[lora.adapter_name_] == 0:
-                all_optimizer[lora.adapter_name_].step()
-                all_optimizer[lora.adapter_name_].zero_grad()
-
-        if step_cnt % config["save_step"] == 0:
-            mlora.save_lora_model(llm_model, config, f"{step_cnt}")
-
-    mlora.save_lora_model(llm_model, config)
+    trainer = mlora.Trainer(llm_model, dispatcher, config["lora"])
+    trainer.train()
 
 
 def inference(config: Dict[str, any],

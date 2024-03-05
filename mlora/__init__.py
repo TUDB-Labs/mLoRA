@@ -1,5 +1,4 @@
-from mlora.utils import (convert_hf_to_pth, save_lora_model,
-                         setup_seed, setup_logging, setup_cuda_check,
+from mlora.utils import (setup_seed, setup_logging, setup_cuda_check,
                          load_base_model, init_lora_model)
 from mlora.tokenizer.tokenizer import Tokenizer
 from mlora.model.model import LLMModel
@@ -8,7 +7,8 @@ from mlora.model.model_chatglm import ChatGLMModel
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData, LoraBatchDataConfig
 from mlora.evaluator.evaluator_factory import EvaluatorFactory
 from mlora.evaluator.evaluator import Evaluator
-from mlora.dispatcher import TrainTask, Dispatcher
+from mlora.trainer.trainer import Trainer
+from mlora.dispatcher.dispatcher import Dispatcher
 
 __all__ = [
     "Tokenizer",
@@ -18,11 +18,8 @@ __all__ = [
     "LLMModelArgs",
     "MultiLoraBatchData",
     "LoraBatchDataConfig",
-    "TrainTask",
     "Dispatcher",
     # utils function
-    "convert_hf_to_pth",
-    "save_lora_model",
     "setup_seed",
     "setup_logging",
     "setup_cuda_check",
@@ -30,5 +27,7 @@ __all__ = [
     "init_lora_model",
     # evaluateor
     "EvaluatorFactory",
-    "Evaluator"
+    "Evaluator",
+    # Trainer
+    "Trainer"
 ]

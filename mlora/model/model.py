@@ -87,6 +87,8 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class LLMModel(metaclass=ABCMeta):
+    vocab_size_: int = -1
+
     @abstractclassmethod
     def forward(self, input: MultiLoraBatchData):
         pass

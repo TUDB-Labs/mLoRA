@@ -1,7 +1,5 @@
-from mlora import Tokenizer
-from mlora import MultiLoraBatchData
-from mlora import LoraBatchDataConfig
-from mlora.model.modelargs import Tokens, Masks
+from mlora.tokenizer.tokenizer import Tokenizer
+from mlora.model.modelargs import Tokens, Masks, MultiLoraBatchData, LoraBatchDataConfig
 
 import sys
 import math
@@ -222,7 +220,7 @@ class TrainTask():
         return ret_data
 
 
-class Dispatcher():
+class Dispatcher:
     config_ = None
     tokenizer_: Tokenizer = None
 
