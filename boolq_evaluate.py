@@ -9,7 +9,7 @@ import fire
 
 from typing import List
 
-choices_map = ["Yes", "No"]
+choices_map = ["true", "false"]
 choices2id = {text: idx for idx, text in enumerate(choices_map)}
 
 
@@ -26,14 +26,15 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Read the passage and answer the question in \"Yes\" or \"No\".\n"
-        prompt_str += f"Question: {data_point['question']}?\n"
-        prompt_str += f"Passage: {data_point['passage']}\nAnswer:"
+        prompt_str = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n"
+        prompt_str += "## Instruction:\nPlease answer the following question with true or false, question: " + \
+            f"{data_point['question']}?\n\n" + "Answer format: true/false\n\n"
+        prompt_str += "## Response:\nThe correct answer is "
         tokens = tokenizer.encode(prompt_str, bos=True, eos=False)
         max_tokens_len = max(len(tokens), max_tokens_len)
         batch_tokens.append(tokens)
         batch_labels.append(
-            choices2id["Yes" if data_point["answer"] else "No"])
+            choices2id["true" if data_point["answer"] else "false"])
 
     if batch_padding:
         logging.info(f"Max tokens: {max_tokens_len}/{max_seq_len}")
