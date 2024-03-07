@@ -1,15 +1,12 @@
 import datasets
 import logging
-import random
 import mlora
 import torch
-import json
 import math
-import fire
 
 from typing import List
 
-choices_map = ["true", "false"]
+choices_map = ["1", "2", "3", "4", "A", "B", "C", "D", "E"]
 choices2id = {text: idx for idx, text in enumerate(choices_map)}
 
 
@@ -26,15 +23,15 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n"
-        prompt_str += "## Instruction:\nPlease answer the following question with true or false, question: " + \
-            f"{data_point['question']}?\n\n" + "Answer format: true/false\n\n"
-        prompt_str += "## Response:\nThe correct answer is "
+        prompt_str = "Question: " + data_point["question"]
+        choices = data_point["choices"]
+        for label, text in zip(choices["label"], choices["text"]):
+            prompt_str += f" ({label}) {text}"
+        prompt_str += "\nAnswer:"
         tokens = tokenizer.encode(prompt_str, bos=True, eos=False)
         max_tokens_len = max(len(tokens), max_tokens_len)
         batch_tokens.append(tokens)
-        batch_labels.append(
-            choices2id["true" if data_point["answer"] else "false"])
+        batch_labels.append(choices2id[data_point["answerKey"]])
 
     if batch_padding:
         logging.info(f"Max tokens: {max_tokens_len}/{max_seq_len}")
@@ -55,17 +52,19 @@ def prepare_data(tokenizer: mlora.Tokenizer,
 
 
 @torch.inference_mode()
-def evaluate(tokenizer: mlora.Tokenizer,
-             model: mlora.LlamaModel,
-             adapter_names: List[str],
-             batch_size: int = 2,
-             max_seq_len: int = 2048):
+def arc_evaluate(
+        tokenizer: mlora.Tokenizer,
+        model: mlora.LlamaModel,
+        adapter_names: List[str],
+        subject: str,
+        batch_size: int = 2,
+        max_seq_len: int = 2048):
     # prepare data
 
-    boolq = datasets.load_dataset("google/boolq")
+    ai2_arc = datasets.load_dataset("allenai/ai2_arc", subject)
 
     sequence_lengths, batch_tokens, atten_masks, batch_labels = prepare_data(
-        tokenizer, boolq["validation"], max_seq_len, batch_size > 1)
+        tokenizer, ai2_arc["test"], max_seq_len, batch_size > 1)
 
     # load adapters
 
@@ -129,53 +128,15 @@ def evaluate(tokenizer: mlora.Tokenizer,
 
         start_pos = end_pos
 
-    return results
-
-
-model_dtypes = {
-    "4bit": {"bits": 4, "load_dtype": torch.float32},
-    "8bit": {"bits": 8, "load_dtype": torch.float32},
-    "16bit": {"load_dtype": torch.bfloat16},
-}
-
-
-def do_evaluate(model_name: str,
-                model_dtype: str,
-                adapter_names: List[str],
-                batch_size: int = 2,
-                device: str = "cuda:0"):
-    tokenizer = mlora.Tokenizer(model_name)
-    model = mlora.LlamaModel.from_pretrained(
-        model_name, device=device, **model_dtypes[model_dtype])
-    for name in adapter_names:
-        logging.info(f"Loading adapter {name}")
-        model.load_adapter_weight(name)
-
-    results = evaluate(tokenizer, model,
-                       adapter_names, batch_size, model.max_seq_len_)
-
+    final_results = []
     for name, result in results.items():
         acc = sum(result) / len(result)
-        logging.info(f"{name} accuracy: {acc}")
+        final_results.append({
+            "adapter_name": name,
+            "dataset": "ARC",
+            "subject": subject,
+            "metric": "accuracy",
+            "value": acc,
+        })
 
-
-def setup_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    random.seed(seed)
-
-
-def main(config: str):
-    setup_seed(66)
-    log_handlers = [logging.StreamHandler()]
-    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
-                        level=logging.INFO,
-                        handlers=log_handlers,
-                        force=True)
-    with open(config, 'r', encoding='utf8') as fp:
-        config_obj = json.load(fp)
-    do_evaluate(**config_obj)
-
-
-if __name__ == "__main__":
-    fire.Fire(main)
+    return final_results

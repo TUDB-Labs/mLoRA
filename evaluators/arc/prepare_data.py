@@ -21,4 +21,3 @@ def prep_data(data, file_path):
 arc_data = datasets.load_dataset("allenai/ai2_arc", "ARC-Challenge")
 
 prep_data(arc_data["train"], "./data_train.json")
-# prep_data(arc_data["test"], "./data_test.json")

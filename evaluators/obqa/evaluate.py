@@ -1,11 +1,8 @@
 import datasets
 import logging
-import random
 import mlora
 import torch
-import json
 import math
-import fire
 
 from typing import List
 
@@ -55,11 +52,13 @@ def prepare_data(tokenizer: mlora.Tokenizer,
 
 
 @torch.inference_mode()
-def evaluate(tokenizer: mlora.Tokenizer,
-             model: mlora.LlamaModel,
-             adapter_names: List[str],
-             batch_size: int = 2,
-             max_seq_len: int = 2048):
+def obqa_evaluate(
+        tokenizer: mlora.Tokenizer,
+        model: mlora.LlamaModel,
+        adapter_names: List[str],
+        subject: str = None,
+        batch_size: int = 2,
+        max_seq_len: int = 2048):
     # prepare data
 
     ai2_arc = datasets.load_dataset("allenai/openbookqa", "main")
@@ -129,53 +128,14 @@ def evaluate(tokenizer: mlora.Tokenizer,
 
         start_pos = end_pos
 
-    return results
-
-
-model_dtypes = {
-    "4bit": {"bits": 4, "load_dtype": torch.float32},
-    "8bit": {"bits": 8, "load_dtype": torch.float32},
-    "16bit": {"load_dtype": torch.bfloat16},
-}
-
-
-def do_evaluate(model_name: str,
-                model_dtype: str,
-                adapter_names: List[str],
-                batch_size: int = 2,
-                device: str = "cuda:0"):
-    tokenizer = mlora.Tokenizer(model_name)
-    model = mlora.LlamaModel.from_pretrained(
-        model_name, device=device, **model_dtypes[model_dtype])
-    for name in adapter_names:
-        logging.info(f"Loading adapter {name}")
-        model.load_adapter_weight(name)
-
-    results = evaluate(tokenizer, model,
-                       adapter_names, batch_size, model.max_seq_len_)
-
+    final_results = []
     for name, result in results.items():
         acc = sum(result) / len(result)
-        logging.info(f"{name} accuracy: {acc}")
+        final_results.append({
+            "adapter_name": name,
+            "dataset": "OpenBookQA",
+            "metric": "accuracy",
+            "value": acc,
+        })
 
-
-def setup_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    random.seed(seed)
-
-
-def main(config: str):
-    setup_seed(66)
-    log_handlers = [logging.StreamHandler()]
-    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
-                        level=logging.INFO,
-                        handlers=log_handlers,
-                        force=True)
-    with open(config, 'r', encoding='utf8') as fp:
-        config_obj = json.load(fp)
-    do_evaluate(**config_obj)
-
-
-if __name__ == "__main__":
-    fire.Fire(main)
+    return final_results
