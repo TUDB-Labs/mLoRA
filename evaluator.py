@@ -1,6 +1,6 @@
-from evaluations.arc.evaluate import arc_evaluate
-from evaluations.boolq.evaluate import boolq_evaluate
-from evaluations.obqa.evaluate import obqa_evaluate
+from evaluators.arc.evaluate import arc_evaluate
+from evaluators.boolq.evaluate import boolq_evaluate
+from evaluators.obqa.evaluate import obqa_evaluate
 from typing import List
 
 import logging
