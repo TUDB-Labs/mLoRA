@@ -1,5 +1,6 @@
 import datasets
 import json
+import os
 
 
 def prep_data(data, file_path):
@@ -20,4 +21,6 @@ def prep_data(data, file_path):
 
 obqa_data = datasets.load_dataset("allenai/openbookqa", "main")
 
-prep_data(obqa_data["train"], "./data_train.json")
+file_path = os.path.dirname(os.path.abspath(__file__))
+
+prep_data(obqa_data["train"], f"{file_path}{os.sep}data_train.json")

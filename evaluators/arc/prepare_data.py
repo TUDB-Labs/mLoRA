@@ -1,5 +1,7 @@
 import datasets
 import json
+import fire
+import os
 
 
 def prep_data(data, file_path):
@@ -18,6 +20,13 @@ def prep_data(data, file_path):
         json.dump(json_data, f, indent=4)
 
 
-arc_data = datasets.load_dataset("allenai/ai2_arc", "ARC-Challenge")
+def main(subject: str):
+    arc_data = datasets.load_dataset("allenai/ai2_arc", subject)
 
-prep_data(arc_data["train"], "./data_train.json")
+    file_path = os.path.dirname(os.path.abspath(__file__))
+
+    prep_data(arc_data["train"], f"{file_path}{os.sep}data_train.json")
+
+
+if __name__ == "__main__":
+    fire.Fire(main)

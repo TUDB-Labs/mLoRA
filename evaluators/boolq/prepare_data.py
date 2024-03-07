@@ -1,5 +1,6 @@
 import datasets
 import json
+import os
 
 
 def prep_data(data, file_path):
@@ -16,4 +17,6 @@ def prep_data(data, file_path):
 
 boolq_data = datasets.load_dataset("google/boolq")
 
-prep_data(boolq_data["train"], "./data_train.json")
+file_path = os.path.dirname(os.path.abspath(__file__))
+
+prep_data(boolq_data["train"], f"{file_path}{os.sep}data_train.json")
