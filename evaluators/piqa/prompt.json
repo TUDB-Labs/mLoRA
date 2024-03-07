@@ -1,4 +1,4 @@
 {
-    "description": "AI2 OpenBook QA",
+    "description": "Physical Commonsense QA",
     "prompt_input": "Question: {instruction}{input}\nAnswer: "
 }

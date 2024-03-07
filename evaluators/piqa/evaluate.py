@@ -6,7 +6,7 @@ import math
 
 from typing import List
 
-choices_map = ["1", "2", "3", "4", "A", "B", "C", "D", "E"]
+choices_map = ["A", "B"]
 choices2id = {text: idx for idx, text in enumerate(choices_map)}
 
 
@@ -23,15 +23,15 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Question: " + data_point["question"]
-        choices = data_point["choices"]
-        for label, text in zip(choices["label"], choices["text"]):
-            prompt_str += f" ({label}) {text}"
+        prompt_str = "Question: " + data_point["goal"]
+        sol1 = data_point["sol1"]
+        sol2 = data_point["sol2"]
+        prompt_str += f" (A) {sol1} (B) {sol2}"
         prompt_str += "\nAnswer:"
         tokens = tokenizer.encode(prompt_str, bos=True, eos=False)
         max_tokens_len = max(len(tokens), max_tokens_len)
         batch_tokens.append(tokens)
-        batch_labels.append(choices2id[data_point["answerKey"]])
+        batch_labels.append(choices2id[choices_map[data_point["label"]]])
 
     if batch_padding:
         logging.info(f"Max tokens: {max_tokens_len}/{max_seq_len}")
@@ -52,8 +52,7 @@ def prepare_data(tokenizer: mlora.Tokenizer,
 
 
 @torch.inference_mode()
-def arc_evaluate(
-        subject: str,
+def piqa_evaluate(
         tokenizer: mlora.Tokenizer,
         model: mlora.LlamaModel,
         adapter_names: List[str],
@@ -61,10 +60,10 @@ def arc_evaluate(
         max_seq_len: int = 2048):
     # prepare data
 
-    ai2_arc = datasets.load_dataset("allenai/ai2_arc", subject)
+    piqa_data = datasets.load_dataset("piqa")
 
     sequence_lengths, batch_tokens, atten_masks, batch_labels = prepare_data(
-        tokenizer, ai2_arc["test"], max_seq_len, batch_size > 1)
+        tokenizer, piqa_data["test"], max_seq_len, batch_size > 1)
 
     # load adapters
 
@@ -87,8 +86,7 @@ def arc_evaluate(
     start_pos = 0
     while start_pos < len(batch_tokens):
         end_pos = min(len(batch_tokens), start_pos + batch_size)
-        logging.info(
-            f"{subject} evaluation step: {start_pos}/{len(batch_tokens)}")
+        logging.info(f"PIQA evaluation step: {start_pos}/{len(batch_tokens)}")
         bsz = end_pos - start_pos
         batch_data_config = []
         batch_start_idx = 0
@@ -134,17 +132,9 @@ def arc_evaluate(
         acc = sum(result) / len(result)
         final_results.append({
             "adapter_name": name,
-            "dataset": subject,
+            "dataset": "PIQA",
             "metric": "accuracy",
             "value": acc,
         })
 
     return final_results
-
-
-def arc_easy_evaluate(**args):
-    return arc_evaluate("ARC-Easy", **args)
-
-
-def arc_challenge_evaluate(**args):
-    return arc_evaluate("ARC-Challenge", **args)

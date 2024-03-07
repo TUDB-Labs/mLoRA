@@ -1,6 +1,7 @@
-from evaluators.arc.evaluate import arc_evaluate
+from evaluators.arc.evaluate import arc_easy_evaluate, arc_challenge_evaluate
 from evaluators.boolq.evaluate import boolq_evaluate
 from evaluators.obqa.evaluate import obqa_evaluate
+from evaluators.piqa.evaluate import piqa_evaluate
 from typing import List
 
 import logging
@@ -9,12 +10,15 @@ import torch
 import mlora
 import json
 import fire
+import os
 
 
 evaluators = {
-    "ARC": arc_evaluate,
+    "ARC-E": arc_easy_evaluate,
+    "ARC-C": arc_challenge_evaluate,
     "BOOLQ": boolq_evaluate,
     "OBQA": obqa_evaluate,
+    "PIQA": piqa_evaluate,
 }
 
 
@@ -35,7 +39,6 @@ def evaluate_bootstrap(dataset: str,
                        model_name: str,
                        model_dtype: str,
                        adapter_names: List[str],
-                       subject: str = None,
                        batch_size: int = 2,
                        device: str = "cuda:0",
                        seed: int = 66):
@@ -67,7 +70,6 @@ def evaluate_bootstrap(dataset: str,
     return evaluators[dataset](tokenizer=tokenizer,
                                model=model,
                                adapter_names=adapter_names,
-                               subject=subject,
                                batch_size=batch_size,
                                max_seq_len=model.max_seq_len_)
 
@@ -80,9 +82,12 @@ def main(config_file: str):
         config_obj = [config_obj]
 
     results = []
+    file_path = os.path.dirname(os.path.abspath(__file__))
     for config in config_obj:
         result = evaluate_bootstrap(**config)
         results.extend(result)
+        with open(f"{file_path}{os.sep}evaluate_result.json", "w") as f:
+            json.dump(results, f, indent=4)
 
     for result in results:
         for key, value in result.items():

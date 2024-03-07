@@ -56,15 +56,14 @@ def obqa_evaluate(
         tokenizer: mlora.Tokenizer,
         model: mlora.LlamaModel,
         adapter_names: List[str],
-        subject: str = None,
         batch_size: int = 2,
         max_seq_len: int = 2048):
     # prepare data
 
-    ai2_arc = datasets.load_dataset("allenai/openbookqa", "main")
+    ai2_obqa = datasets.load_dataset("allenai/openbookqa", "main")
 
     sequence_lengths, batch_tokens, atten_masks, batch_labels = prepare_data(
-        tokenizer, ai2_arc["test"], max_seq_len, batch_size > 1)
+        tokenizer, ai2_obqa["test"], max_seq_len, batch_size > 1)
 
     # load adapters
 
@@ -87,7 +86,7 @@ def obqa_evaluate(
     start_pos = 0
     while start_pos < len(batch_tokens):
         end_pos = min(len(batch_tokens), start_pos + batch_size)
-        logging.info(f"evaluation step: {start_pos}/{len(batch_tokens)}")
+        logging.info(f"OpenBookQA evaluation step: {start_pos}/{len(batch_tokens)}")
         bsz = end_pos - start_pos
         batch_data_config = []
         batch_start_idx = 0

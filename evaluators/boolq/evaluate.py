@@ -56,7 +56,6 @@ def boolq_evaluate(
         tokenizer: mlora.Tokenizer,
         model: mlora.LlamaModel,
         adapter_names: List[str],
-        subject: str = None,
         batch_size: int = 2,
         max_seq_len: int = 2048):
     # prepare data
@@ -87,7 +86,7 @@ def boolq_evaluate(
     start_pos = 0
     while start_pos < len(batch_tokens):
         end_pos = min(len(batch_tokens), start_pos + batch_size)
-        logging.info(f"evaluation step: {start_pos}/{len(batch_tokens)}")
+        logging.info(f"BoolQ evaluation step: {start_pos}/{len(batch_tokens)}")
         bsz = end_pos - start_pos
         batch_data_config = []
         batch_start_idx = 0
