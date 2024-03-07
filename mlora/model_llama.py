@@ -17,7 +17,7 @@ import xformers.ops.fmha.attn_bias
 from typing import List, Dict, Tuple, Optional
 from huggingface_hub import snapshot_download
 from transformers import BitsAndBytesConfig
-from transformers import LlamaForCausalLM
+from transformers import AutoModelForCausalLM
 from collections import OrderedDict
 import logging
 import json
@@ -437,7 +437,7 @@ class LlamaModel(LLMModel):
 
         if bits in [4, 8]:
             logging.info(f"Loading model with quantization, bits = {bits}.")
-            llama_model = LlamaForCausalLM.from_pretrained(
+            llama_model = AutoModelForCausalLM.from_pretrained(
                 path,
                 load_in_4bit=bits == 4,
                 load_in_8bit=bits == 8,
@@ -453,10 +453,14 @@ class LlamaModel(LLMModel):
                 ),
                 torch_dtype=load_dtype)
         else:
-            llama_model = LlamaForCausalLM.from_pretrained(
+            llama_model = AutoModelForCausalLM.from_pretrained(
                 path,
                 device_map=device,
                 torch_dtype=load_dtype)
+
+        if llama_model.config.model_type not in ["llama", "mistral", "qwen2"]:
+            logging.warning(
+                f"unsupported model type {llama_model.config.model_type}")
 
         llama_args = LLMModelArgs()
         llama_args.dim_ = llama_model.config.hidden_size
