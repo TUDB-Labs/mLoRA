@@ -23,10 +23,8 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n"
-        prompt_str += "## Instruction:\nPlease answer the following question with true or false, question: " + \
-            f"{data_point['question']}?\n\n" + "Answer format: true/false\n\n"
-        prompt_str += "## Response:\nThe correct answer is "
+        prompt_str = "Please answer the following question with true or false: " + \
+            f"{data_point['question']}?\nAnswer:"
         tokens = tokenizer.encode(prompt_str, bos=True, eos=False)
         max_tokens_len = max(len(tokens), max_tokens_len)
         batch_tokens.append(tokens)

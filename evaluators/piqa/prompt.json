@@ -1,4 +1,4 @@
 {
     "description": "Physical Commonsense QA",
-    "prompt_input": "Question: {instruction}{input}\nAnswer: "
+    "prompt_input": "Please choose the correct solution to the question: {instruction}{input}\nAnswer: "
 }

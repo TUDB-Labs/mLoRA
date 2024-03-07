@@ -23,7 +23,8 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Question: " + data_point["question"]
+        prompt_str = "Please choose the correct answer to the question: " + \
+            data_point["question"]
         choices = data_point["choices"]
         for label, text in zip(choices["label"], choices["text"]):
             prompt_str += f" ({label}) {text}"

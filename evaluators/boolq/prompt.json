@@ -1,4 +1,4 @@
 {
     "description": "BoolQ Benchmark",
-    "prompt_input": "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n## Instruction:\nPlease answer the following question with true or false, question: {instruction}?\n\nAnswer format: true/false\n\n## Response:\nThe correct answer is "
+    "prompt_input": "Please answer the following question with true or false: {instruction}?\nAnswer: "
 }

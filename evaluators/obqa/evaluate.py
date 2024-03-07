@@ -23,7 +23,8 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Question: " + data_point["question_stem"]
+        prompt_str = "Please choose the correct answer to the question: " + \
+            data_point["question_stem"]
         choices = data_point["choices"]
         for label, text in zip(choices["label"], choices["text"]):
             prompt_str += f" ({label}) {text}"
@@ -86,7 +87,8 @@ def obqa_evaluate(
     start_pos = 0
     while start_pos < len(batch_tokens):
         end_pos = min(len(batch_tokens), start_pos + batch_size)
-        logging.info(f"OpenBookQA evaluation step: {start_pos}/{len(batch_tokens)}")
+        logging.info(
+            f"OpenBookQA evaluation step: {start_pos}/{len(batch_tokens)}")
         bsz = end_pos - start_pos
         batch_data_config = []
         batch_start_idx = 0

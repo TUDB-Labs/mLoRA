@@ -23,7 +23,8 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Question: " + data_point["goal"]
+        prompt_str = "Please choose the correct solution to the question: " + \
+            data_point["goal"]
         sol1 = data_point["sol1"]
         sol2 = data_point["sol2"]
         prompt_str += f" (A) {sol1} (B) {sol2}"
