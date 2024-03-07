@@ -1,5 +1,6 @@
 from mlora.model.model import LLMModel
 from mlora.dispatcher.dispatcher import Dispatcher
+from mlora.config import LoraConfig, OptimConfig
 
 import os
 import json
@@ -16,42 +17,42 @@ class TrainerContext:
     optimizer_: torch.optim.Optimizer = None
 
     def __init__(self,
-                 lora_config: Dict[str, str],
+                 lora_config: LoraConfig,
                  trainable_params: torch.Tensor):
-        self.adapter_name_ = lora_config["name"]
+        self.adapter_name_ = lora_config.adapter_name_
 
         self.loss_fn_ = torch.nn.CrossEntropyLoss()
 
-        self.batch_size_ = lora_config["batch_size"]
-        self.micro_batch_size_ = lora_config["micro_batch_size"]
+        self.batch_size_ = lora_config.batch_size_
+        self.micro_batch_size_ = lora_config.micro_batch_size_
         if self.batch_size_ < self.micro_batch_size_ or self.batch_size_ % self.micro_batch_size_ != 0:
             raise f"error batch_size {self.batch_size_} and micro batch size {self.micro_batch_size_}"
         self.accumulation_step_ = self.batch_size_ / self.micro_batch_size_
         self.step_cnt_ = 0
 
-        self.setup_optimizer(lora_config, trainable_params)
+        self.setup_optimizer(lora_config.optim_config_, trainable_params)
 
         assert self.optimizer_ is not None
 
         # config
-        self.alpha_ = lora_config["alpha"]
-        self.dropout_ = lora_config["dropout"]
-        self.r_ = lora_config["r"]
-        self.target_modules_ = lora_config["target_modules"]
+        self.alpha_ = lora_config.lora_alpha_
+        self.dropout_ = lora_config.lora_dropout_
+        self.r_ = lora_config.r_
+        self.target_modules_ = lora_config.target_
 
     def setup_optimizer(self,
-                        lora_config: Dict[str, str],
+                        config: OptimConfig,
                         trainable_params: torch.Tensor):
-        self.optim_name_ = lora_config["optim"]
-        self.lr_ = lora_config["lr"]
-        if self.optim_name_ == "adamw":
-            self.optimizer_ = torch.optim.AdamW(trainable_params, lr=self.lr_)
-        elif self.optim_name_ == "sgd":
-            momentum = 0
-            if "momentum" in lora_config:
-                momentum = lora_config["momentum"]
+        if config.optim_ == "adamw":
+            from mlora.config import AdamWOptimConfig
+            assert isinstance(config, AdamWOptimConfig)
+            self.optimizer_ = torch.optim.AdamW(
+                trainable_params, lr=config.lr_)
+        elif config.optim_ == "sgd":
+            from mlora.config import SGDOptimConfig
+            assert isinstance(config, SGDOptimConfig)
             self.optimizer_ = torch.optim.SGD(
-                trainable_params, lr=self.lr_, momentum=momentum)
+                trainable_params, lr=config.lr_, momentum=config.momentum_)
         else:
             raise f"unkown optimizer {self.optim_name_}"
 
@@ -85,13 +86,13 @@ class Trainer:
     def __init__(self,
                  model: LLMModel,
                  dispatcher: Dispatcher,
-                 lora_configs: List[Dict[str, str]]) -> None:
+                 lora_configs: List[LoraConfig]) -> None:
         self.model_ = model
         self.dispatcher_ = dispatcher
         all_trainable_params = self.model_.get_train_paramas()
         for lora_config in lora_configs:
             context = TrainerContext(
-                lora_config, all_trainable_params[lora_config["name"]])
+                lora_config, all_trainable_params[lora_config.adapter_name_])
             self.trainer_context_[context.adapter_name_] = context
 
     def train(self, save_step: int = 2000) -> None:
@@ -122,7 +123,7 @@ class Trainer:
                 adapter_name = lora_config.adapter_name_
                 self.trainer_context_[adapter_name].step()
                 adapter_step = self.trainer_context_[adapter_name].step_cnt_
-                if adapter_step % save_step:
+                if adapter_step % save_step == 0:
                     self.save_lora_model(adapter_name, f"{adapter_step}")
 
         # flush the grad

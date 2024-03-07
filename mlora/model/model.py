@@ -1,4 +1,5 @@
 from mlora.model.modelargs import MultiLoraBatchData, Masks
+from mlora.config import LoraConfig
 
 import torch
 
@@ -98,13 +99,7 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def init_lora_weight(self,
-                         adapter_name: str,
-                         r: int,
-                         lora_alpha: int,
-                         lora_dropout: float,
-                         target: Dict[str, bool],
-                         weight: Optional[Dict[str, torch.Tensor]]):
+    def init_lora_weight(self, lora_config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         pass
 
     @abstractclassmethod
