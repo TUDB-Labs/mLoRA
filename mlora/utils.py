@@ -2,7 +2,9 @@ from mlora.model.model import LLMModel
 from mlora.tokenizer.tokenizer import Tokenizer
 from mlora.model.model_llama import LlamaModel
 from mlora.model.model_chatglm import ChatGLMModel
+from mlora.config import LoraConfig
 
+import os
 import torch
 import random
 import logging
@@ -71,20 +73,16 @@ def load_base_model(base_model: str,
     return tokenizer, model
 
 
-def init_lora_model(config: Dict[str, any],
-                    llm_model: LLMModel,
-                    load_lora: bool = False):
-    for lora_config in config["lora"]:
+def init_lora_model(llm_model: LLMModel, lora_configs: List[LoraConfig]):
+    for lora_config in lora_configs:
         lora_weight = None
-        if load_lora:
-            adapter_file_path = lora_config["output"] + "/adapter_model.bin"
-            print(f"load {adapter_file_path}")
+        adapter_file_path = lora_config.adapter_name_ + "/adapter_model.bin"
+
+        if os.path.isfile(adapter_file_path):
+            logging.info(f"load {adapter_file_path}")
             lora_weight = torch.load(adapter_file_path)
 
-        logging.info(f'init the lora adapter {lora_config["name"]} weight.')
-        llm_model.init_lora_weight(lora_config["name"],
-                                   lora_config["r"],
-                                   lora_config["alpha"],
-                                   lora_config["dropout"],
-                                   lora_config["target_modules"],
-                                   lora_weight)
+        logging.info(
+            f'init the lora adapter {lora_config.adapter_name_} weight.')
+
+        llm_model.init_lora_weight(lora_config, lora_weight)

@@ -1,4 +1,5 @@
 from mlora.model.modelargs import MultiLoraBatchData
+from mlora.config import LoraConfig
 
 import math
 import torch
@@ -53,10 +54,7 @@ class Linear():
         self.loras_: Dict[str, Lora] = {}
 
     def init_lora_weight(self,
-                         adapter_name: str,
-                         r: int,
-                         alpha: int,
-                         dropout: float,
+                         lora_config: LoraConfig,
                          lora_tensor: Tuple[Optional[torch.Tensor],
                                             Optional[torch.Tensor]] = (None, None)):
         # if the lora_tensor is not (None, None), use it to init the lora weight
@@ -64,6 +62,11 @@ class Linear():
         assert len(lora_tensor) == 2
         assert ((lora_tensor[0] is None) and (lora_tensor[1] is None)) or (isinstance(
             lora_tensor[0], torch.Tensor) and isinstance(lora_tensor[1], torch.Tensor))
+
+        adapter_name = lora_config.adapter_name_
+        r = lora_config.r_
+        alpha = lora_config.lora_alpha_
+        dropout = lora_config.lora_dropout_
 
         if adapter_name not in self.loras_:
             self.loras_[adapter_name] = Lora(adapter_name)

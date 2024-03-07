@@ -1,4 +1,5 @@
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.config import LoraConfig
 from mlora.model.model import LLMModel, apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
 from mlora.model.LoraLiner import Linear
 from mlora.model.RMSNorm import RMSNorm
@@ -39,12 +40,7 @@ class Transformer:
         self.head_dim_ = args.dim_ // args.n_heads_
         self.hidden_dropout_ = args.hidden_dropout_
 
-    def init_lora_layer_weight(self,
-                               adapter_name: str,
-                               r: int,
-                               lora_alpha: int,
-                               lora_dropout: float,
-                               target: Dict[str, bool],
+    def init_lora_layer_weight(self, lora_config: LoraConfig,
                                weight: Optional[Dict[str, torch.Tensor]]):
         linear_layer_list = [self.query_key_value_,
                              self.dense_, self.dense_h_to_4h_, self.dense_4h_to_h_]
@@ -52,12 +48,12 @@ class Transformer:
             "qkv", "dense", "mlp_in", "mlp_out"]
 
         for idx, layer_name in enumerate(linear_layer_name_list):
-            if layer_name in target and target[layer_name]:
+            if layer_name in lora_config.target_ and lora_config.target_[layer_name]:
                 lora_a = None
                 lora_b = None
 
                 linear_layer_list[idx].init_lora_weight(
-                    adapter_name, r, lora_alpha, lora_dropout, lora_a, lora_b)
+                    lora_config, (lora_a, lora_b))
 
     def forward(self,
                 data: torch.Tensor,
@@ -258,15 +254,10 @@ class ChatGLMModel(LLMModel):
 
         return model
 
-    def init_lora_weight(self, adapter_name: str,
-                         r: int,
-                         lora_alpha: int,
-                         lora_dropout: float,
-                         target: Dict[str, bool],
+    def init_lora_weight(self, lora_config: LoraConfig,
                          weight: Optional[Dict[str, torch.Tensor]]):
         for transformer_layer in self.layers_:
-            transformer_layer.init_lora_layer_weight(
-                adapter_name, r, lora_alpha, lora_dropout, target, weight)
+            transformer_layer.init_lora_layer_weight(lora_config, weight)
 
     def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
         pass

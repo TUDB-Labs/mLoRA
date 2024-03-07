@@ -1,5 +1,6 @@
 from mlora.utils import (setup_seed, setup_logging, setup_cuda_check,
                          load_base_model, init_lora_model)
+from mlora.config import MLoRAConfig
 from mlora.tokenizer.tokenizer import Tokenizer
 from mlora.model.model import LLMModel
 from mlora.model.model_llama import LlamaModel
@@ -25,6 +26,7 @@ __all__ = [
     "setup_cuda_check",
     "load_base_model",
     "init_lora_model",
+    "MLoRAConfig",
     # evaluateor
     "EvaluatorFactory",
     "Evaluator",

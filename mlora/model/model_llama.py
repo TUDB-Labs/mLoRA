@@ -1,4 +1,5 @@
 from mlora.common import nvtx_wrapper
+from mlora.config import LoraConfig
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.model.model import LLMModel, repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
 from mlora.model.LoraLiner import Linear, Lora
@@ -98,12 +99,7 @@ class Transformer(torch.nn.Module):
         for var_dict_name, source in norm_dict_name.items():
             self.__dict__[var_dict_name] = RMSNorm(source, norm_eps)
 
-    def init_lora_layer_weight(self,
-                               adapter_name: str,
-                               r: int,
-                               lora_alpha: int,
-                               lora_dropout: float,
-                               target: Dict[str, bool],
+    def init_lora_layer_weight(self, lora_config: LoraConfig,
                                weight: Optional[Dict[str, torch.Tensor]]):
         # init the lora layer, if the weight state dict have already
         # exist this lora weight, use it, otherwise init it with zero
@@ -113,7 +109,7 @@ class Transformer(torch.nn.Module):
         for name, module in name_module_dict.items():
             assert isinstance(module, Linear)
 
-            if name in target and target[name]:
+            if name in lora_config.target_ and lora_config.target_[name]:
                 lora_weight = (None, None)
                 lora_a_name = self.lora_layer_name(name, is_lora_a=True)
                 lora_b_name = self.lora_layer_name(name, is_lora_b=True)
@@ -123,8 +119,7 @@ class Transformer(torch.nn.Module):
                     lora_weight = (weight[lora_a_name], weight[lora_b_name])
 
                 # init the lora layer
-                module.init_lora_weight(
-                    adapter_name, r, lora_alpha, lora_dropout, lora_weight)
+                module.init_lora_weight(lora_config, lora_weight)
 
     def forward(self,
                 data: torch.Tensor,
@@ -285,15 +280,10 @@ class LlamaModel(LLMModel):
         return data[0]
 
     def init_lora_weight(self,
-                         adapter_name: str,
-                         r: int,
-                         lora_alpha: int,
-                         lora_dropout: float,
-                         target: Dict[str, bool],
+                         lora_config: LoraConfig,
                          weight: Optional[Dict[str, torch.Tensor]]):
         for transformer_layer in self.layers_:
-            transformer_layer.init_lora_layer_weight(
-                adapter_name, r, lora_alpha, lora_dropout, target, weight)
+            transformer_layer.init_lora_layer_weight(lora_config, weight)
 
     @staticmethod
     def from_pretrained(path: str,

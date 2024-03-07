@@ -16,13 +16,9 @@
 #
 # Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
 
-import json
-import torch
 import mlora
 import argparse
 import logging
-
-from typing import Dict, List
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
@@ -39,9 +35,6 @@ parser.add_argument('--load_8bit', action="store_true",
                     help='Load model in 8bit mode')
 parser.add_argument('--load_4bit', action="store_true",
                     help='Load model in 4bit mode')
-# inference model
-parser.add_argument('--inference', action="store_true",
-                    help='The inference mode (just for test)')
 # mmlu evaluate model
 parser.add_argument('--evaluate', type=str,
                     help='Enable the evaluate mode.')
@@ -75,65 +68,9 @@ args = parser.parse_args()
 
 
 # to get test result and want early stop it
-def train(config: Dict[str, any], llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
-    trainer = mlora.Trainer(llm_model, dispatcher, config["lora"])
+def train(config: mlora.MLoRAConfig, llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
+    trainer = mlora.Trainer(llm_model, dispatcher, config.lora_configs_)
     trainer.train()
-
-
-def inference(config: Dict[str, any],
-              llm_model: mlora.LLMModel,
-              tokenizer: mlora.Tokenizer):
-    lora_adapter_num = len(config["lora"])
-    batch_data_config: List[mlora.LoraBatchDataConfig] = []
-
-    for idx, lora_config in enumerate(config["lora"]):
-        adapter_name = lora_config["name"]
-        batch_data_config.append(mlora.LoraBatchDataConfig(
-            adapter_name, idx, idx + 1))
-
-    inference_max_len = 128
-
-    while True:
-        input_raw = input("INPUT WITHOUT PROMPT: ")
-        if input_raw == "QUIT":
-            return
-
-        tokens = tokenizer.encode(input_raw, True, False)
-        token_len = len(tokens)
-        while len(tokens) < inference_max_len:
-            tokens.append(tokenizer.pad_id_)
-
-        input_data = mlora.MultiLoraBatchData(
-            prompts_=[input_raw] * lora_adapter_num,
-            lora_batch_data_config_=batch_data_config,
-            batch_tokens_=[tokens] * lora_adapter_num,
-            tokens_len_without_pad_=[token_len] * lora_adapter_num,
-            batch_seq_len_=inference_max_len,
-            expand_side_=["right"] * lora_adapter_num,
-            inference_model_=True)
-
-        eos_flag: List[bool] = [False] * lora_adapter_num
-        for pos in range(token_len, inference_max_len):
-            with torch.no_grad():
-                # batch_size, seq_len, voc_logs
-                outputs = llm_model.forward(input_data)
-                next_token = outputs[:, pos - 1, :]
-                next_token = torch.argmax(next_token, dim=-1)
-                for idx in range(len(input_data.batch_tokens_)):
-                    input_data.batch_tokens_[idx][pos] = next_token[idx].item()
-                    # end of the sentence
-                    if next_token[idx].item() == tokenizer.eos_id_:
-                        eos_flag[idx] = True
-                    input_data.tokens_len_without_pad_[
-                        idx] = input_data.tokens_len_without_pad_[idx] + 1
-            # check if the all sentence end
-            have_all_done = all(flag for flag in eos_flag)
-            if have_all_done:
-                break
-
-        for idx, output in enumerate(input_data.batch_tokens_):
-            print(f"# LORA{idx} OUTPUT IS:")
-            print(tokenizer.decode(output))
 
 
 # Main Function
@@ -163,17 +100,13 @@ if __name__ == "__main__":
 
     if not args.disable_lora:
         assert args.config is not None, "error: Argument --config are required."
-
-        with open(args.config, 'r', encoding='utf8') as fp:
-            config = json.load(fp)
-        mlora.init_lora_model(config, model, args.load_lora)
+        config = mlora.MLoRAConfig(args.config)
+        mlora.init_lora_model(model, config.lora_configs_)
 
     if args.pipeline:
         raise NotImplementedError
 
-    if args.inference:
-        inference(config, model, tokenizer)
-    elif args.evaluate:
+    if args.evaluate:
         evaluator: mlora.Evaluator = mlora.EvaluatorFactory().create(
             model, tokenizer, args.evaluate, args.evaluate_data)
         evaluator.evaluate()

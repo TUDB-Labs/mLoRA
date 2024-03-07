@@ -1,12 +1,9 @@
 from mlora.dispatcher.dispatcher import TrainTask
+from mlora.config import MLoRAConfig
 
-import json
 import unittest
 
 from typing import List
-
-with open('config/finetune.json', 'r', encoding='utf8') as fp:
-    config = json.load(fp)
 
 
 class MockTokenizer:
@@ -20,20 +17,11 @@ class MockTokenizer:
 class TestDataSet(unittest.TestCase):
     def test_load_dataset(self):
         tasks: List[TrainTask] = []
+        mlora_config: MLoRAConfig = MLoRAConfig("config/finetune.json")
 
-        for lora in config["lora"]:
-            task = TrainTask(MockTokenizer(),
-                             lora["name"],
-                             lora["data"],
-                             -1,
-                             lora["test_data"],
-                             lora["prompt"],
-                             lora["num_epochs"],
-                             lora["batch_size"],
-                             lora["micro_batch_size"],
-                             lora["test_batch_size"],
-                             config["cutoff_len"],
-                             config.get("group_by_length", False))
+        for lora_config in mlora_config.lora_configs_:
+
+            task = TrainTask(MockTokenizer(), lora_config)
             task.load_data()
             tasks.append(task)
             self.assertEqual(len(task.train_token_data_), 2)
