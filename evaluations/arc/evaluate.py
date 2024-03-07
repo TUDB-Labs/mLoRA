@@ -6,7 +6,6 @@ import torch
 import json
 import math
 import fire
-import csv
 
 from typing import List
 
