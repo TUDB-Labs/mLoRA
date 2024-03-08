@@ -439,8 +439,6 @@ class LlamaModel(LLMModel):
             logging.info(f"Loading model with quantization, bits = {bits}.")
             llama_model = AutoModelForCausalLM.from_pretrained(
                 path,
-                load_in_4bit=bits == 4,
-                load_in_8bit=bits == 8,
                 device_map=device,
                 quantization_config=BitsAndBytesConfig(
                     load_in_4bit=bits == 4,
