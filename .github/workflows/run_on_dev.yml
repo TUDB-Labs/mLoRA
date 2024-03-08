@@ -40,3 +40,33 @@ jobs:
         run: |
           cd /workspace/multi-lora-fine-tune
           python .github/workflows/ci_script.py "llama" "/data/llama-7b-hf" "./lora_1" "What is m-LoRA?" "Multi-LoRA"
+    
+  additional-test:
+    runs-on: self-hosted
+    steps:
+      - name: Get Branch Name
+        id: branch_name
+        run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+
+      - name: clone repository
+        run: |
+          current_branch="${{ steps.branch_name.outputs.branch }}"
+          cd /workspace
+          rm -rf ./multi-lora-fine-tune
+          git clone -b $current_branch --single-branch git@github.com:TUDB-Labs/multi-lora-fine-tune.git
+
+      - name: install dependencies
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          pip install -e .
+          pip install -r requirements.txt --force
+      
+      - name: transport test
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python tests/transport_check.py
+
+      - name: pipeline example test
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python tests/pipeline_example_check.py

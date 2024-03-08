@@ -29,6 +29,21 @@ class WorkerRole(Enum):
     TAIL = auto()
 
 
+class TestModel(torch.nn.Module):
+    def __init__(self, device: torch.device):
+        super(TestModel, self).__init__()
+        self.device_ = device
+        self.weight_ = torch.rand(
+            (4096, 4096), dtype=torch.float32, device=self.device_, requires_grad=True)
+
+    def forward(self, data: torch.Tensor):
+        for _ in range(0, G_CALC_TOTAL_CNT):
+            data = data @ self.weight_
+            # too big will make the grad to be inf
+            data /= 1000
+        return data
+
+
 class Pipe():
     world_size_: int = -1
     rank_: int = -1
@@ -45,10 +60,10 @@ class Pipe():
     def is_stop_signal(self, data: torch.tensor) -> bool:
         return data.dtype == torch.long and torch.numel(data) == 1
 
-    def __init__(self, rank: int) -> None:
-        self.world_size_ = torch.cuda.device_count()
+    def __init__(self, rank: int, world_size: int, device: torch.device = None) -> None:
+        self.world_size_ = world_size
         self.rank_ = rank
-        self.device_ = torch.device(f"cuda:{self.rank_}")
+        self.device_ = device if device else torch.device(f"cuda:{self.rank_}")
 
         if rank == 0:
             self.role_ = WorkerRole.HEAD
@@ -60,8 +75,7 @@ class Pipe():
         self.transport_ = RpcTransport(
             self.rank_, self.world_size_, self.device_)
 
-        self.weight_ = torch.rand(
-            (4096, 4096), dtype=torch.float32, device=self.device_, requires_grad=True)
+        self.model_ = TestModel(self.device_)
         self.datas_ = [torch.rand(
             (4096, 4096), device=self.device_, dtype=torch.float32)] * G_TEST_TOTAL_CNT
 
@@ -120,6 +134,7 @@ class Pipe():
         phony: torch.Tensor = self.backward_cache_[msg_id]
         phony.grad_fn.grad_from_next_worker = message.tensor_data_
         phony.backward()
+        self.test_grads_.append(self.model_.weight_.grad.sum())
 
         del self.backward_cache_[msg_id]
 
@@ -146,10 +161,7 @@ class Pipe():
                 torch.tensor(1.0, requires_grad=True), self.transport_, message)
             data.grad_fn.pre_stage_fn = self.default_stream_.poll
             self.forward_cnt_ += 1
-            for _ in range(0, G_CALC_TOTAL_CNT):
-                data = data @ self.weight_
-                # too big will make the grad to be inf
-                data /= 1000
+            data = self.model_(data)
 
         if self.stop_signal_ is not None and self.stop_signal_.item() == self.forward_cnt_:
             self.forward_stop_ = True
@@ -163,6 +175,7 @@ class Pipe():
         if not self.forward_stop_:
             logging.info(f"Calc the grad {data.sum()}.")
             data.sum().backward()
+            self.test_grads_.append(self.model_.weight_.grad.sum())
 
     def process_input(self):
         assert self.role_ == WorkerRole.HEAD
@@ -180,9 +193,7 @@ class Pipe():
             logging.info(f"Train input data {G_TEST_CNT}.")
             self.forward_cnt_ += 1
             data = self.datas_[G_TEST_CNT]
-            for _ in range(0, G_CALC_TOTAL_CNT):
-                data = data @ self.weight_
-                data /= 1000
+            data = self.model_(data)
 
         G_TEST_CNT += 1
 
@@ -211,5 +222,5 @@ if __name__ == "__main__":
     assert "RANK" in os.environ
     rank = int(os.environ["RANK"])
     setup_seed(42)
-    pipe = Pipe(rank)
+    pipe = Pipe(rank, torch.cuda.device_count())
     pipe.run()
