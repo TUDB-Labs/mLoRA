@@ -306,6 +306,9 @@ class LlamaSequentialWrapper(torch.nn.Module):
             raise f"module invalid: {module_name}"
 
 
+LlamaCompatibleModelTypes = ["mistral", "qwen2"]
+
+
 class LlamaModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
         self.name_or_path_ = args.name_or_path_
@@ -457,9 +460,13 @@ class LlamaModel(LLMModel):
                 device_map=device,
                 torch_dtype=load_dtype)
 
-        if llama_model.config.model_type not in ["llama", "mistral", "qwen2"]:
-            logging.warning(
-                f"unsupported model type {llama_model.config.model_type}")
+        if llama_model.config.model_type != "llama":
+            if llama_model.config.model_type in LlamaCompatibleModelTypes:
+                logging.info(
+                    f"Loading {llama_model.config.model_type} model with llama compatible mode.")
+            else:
+                logging.warning(
+                    f"Unsupported model type {llama_model.config.model_type}, loading with llama compatible mode.")
 
         llama_args = LLMModelArgs()
         llama_args.name_or_path_ = llama_model.config.name_or_path
@@ -472,6 +479,10 @@ class LlamaModel(LLMModel):
         llama_args.vocab_size_ = llama_model.config.vocab_size
         llama_args.max_seq_len_ = 4096 if not hasattr(
             llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
+        if hasattr(llama_model.config, "sliding_window") and llama_args.max_seq_len_ > llama_model.config.sliding_window:
+            logging.warning(f"Shrink max sequence length {llama_args.max_seq_len_} to " +
+                            f"window size {llama_model.config.sliding_window} of sliding window attention.")
+            llama_args.max_seq_len_ = llama_model.config.sliding_window
         llama_args.pad_token_id_ = llama_model.config.pad_token_id
         llama_args.rope_theta_ = llama_model.config.rope_theta
         if llama_args.pad_token_id_ is None:
