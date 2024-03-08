@@ -1,12 +1,12 @@
-from transformers import LlamaForCausalLM, LlamaTokenizer, AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM
 import torch
 from peft import PeftModel
 import sys
 
 
 def inference_llama(base_model_name_or_path, lora_weights_path, prompt, device):
-    tokenizer = LlamaTokenizer.from_pretrained(base_model_name_or_path)
-    model = LlamaForCausalLM.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name_or_path)
+    model = AutoModelForCausalLM.from_pretrained(
         base_model_name_or_path,
         torch_dtype=torch.float16,
         device_map=device,

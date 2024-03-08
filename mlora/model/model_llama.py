@@ -13,18 +13,24 @@ import torch.nn.functional as F
 import xformers.ops
 import xformers.ops.fmha.attn_bias
 
-from transformers import LlamaForCausalLM, AutoConfig
+from transformers import AutoModelForCausalLM, AutoConfig
 from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
 
 
 class OutputLayer(torch.nn.Module):
-    def __init__(self, weight: torch.Tensor):
+    def __init__(self, args: LLMModelArgs, weight: Optional[torch.nn.Module] = None):
         super().__init__()
-        self.weight_: torch.Tensor = weight
+        self.lm_head_ = torch.nn.Linear(
+            args.dim_, args.vocab_size_, bias=False, device=args.device_, dtype=args.dtype_)
+
+        if weight is not None:
+            with torch.no_grad():
+                self.lm_head_.weight.copy_(weight)
+            self.lm_head_.requires_grad_(False)
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        return data @ self.weight_.transpose(0, 1)
+        return self.lm_head_(data).float()
 
 
 class Transformer(torch.nn.Module):
@@ -45,7 +51,7 @@ class Transformer(torch.nn.Module):
         # rope angle cos and sin
         self.cos_, self.sin_ = precompute_rope_angle(
             args.dim_ // args.n_heads_, args.max_seq_len_,
-            args.rope_theta_, args.device)
+            args.rope_theta_, args.device_)
         # other arg
         self.layer_id_ = layer_id
         self.norm_eps_ = args.norm_eps_
@@ -182,6 +188,8 @@ LlamaSequentialModuleIO = Tuple[torch.Tensor,                         # the inpu
                                 ]
 LEN_LLAMA_SEQUENTIAL_MODULE_IO = 4
 
+LlamaCompatibleModelTypes = ["mistral", "qwen2"]
+
 
 class LlamaSequentialWrapper(torch.nn.Module):
     def __init__(self, module: torch.nn.Module):
@@ -237,6 +245,7 @@ class LlamaSequentialWrapper(torch.nn.Module):
 
 class LlamaModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
+        self.name_or_path_ = args.name_or_path_
         # weight
         self.token_embedding_: Embedding = None
 
@@ -252,7 +261,7 @@ class LlamaModel(LLMModel):
 
         self.norm_eps_ = args.norm_eps_
 
-        self.device_ = args.device
+        self.device_ = args.device_
         self.n_heads_ = args.n_heads_
         self.vocab_size_ = args.vocab_size_
         self.pad_token_id_ = args.pad_token_id_
@@ -332,8 +341,6 @@ class LlamaModel(LLMModel):
             torch_dtype = torch.float32
             torch_dtype = torch.bfloat16 if qlora_4bit_bf16 else torch_dtype
             additional_load_args["torch_dtype"] = torch_dtype
-            additional_load_args["load_in_4bit"] = True if bits == 4 else False
-            additional_load_args["load_in_8bit"] = True if bits == 8 else False
             additional_load_args["quantization_config"] = BitsAndBytesConfig(
                 load_in_4bit=True if bits == 4 else False,
                 load_in_8bit=True if bits == 8 else False,
@@ -344,12 +351,22 @@ class LlamaModel(LLMModel):
                 bnb_4bit_quant_type=qlora_4_bit_quant_type,
             )
 
-        llama_model = LlamaForCausalLM.from_pretrained(
+        llama_model = AutoModelForCausalLM.from_pretrained(
             path, **additional_load_args)
 
+        if llama_model.config.model_type != "llama":
+            if llama_model.config.model_type in LlamaCompatibleModelTypes:
+                logging.info(
+                    f"loading {llama_model.config.model_type} model with llama compatible mode.")
+            else:
+                logging.warning(
+                    f"unsupported model type {llama_model.config.model_type}, loading with llama compatible mode.")
+
         llama_args = LLMModelArgs(llama_model.config)
-        llama_args.pad_token_id_ = -1
-        llama_args.device = device
+        if llama_args.pad_token_id_ is None:
+            llama_args.pad_token_id_ = -1
+        llama_args.device_ = device
+        llama_args.dtype_ = llama_model.dtype
 
         # load model from pretrained large model
         model = LlamaModel.convert_model_from_huggingface(
@@ -361,7 +378,7 @@ class LlamaModel(LLMModel):
         return model
 
     @staticmethod
-    def convert_model_from_huggingface(llama_model: LlamaForCausalLM,
+    def convert_model_from_huggingface(llama_model: AutoModelForCausalLM,
                                        llama_args: LLMModelArgs,
                                        device: str):
         model = LlamaModel(llama_args)
@@ -390,7 +407,7 @@ class LlamaModel(LLMModel):
         model.norm_ = RMSNorm(
             get_tensor_from_plm("norm"), model.norm_eps_)
 
-        model.output_ = OutputLayer(get_tensor_from_plm("output"))
+        model.output_ = OutputLayer(llama_args, get_tensor_from_plm("output"))
 
         return model
 
