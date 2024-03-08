@@ -400,7 +400,7 @@ class LlamaModel(LLMModel):
                 device=self.device_,
                 weight=weight)
         self.output_.layers_[config.adapter_name_] = output_layer
-        if config.adapter_name_ == "default":
+        if config.adapter_name_ == "default" and weight is None:
             return
         # init transformer layers
         for transformer_layer in self.layers_:
