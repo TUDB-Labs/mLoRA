@@ -18,6 +18,7 @@ class TokenizerArgs:
 
 @dataclass
 class LLMModelArgs:
+    name_or_path_: str = ""
     dim_: int = 4096
     multiple_of_: int = 256
     n_heads_: int = 32

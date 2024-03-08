@@ -17,6 +17,7 @@
 # Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
 
 import os
+import sys
 import json
 import torch
 import mlora
@@ -36,9 +37,9 @@ parser.add_argument('--inference', action="store_true",
 parser.add_argument('--evaluate', action="store_true",
                     help='The evaluate mode (just for test)')
 parser.add_argument('--disable_prompter', action="store_true",
-                    help="Disable prompter when inference")
+                    help='Disable prompter when inference')
 parser.add_argument('--load_adapter', action="store_true",
-                    help="Load adapter from file instead of init randomly")
+                    help='Load adapter from file instead of init randomly')
 parser.add_argument('--disable_adapter', action="store_true",
                     help="Disable the adapter modules")
 parser.add_argument('--tokenizer', type=str,
@@ -60,7 +61,9 @@ parser.add_argument('--dir', type=str, default=".",
 parser.add_argument('--disable_log', action="store_true",
                     help='Disable logging.')
 parser.add_argument('--log_file', type=str,
-                    help="Save log to specific file.")
+                    help='Save log to specific file.')
+parser.add_argument('--overwrite', action="store_true",
+                    help='Overwrite adapter model when older one existed.')
 
 args = parser.parse_args()
 
@@ -70,6 +73,29 @@ def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     random.seed(seed)
+
+
+def query_yes_no(question, default="no"):
+    valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = input().lower()
+        if default is not None and choice == "":
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write(
+                "Please respond with 'yes' or 'no' " "(or 'y' or 'n').\n")
 
 
 def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
@@ -109,12 +135,28 @@ def init_adapter_config(config: Dict[str, any],
         config_class.task_type_ = lora_config.get("task_type", "casual")
         config_class.device_ = args.device
 
+        adapter_file_path = args.dir + os.sep + \
+            config_class.adapter_name_ + os.sep + "adapter_model.bin"
         if args.load_adapter:
-            adapter_file_path = args.dir + os.sep + \
-                config_class.adapter_name_ + os.sep + "adapter_model.bin"
+            adapter_config_path = args.dir + os.sep + \
+                config_class.adapter_name_ + os.sep + "adapter_config.json"
             logging.info(f"Load adapter: {adapter_file_path}")
+            with open(adapter_config_path, 'r', encoding='utf8') as fp:
+                adapter_config = json.load(fp)
+                base_model_name_or_path = adapter_config.get(
+                    "base_model_name_or_path", "")
+                if base_model_name_or_path != "" and base_model_name_or_path != llm_model.name_or_path_:
+                    raise ValueError("loading adapter with unmatched base model." +
+                                     f" current is {llm_model.name_or_path_}, provided {base_model_name_or_path}")
             lora_weight = torch.load(
                 adapter_file_path, map_location=args.device)
+        elif os.path.isfile(adapter_file_path):
+            if args.overwrite:
+                logging.warning(
+                    f"Overwriting existed adapter model file: {adapter_file_path}")
+            elif not query_yes_no(f"Existed adapter model file detected: {adapter_file_path}\n" + "Overwrite?"):
+                logging.info("User canceled training due to file conflict.")
+                exit(0)
 
         llm_model.init_lora_layer_weight(config_class, lora_weight)
         if args.inference:

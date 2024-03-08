@@ -308,6 +308,7 @@ class LlamaSequentialWrapper(torch.nn.Module):
 
 class LlamaModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
+        self.name_or_path_ = args.name_or_path_
         # weight
         self.token_embedding_: Embedding = None
 
@@ -461,6 +462,7 @@ class LlamaModel(LLMModel):
                 f"unsupported model type {llama_model.config.model_type}")
 
         llama_args = LLMModelArgs()
+        llama_args.name_or_path_ = llama_model.config.name_or_path
         llama_args.dim_ = llama_model.config.hidden_size
         llama_args.n_heads_ = llama_model.config.num_attention_heads
         llama_args.n_kv_heads_ = llama_args.n_heads_ if not hasattr(
