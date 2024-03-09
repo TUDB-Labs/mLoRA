@@ -1,4 +1,4 @@
-name: Additional Test on Dev
+name: Test on Dev
 
 on:
   push:
