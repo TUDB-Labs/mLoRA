@@ -1,4 +1,4 @@
-name: Test LLM Models on Dev
+name: Test on Dev
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
         - 'main'
 
 jobs:
-  test-llama-7b:
+  test:
     runs-on: self-hosted
     steps:
       - name: Get Branch Name
@@ -24,6 +24,7 @@ jobs:
       - name: install dependencies
         run: |
           cd /workspace/multi-lora-fine-tune
+          pip install -e .
           pip install -r requirements.txt --force
 
       - name: evaluate llama-7b (mmlu)
@@ -40,3 +41,13 @@ jobs:
         run: |
           cd /workspace/multi-lora-fine-tune
           python .github/workflows/ci_script.py "llama" "/data/llama-7b-hf" "./lora_1" "What is m-LoRA?" "Multi-LoRA"
+
+      - name: transport test
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python tests/transport_check.py
+
+      - name: pipeline example test
+        run: |
+          cd /workspace/multi-lora-fine-tune
+          python tests/pipeline_example_check.py
