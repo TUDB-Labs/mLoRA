@@ -24,7 +24,7 @@ def test_pipe():
             args)
 
     res_1, res_2 = test_grads
-    
+
     grads_1, weight, datas = res_1
     grads_2, _, _ = res_2
 
@@ -35,7 +35,7 @@ def test_pipe():
     model_2.weight_ = weight.clone().detach()
     model_1.weight_.requires_grad = True
     model_2.weight_.requires_grad = True
-    
+
     expected_grads_1 = []
     expected_grads_2 = []
 
@@ -45,7 +45,7 @@ def test_pipe():
         res.sum().backward()
         expected_grads_1.append(model_1.weight_.grad.sum())
         expected_grads_2.append(model_2.weight_.grad.sum())
-    
+
     # check if the gradients are the same
     for i in range(len(grads_1)):
         assert torch.allclose(expected_grads_1[i], grads_1[i])
