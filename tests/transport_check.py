@@ -13,7 +13,6 @@ def send_msg(worker: RpcTransport,
              src: str,
              dst: str,
              loop_times: int):
-    msgs = []
     for i in range(loop_times):
         message = PipeMessage(
             src_=src,
@@ -23,8 +22,6 @@ def send_msg(worker: RpcTransport,
             tensor_data_=torch.ones((4096, 4096)).cuda(0) * i,
             batch_data_=None,
         )
-        msgs.append(message)
-    for message in msgs:
         worker.send_message(message)
 
 
