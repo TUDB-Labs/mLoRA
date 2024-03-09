@@ -7,7 +7,7 @@ on:
         - 'main'
 
 jobs:
-  additonal-test:
+  test:
     runs-on: self-hosted
     steps:
       - name: Get Branch Name
