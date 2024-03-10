@@ -7,9 +7,6 @@ class RMSNorm(torch.nn.Module):
         self.norm_eps_ = eps
         self.weight_ = weight
 
-    def _norm(self, data: torch.Tensor) -> torch.Tensor:
-        return data * torch.rsqrt(+ self.norm_eps_)
-
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         input_dtype = data.dtype
         v = data.to(torch.float32).pow(2).mean(-1, keepdim=True)
