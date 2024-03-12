@@ -1,4 +1,4 @@
 {
     "description": "Physical Commonsense QA",
-    "prompt_input": "Please choose the correct solution to the question: {instruction}{input}\nAnswer: "
+    "prompt_input": "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\nPlease choose the correct solution to the question: {instruction}{input}\n\nAnswer format: a/b\n\n### Response:\nThe correct answer is "
 }

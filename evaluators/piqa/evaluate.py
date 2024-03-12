@@ -6,7 +6,7 @@ import math
 
 from typing import List
 
-choices_map = ["A", "B"]
+choices_map = ["a", "b"]
 choices2id = {text: idx for idx, text in enumerate(choices_map)}
 
 
@@ -23,12 +23,13 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Please choose the correct solution to the question: " + \
-            data_point["goal"]
-        sol1 = data_point["sol1"]
-        sol2 = data_point["sol2"]
-        prompt_str += f" (A) {sol1} (B) {sol2}"
-        prompt_str += "\nAnswer:"
+        prompt_str = "Below is an instruction that describes a task. Write a response that appropriately completes the request."
+        prompt_str += "\n\n### Instruction:\n"
+        prompt_str += f"Please choose the correct solution to the question: {data_point['goal']}"
+        prompt_str += f"\n\na. {data_point['sol1']}\n\nb. {data_point['sol2']}"
+        prompt_str += "\n\nAnswer format: a/b"
+        prompt_str += "\n\n### Response:\n"
+        prompt_str += "The correct answer is "
         tokens = tokenizer.encode(prompt_str, bos=True, eos=False)
         max_tokens_len = max(len(tokens), max_tokens_len)
         batch_tokens.append(tokens)
