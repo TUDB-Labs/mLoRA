@@ -18,6 +18,7 @@ class TokenizerArgs:
 
 @dataclass
 class LLMModelArgs:
+    name_or_path_: str = ""
     dim_: int = 4096
     multiple_of_: int = 256
     n_heads_: int = 32
@@ -211,7 +212,6 @@ class MixConfig(LoraConfig):
         elif self.routing_strategy_ == "switch":
             config["expert_capacity"] = self.expert_capacity_
             config["jitter_noise"] = self.jitter_noise_
-            config["ffn_dropout"] = self.dropout_rate_
 
         return config
 

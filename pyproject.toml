@@ -26,10 +26,6 @@ dependencies = [
     "protobuf==3.20.2",
     "xformers==0.0.21",
     "huggingface_hub",
-    "nltk",
-    "jieba",
-    "rouge",
-    "rouge_chinese"
 ]
 
 [project.urls]

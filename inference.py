@@ -26,7 +26,7 @@ class Iteratorize:
         def _callback(seq_pos, output):
             if self.stop_now:
                 raise ValueError
-            self.q.put(output["m-LoRA"][0])
+            self.q.put(output["default"][0])
 
         def gentask():
             try:
@@ -78,10 +78,11 @@ def main(base_model: str,
     tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:
-        model.load_adapter_weight(lora_weights, "m-LoRA")
-        generation_config = model.get_generate_paramas()["m-LoRA"]
+        model.load_adapter_weight(lora_weights, "default")
     else:
-        generation_config = mlora.GenerateConfig(adapter_name_="m-LoRA")
+        model.load_adapter_weight("default")
+
+    generation_config = model.get_generate_paramas()["default"]
 
     generation_config.prompt_template_ = template
 
@@ -130,7 +131,7 @@ def main(base_model: str,
 
         # Without streaming
         output = mlora.generate(**generate_params)
-        yield output["m-LoRA"][0]
+        yield output["default"][0]
 
     gr.Interface(
         fn=evaluate,

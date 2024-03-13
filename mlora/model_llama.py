@@ -17,7 +17,7 @@ import xformers.ops.fmha.attn_bias
 from typing import List, Dict, Tuple, Optional
 from huggingface_hub import snapshot_download
 from transformers import BitsAndBytesConfig
-from transformers import LlamaForCausalLM
+from transformers import AutoModelForCausalLM
 from collections import OrderedDict
 import logging
 import json
@@ -306,8 +306,12 @@ class LlamaSequentialWrapper(torch.nn.Module):
             raise f"module invalid: {module_name}"
 
 
+LlamaCompatibleModelTypes = ["mistral", "qwen2"]
+
+
 class LlamaModel(LLMModel):
     def __init__(self, args: LLMModelArgs):
+        self.name_or_path_ = args.name_or_path_
         # weight
         self.token_embedding_: Embedding = None
 
@@ -400,7 +404,7 @@ class LlamaModel(LLMModel):
                 device=self.device_,
                 weight=weight)
         self.output_.layers_[config.adapter_name_] = output_layer
-        if config.adapter_name_ == "default":
+        if config.adapter_name_ == "default" and weight is None:
             return
         # init transformer layers
         for transformer_layer in self.layers_:
@@ -437,10 +441,8 @@ class LlamaModel(LLMModel):
 
         if bits in [4, 8]:
             logging.info(f"Loading model with quantization, bits = {bits}.")
-            llama_model = LlamaForCausalLM.from_pretrained(
+            llama_model = AutoModelForCausalLM.from_pretrained(
                 path,
-                load_in_4bit=bits == 4,
-                load_in_8bit=bits == 8,
                 device_map=device,
                 quantization_config=BitsAndBytesConfig(
                     load_in_4bit=bits == 4,
@@ -453,12 +455,21 @@ class LlamaModel(LLMModel):
                 ),
                 torch_dtype=load_dtype)
         else:
-            llama_model = LlamaForCausalLM.from_pretrained(
+            llama_model = AutoModelForCausalLM.from_pretrained(
                 path,
                 device_map=device,
                 torch_dtype=load_dtype)
 
+        if llama_model.config.model_type != "llama":
+            if llama_model.config.model_type in LlamaCompatibleModelTypes:
+                logging.info(
+                    f"Loading {llama_model.config.model_type} model with llama compatible mode.")
+            else:
+                logging.warning(
+                    f"Unsupported model type {llama_model.config.model_type}, loading with llama compatible mode.")
+
         llama_args = LLMModelArgs()
+        llama_args.name_or_path_ = llama_model.config.name_or_path
         llama_args.dim_ = llama_model.config.hidden_size
         llama_args.n_heads_ = llama_model.config.num_attention_heads
         llama_args.n_kv_heads_ = llama_args.n_heads_ if not hasattr(
@@ -468,6 +479,10 @@ class LlamaModel(LLMModel):
         llama_args.vocab_size_ = llama_model.config.vocab_size
         llama_args.max_seq_len_ = 4096 if not hasattr(
             llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
+        if hasattr(llama_model.config, "sliding_window") and llama_args.max_seq_len_ > llama_model.config.sliding_window:
+            logging.warning(f"Shrink max sequence length {llama_args.max_seq_len_} to " +
+                            f"window size {llama_model.config.sliding_window} of sliding window attention.")
+            llama_args.max_seq_len_ = llama_model.config.sliding_window
         llama_args.pad_token_id_ = llama_model.config.pad_token_id
         llama_args.rope_theta_ = llama_model.config.rope_theta
         if llama_args.pad_token_id_ is None:

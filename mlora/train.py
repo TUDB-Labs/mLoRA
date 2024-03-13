@@ -95,6 +95,7 @@ def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suf
 
     lora_weight_dict = model.get_lora_weight_dict(config.adapter_name_)
     lora_config_dict = model.adapter_configs_[config.adapter_name_].export()
+    lora_config_dict["base_model_name_or_path"] = model.name_or_path_
 
     torch.save(lora_weight_dict, lora_output_dir +
                os.sep + "adapter_model.bin")

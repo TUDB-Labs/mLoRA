@@ -1,0 +1,4 @@
+{
+    "description": "AI2 Reasoning Challenge",
+    "prompt_input": "Please choose the correct answer to the question: {instruction}{input}\nAnswer: "
+}

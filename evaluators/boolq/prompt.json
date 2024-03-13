@@ -1,0 +1,4 @@
+{
+    "description": "BoolQ Benchmark",
+    "prompt_input": "Please answer the following question with true or false: {instruction}?\nAnswer: "
+}

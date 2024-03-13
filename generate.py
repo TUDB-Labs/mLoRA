@@ -23,7 +23,7 @@ def main(base_model: str,
         adapter_name = model.load_adapter_weight(lora_weights)
         generate_paramas = model.get_generate_paramas()[adapter_name]
     else:
-        adapter_name = base_model
+        adapter_name = model.load_adapter_weight("default")
         generate_paramas = mlora.GenerateConfig(adapter_name_=adapter_name)
 
     generate_paramas.prompt_template_ = template
