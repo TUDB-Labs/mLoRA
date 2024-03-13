@@ -22,6 +22,8 @@ m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning 
 - [Copyright](#Copyright)
 
 ## Updates
+- Support multiple Qwen2 fine-tuning
+- Support multiple Mistral fine-tuning
 - Support multiple LLaMA2 fine-tuning
 - Support multiple ChatGLM fine-tuning
 - Support multiple LLaMA fine-tuning
@@ -29,15 +31,17 @@ m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning 
 
 ## Models
 
-|                                 | Model                                          | Model size      |
-|---------------------------------|------------------------------------------------|-----------------|
-| <input type="checkbox" checked> | [ChatGLM](https://github.com/THUDM/ChatGLM-6B) | 6B              |
-| <input type="checkbox" checked> | [ChatGLM2](https://github.com/THUDM/ChatGLM2-6B) | 6B/12B          |
-| <input type="checkbox">         | [ChatGLM3](https://github.com/THUDM/ChatGLM3)  | 6B                 |                 |
-| <input type="checkbox" checked> | [LLaMA](https://github.com/facebookresearch/llama) | 7B//13B/33B/65B |
-| <input type="checkbox" checked> | [LLaMA-2](https://huggingface.co/meta-llama)   | 7B/13B/70B      |
-| <input type="checkbox">         | [Baichuan](https://github.com/baichuan-inc/Baichuan-13B) | 7B/13B          |
-| <input type="checkbox">         | [Baichuan2](https://github.com/baichuan-inc/Baichuan2) | 7B/13B                  |
+|         | Model                                                    | # Parameters    |
+|---------|----------------------------------------------------------|-----------------|
+| &check; | [LLaMA](https://github.com/facebookresearch/llama)       | 7B/13B/33B/65B  |
+| &check; | [LLaMA-2](https://huggingface.co/meta-llama)             | 7B/13B/70B      |
+| &check; | [Qwen-2](https://qwenlm.github.io)                       | 4B/7B/14B/72B   |
+| &check; | [Mistral](https://mistral.ai)                            | 7B              |
+| &check; | [ChatGLM](https://github.com/THUDM/ChatGLM-6B)           | 6B              |
+| &check; | [ChatGLM2](https://github.com/THUDM/ChatGLM2-6B)         | 6B/12B          |
+| &cross; | [ChatGLM3](https://github.com/THUDM/ChatGLM3)            | 6B              |
+| &cross; | [Baichuan](https://github.com/baichuan-inc/Baichuan-13B) | 7B/13B          |
+| &cross; | [Baichuan2](https://github.com/baichuan-inc/Baichuan2)   | 7B/13B          |
 
 > **Example:** Use our system  to improve the LLaMa-2 fine-tuning with less resources
 >https://www.kaggle.com/code/rraydata/multi-lora-example/notebook

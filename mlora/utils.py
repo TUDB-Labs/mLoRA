@@ -5,6 +5,7 @@ from mlora.model.model_chatglm import ChatGLMModel
 from mlora.config import LoraConfig
 
 import os
+import json
 import torch
 import random
 import logging
@@ -80,6 +81,15 @@ def init_lora_model(llm_model: LLMModel, lora_configs: List[LoraConfig]):
 
         if os.path.isfile(adapter_file_path):
             logging.info(f"load {adapter_file_path}")
+            # Load adapter configuration for consistency check
+            with open(lora_config.adapter_name_ + "/adapter_config.json", 'r', encoding='utf8') as fp:
+                adapter_config = json.load(fp)
+            base_model_name_or_path = adapter_config.get(
+                "base_model_name_or_path", "")
+            if base_model_name_or_path != "" and base_model_name_or_path != llm_model.name_or_path_:
+                raise ValueError("loading adapter with unmatched base model." +
+                                 f" current is {llm_model.name_or_path_}, provided {base_model_name_or_path}")
+            # Load adapter weight
             lora_weight = torch.load(adapter_file_path)
 
         logging.info(

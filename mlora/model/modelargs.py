@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import List
 
 from transformers import PretrainedConfig
+import logging
+import torch
 
 Tokens = List[int]
 Masks = List[bool]
@@ -17,6 +19,7 @@ class TokenizerArgs:
 
 @dataclass
 class LLMModelArgs:
+    name_or_path_: str = ""
     dim_: int = 4096
     multiple_of_: int = 256
     n_heads_: int = 32
@@ -28,12 +31,14 @@ class LLMModelArgs:
     vocab_size_: int = -1
     pad_token_id_: int = -1
     max_seq_len_: int = 4096
-    device: str = ""
+    device_: str = ""
+    dtype_: torch.dtype = None
 
     def __init__(self, config: PretrainedConfig):
         self.from_pretrained_config(config)
 
     def from_pretrained_config(self, config: PretrainedConfig):
+        self.name_or_path_ = config.name_or_path
         self.dim_ = config.hidden_size
         self.n_heads_ = config.num_attention_heads
         if hasattr(config, "num_key_value_heads"):
@@ -41,8 +46,13 @@ class LLMModelArgs:
         self.n_layers_ = config.num_hidden_layers
         self.norm_eps_ = config.rms_norm_eps
         self.vocab_size_ = config.vocab_size
+        self.pad_token_id_ = config.pad_token_id
         if hasattr(config, "max_sequence_length"):
             self.max_seq_len_ = config.max_sequence_length
+        if hasattr(config, "sliding_window") and self.max_seq_len_ > config.sliding_window:
+            logging.warning(
+                "Shrink max sequence length to window size of sliding window attention.")
+            self.max_seq_len_ = config.sliding_window
         self.rope_theta_ = config.rope_theta
 
 

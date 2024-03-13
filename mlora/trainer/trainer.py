@@ -10,6 +10,7 @@ from typing import Dict, List
 
 
 class TrainerContext:
+    name_or_path_: str = ""
     adapter_name_: str = ""
     loss_fn_: torch.nn.Module = None
     accumulation_step_: int = -1
@@ -68,6 +69,7 @@ class TrainerContext:
 
     def export_config(self) -> Dict[str, str]:
         return {
+            "base_model_name_or_path": self.name_or_path_,
             "lora_alpha": self.alpha_,
             "lora_dropout": self.dropout_,
             "r": self.r_,
@@ -93,6 +95,7 @@ class Trainer:
         for lora_config in lora_configs:
             context = TrainerContext(
                 lora_config, all_trainable_params[lora_config.adapter_name_])
+            context.name_or_path_ = self.model_.name_or_path_
             self.trainer_context_[context.adapter_name_] = context
 
     def train(self, save_step: int = 2000) -> None:
@@ -144,6 +147,6 @@ class Trainer:
         torch.save(lora_weight_dict, lora_output_dir +
                    os.sep + "adapter_model.bin")
 
-        context = self.trainer_context_[adapter_name]
+        adapter_config = self.trainer_context_[adapter_name].export_config()
         with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
-            json.dump(context.export_config(), f, indent=4)
+            json.dump(adapter_config, f, indent=4)
