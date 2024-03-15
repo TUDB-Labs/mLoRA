@@ -197,7 +197,7 @@ class Transformer(torch.nn.Module):
 
                         linear_layer_list[idx].init_lora_weight(
                             f"moe.{adapter_name}.experts.{expert_idx}",
-                            config.lora_r_, config.lora_alpha_, config.lora_dropout_, lora_a, lora_b)
+                            config.expert_r_, config.expert_alpha_, config.expert_dropout_, lora_a, lora_b)
                 else:
                     lora_a = None
                     lora_b = None
