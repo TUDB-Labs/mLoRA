@@ -196,7 +196,7 @@ def _dispatch_task_in(tokenizer: Tokenizer, configs: List[EvaluateConfig], max_s
             while len(tokens) < max_seq_len:
                 tokens.append(tokenizer.pad_id_)
             batch_tokens.append(tokens)
-            atten_masks.append(tokenizer.attention_mask(tokens))
+            atten_masks.append(tokenizer.mask_from(tokens))
             batch_labels.append(labels.copy())
 
         config.batch_start_idx_ = config.batch_end_idx_

@@ -1,7 +1,7 @@
+from mlora.modelargs import Tokens, Masks
+
 from transformers import AutoTokenizer
 from typing import List, Union
-
-Tokens = List[int]
 
 
 class Tokenizer:
@@ -30,12 +30,12 @@ class Tokenizer:
             ret.append(self.eos_id_)
         return ret
 
-    def attention_mask(self, tokens: Tokens) -> Tokens:
-        mask = []
-        special_tokens = [self.pad_id_]
-        for tok in tokens:
-            mask.append(1 if tok in special_tokens else 0)
-        return mask
-
     def decode(self, data: Tokens) -> str:
         return self.tokenizer.decode(data)
+
+    # get the mask from tokens
+    #   example: tokens is [2, 3, pad, pad, 4, 5]
+    #            output is [False, False, True, True, False, False]
+    def mask_from(self, tokens: Tokens) -> Masks:
+        mask_tokens = [self.pad_id_]
+        return [tok in mask_tokens for tok in tokens]

@@ -6,6 +6,7 @@ import torch
 
 
 Tokens = List[int]
+Masks = List[bool]
 
 
 @dataclass
@@ -104,11 +105,6 @@ class LoraConfig:
             "w1_proj": False,
             "w2_proj": False,
             "w3_proj": False,
-            # ChatGLM names
-            "qkv": False,
-            "dense": False,
-            "mlp_in": False,
-            "mlp_out": False
         }
         if isinstance(config["target_modules"], List):
             for target in config["target_modules"]:

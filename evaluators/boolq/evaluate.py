@@ -44,7 +44,7 @@ def prepare_data(tokenizer: mlora.Tokenizer,
                 tokens.append(tokenizer.pad_id_)
         else:
             sequence_lengths.append(-1)
-        atten_masks.append(tokenizer.attention_mask(tokens))
+        atten_masks.append(tokenizer.mask_from(tokens))
 
     return sequence_lengths, batch_tokens, atten_masks, batch_labels
 
