@@ -79,9 +79,11 @@ class TrainConfig:
         if self.accumulation_step_cnt_ % self.accumulation_step_ == 0:
             self.optimizer_.step()
             self.lr_scheduler_.step()
-            logging.info(f"    adapter: {self.adapter_name_}" +
-                         f"   lr: {self.lr_scheduler_.get_last_lr()[-1]}")
             self.optimizer_.zero_grad()
+
+    def finish(self):
+        self.optimizer_.step()
+        self.optimizer_.zero_grad()
 
 
 def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suffix=""):
@@ -160,4 +162,5 @@ def train(dispatcher: Dispatcher,
                 save_adapter_weight(model, config, save_dir, f"{step_cnt}")
 
     for config in configs:
+        config.finish()
         save_adapter_weight(model, config, save_dir)

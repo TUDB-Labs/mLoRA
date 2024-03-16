@@ -1,6 +1,7 @@
 from mlora import Tokenizer
 from mlora import MultiLoraBatchData
 from mlora import LoraBatchDataConfig
+from mlora.modelargs import Tokens, Masks
 
 import sys
 import math
@@ -27,9 +28,6 @@ class Event():
                 return True
 
         return False
-
-
-Tokens = List[int]
 
 
 @dataclass
@@ -358,7 +356,7 @@ class Dispatcher():
         # all prompts and tokens / config
         batch_seq_len = math.ceil(batch_seq_len / 8) * 8
         batch_tokens: List[Tokens] = []
-        attention_masks: List[Tokens] = []
+        attention_masks: List[Masks] = []
         batch_labels: List[List] = []
         lora_batch_data_config: List[LoraBatchDataConfig] = []
 
@@ -383,7 +381,7 @@ class Dispatcher():
                     else:
                         tokens.insert(0, self.tokenizer_.pad_id_)
                 batch_tokens.append(tokens)
-                attention_masks.append(self.tokenizer_.attention_mask(tokens))
+                attention_masks.append(self.tokenizer_.mask_from(tokens))
                 labels: List = data.labels_
                 if labels is None:
                     labels = tokens.copy()

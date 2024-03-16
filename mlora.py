@@ -14,7 +14,7 @@
 #
 # Copyright (C) 2023 All Rights Reserved.
 #
-# Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
+# Github:  https://github.com/mikecovlee/mlora
 
 import os
 import sys
@@ -30,8 +30,6 @@ from typing import Dict, Tuple, List, Union
 parser = argparse.ArgumentParser(description='m-LoRA main program')
 parser.add_argument('--base_model', type=str, required=True,
                     help='Path to or name of base model')
-parser.add_argument('--model_type', type=str, default="llama",
-                    help='The model type, support: llama, chatglm')
 parser.add_argument('--inference', action="store_true",
                     help='The inference mode (just for test)')
 parser.add_argument('--evaluate', action="store_true",
@@ -99,24 +97,13 @@ def query_yes_no(question, default="no"):
 
 
 def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
-    if args.model_type == "llama":
-        logging.info("Initializing LLaMA model.")
-        model = mlora.LlamaModel.from_pretrained(
-            path=args.base_model,
-            device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            load_dtype=torch.bfloat16 if args.load_16bit else torch.float32
-        )
-    elif args.model_type == "chatglm":
-        logging.info("Initializing ChatGLM model.")
-        model = mlora.ChatGLMModel.from_pretrained(
-            path=args.base_model,
-            device=args.device,
-            bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-            load_dtype=torch.float32
-        )
-    else:
-        raise f"unkown model type {args.model_type}"
+    logging.info("Initializing pre-trained model.")
+    model = mlora.LlamaModel.from_pretrained(
+        path=args.base_model,
+        device=args.device,
+        bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
+        load_dtype=torch.bfloat16 if args.load_16bit else torch.float32
+    )
 
     tokenizer = mlora.Tokenizer(args.base_model)
 

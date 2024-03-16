@@ -1,5 +1,5 @@
 {
-    "cutoff_len": 80,
+    "cutoff_len": 256,
     "save_step": 2000,
     "early_stop_test_step": 2000,
     "train_lora_candidate_num": 2,

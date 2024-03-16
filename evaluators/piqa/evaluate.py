@@ -23,7 +23,8 @@ def prepare_data(tokenizer: mlora.Tokenizer,
     max_tokens_len = 0
     tokens = None
     for data_point in data:
-        prompt_str = "Below is an instruction that describes a task. Write a response that appropriately completes the request."
+        prompt_str = "Below is an instruction that describes a task. "
+        prompt_str += "Write a response that appropriately completes the request."
         prompt_str += "\n\n### Instruction:\n"
         prompt_str += f"Please choose the correct solution to the question: {data_point['goal']}"
         prompt_str += f"\n\na. {data_point['sol1']}\n\nb. {data_point['sol2']}"
@@ -48,7 +49,7 @@ def prepare_data(tokenizer: mlora.Tokenizer,
                 tokens.append(tokenizer.pad_id_)
         else:
             sequence_lengths.append(-1)
-        atten_masks.append(tokenizer.attention_mask(tokens))
+        atten_masks.append(tokenizer.mask_from(tokens))
 
     return sequence_lengths, batch_tokens, atten_masks, batch_labels
 
