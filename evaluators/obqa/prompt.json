@@ -1,4 +1,0 @@
-{
-    "description": "AI2 OpenBook QA",
-    "prompt_input": "Please choose the correct answer to the question: {instruction}{input}\nAnswer: "
-}
