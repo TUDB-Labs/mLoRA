@@ -9,11 +9,11 @@ work_path = os.path.dirname(os.path.abspath(__file__))
 
 
 def compose_command(base_model: str,
-                    config: str = "launcher.json",
+                    config: str = "mlora.json",
                     model_dtype: str = "16bit",
                     load_adapter: bool = False,
                     random_seed: int = 42,
-                    log_file: str = "launcher.log",
+                    log_file: str = "mlora.log",
                     overwrite: bool = False,
                     cuda_device: int = 0):
     assert model_dtype not in ["4bit", "8bit" "16bit"]
@@ -38,7 +38,7 @@ def train(**kwargs):
     os.system(compose_command(**kwargs))
 
 
-def run(config: str = "launcher.json", **kwargs):
+def run(config: str = "mlora.json", **kwargs):
     config = f"{work_path}{os.sep}{config}"
     with open(config, 'r', encoding='utf8') as fp:
         config_obj = json.load(fp)
@@ -58,7 +58,7 @@ def run(config: str = "launcher.json", **kwargs):
 
 def gen_config(template_name: str,
                task_names: str,
-               file_name: str = "launcher.json",
+               file_name: str = "mlora.json",
                cutoff_len: int = 512,
                save_step: int = 1000,
                warmup_steps: float = 0.2,
@@ -114,9 +114,9 @@ def avail_tasks():
 
 
 def show_help():
-    print("m-LoRA launcher")
-    print("usage: python launcher.py COMMAND [ARGS...]")
-    print("command:")
+    print("Launcher of m-LoRA")
+    print("Usage: python launch.py COMMAND [ARGS...]")
+    print("Command:")
     print("    gen         generate a configuration from template")
     print("    run         Automatically training and evaluate")
     print("    evaluate    Run evaluation on existed adapter")
@@ -124,29 +124,29 @@ def show_help():
     print("    avail       List all available tasks")
     print("    help        Show help information")
     print("")
-    print("    Arguments of gen:")
-    print("        --template_name    lora, mixlora, mixlora_compare")
-    print("        --task_names       task names separate by \';\'")
-    print("        --file_name        [launcher.json]")
-    print("        --cutoff_len       [512]")
-    print("        --save_step        [1000]")
-    print("        --warmup_steps     [0.2]")
-    print("        --learning_rate    [1e-4]")
-    print("        --batch_size       [16]")
-    print("        --micro_batch_size [4]")
-    print("        --test_batch_size  [16]")
-    print("        --num_epochs       [2]")
-    print("        --group_by_length  [false]")
+    print("Arguments of gen:")
+    print("    --template_name    lora, mixlora, mixlora_compare")
+    print("    --task_names       task names separate by \';\'")
+    print("    --file_name        [mlora.json]")
+    print("    --cutoff_len       [512]")
+    print("    --save_step        [1000]")
+    print("    --warmup_steps     [0.2]")
+    print("    --learning_rate    [1e-4]")
+    print("    --batch_size       [16]")
+    print("    --micro_batch_size [4]")
+    print("    --test_batch_size  [16]")
+    print("    --num_epochs       [2]")
+    print("    --group_by_length  [false]")
     print("")
-    print("    Arguments of run, train and evaluate:")
-    print("        --base_model   model name or path")
-    print("        --config       [launcher.json]")
-    print("        --model_dtype  [16bit], 8bit, 4bit")
-    print("        --load_adapter [false]")
-    print("        --random_seed  [42]")
-    print("        --log_file     [launcher.log]")
-    print("        --overwrite    [false]")
-    print("        --cuda_device  [0]")
+    print("Arguments of run, train and evaluate:")
+    print("    --base_model   model name or path")
+    print("    --config       [mlora.json]")
+    print("    --model_dtype  [16bit], 8bit, 4bit")
+    print("    --load_adapter [false]")
+    print("    --random_seed  [42]")
+    print("    --log_file     [mlora.log]")
+    print("    --overwrite    [false]")
+    print("    --cuda_device  [0]")
     print("")
 
 
