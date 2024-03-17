@@ -335,6 +335,10 @@ class Dispatcher:
         else:
             raise "unkown strategy"
 
+        # for pipeline
+        if not all_train_data:
+            return None
+
         batch_seq_len: int = -1
         # to align batch token data
         for adapter in all_train_data:

@@ -1,0 +1,88 @@
+{
+    "cutoff_len": 256,
+    "save_step": 2000,
+    "early_stop_test_step": 2000,
+    "train_lora_candidate_num": 3,
+    "train_lora_simultaneously_num": 1,
+    "train_strategy": "optim",
+    "lora": [
+        {
+            "name": "lora_0",
+            "optim": "adamw",
+            "lr": 3e-4,
+            "batch_size": 32,
+            "micro_batch_size": 32,
+            "test_batch_size": 32,
+            "num_epochs": 10,
+            "r": 8,
+            "alpha": 16,
+            "dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true,
+                "w1_proj": true,
+                "w2_proj": true,
+                "w3_proj": true
+            },
+            "data": "data/dummy_data.json",
+            "test_data": "data/test_data_demo.json",
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
+        },
+        {
+            "name": "lora_1",
+            "optim": "adamw",
+            "lr": 3e-4,
+            "batch_size": 32,
+            "micro_batch_size": 32,
+            "test_batch_size": 32,
+            "num_epochs": 10,
+            "r": 32,
+            "alpha": 64,
+            "dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true,
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
+            },
+            "data": "data/dummy_data.json",
+            "test_data": "data/test_data_demo.json",
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
+        },
+        {
+            "name": "lora_2",
+            "optim": "adamw",
+            "lr": 3e-4,
+            "batch_size": 32,
+            "micro_batch_size": 32,
+            "test_batch_size": 32,
+            "num_epochs": 10,
+            "r": 32,
+            "alpha": 64,
+            "dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "o_proj": true,
+                "w1_proj": false,
+                "w2_proj": false,
+                "w3_proj": false
+            },
+            "data": "data/dummy_data.json",
+            "test_data": "data/test_data_demo.json",
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
+        }
+    ]
+}

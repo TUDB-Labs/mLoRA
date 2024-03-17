@@ -3,9 +3,10 @@ from mlora.pipeline.stream import CudaStream
 from mlora.pipeline.messages import PipeMessageType
 from mlora.pipeline.function import RecvOperator, SendOperator
 from mlora.model.model import LLMModel, precompute_mask
-from mlora.model.modelargs import MultiLoraBatchData
-from mlora.dispatcher import Dispatcher
-from mlora.utils import create_optimizer_from, get_accumulation_steps
+from mlora.model.modelargs import LoraBatchDataConfig, MultiLoraBatchData
+from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
+from mlora.trainer.trainer import TrainerContext
+from mlora.config import MLoRAConfig
 
 import torch
 import uuid
@@ -13,7 +14,6 @@ import logging
 
 from enum import Enum, auto
 from typing import Dict, List
-from collections.abc import Iterable
 
 
 class WorkerRole(Enum):
@@ -35,25 +35,26 @@ class Pipe():
     stop_signal_: torch.tensor = None
 
     model_partition_: torch.nn.Sequential = torch.nn.Sequential()
-    data_dispatcher_: Iterable[MultiLoraBatchData] = None
+    dispatcher_: PipelineDispatcher = None
     n_heads_: int = -1
 
-    config_: Dict[str, any] = {}
+    config_: MLoRAConfig = None
 
     loss_fn_: torch.nn.Module = torch.nn.CrossEntropyLoss()
-    optimizer_: Dict[str, torch.optim.Optimizer] = {}
-    accumulation_step_: Dict[str, int] = {}
+    trainer_context_: Dict[str, TrainerContext] = {}
+    save_step: int = 1000
 
     def is_stop_signal(self, data: torch.tensor) -> bool:
         return data.dtype == torch.long and torch.numel(data) == 1
 
     def __init__(self,
                  model: LLMModel,
-                 config: Dict[str, any],
-                 dispatcher: Dispatcher,
+                 config: MLoRAConfig,
+                 dispatcher: PipelineDispatcher,
                  device: torch.device,
                  rank: int,
-                 balance: List[int]) -> None:
+                 balance: List[int],
+                 save_step: int = 1000) -> None:
         self.world_size_ = torch.cuda.device_count()
         assert self.world_size_ == len(balance)
 
@@ -75,7 +76,8 @@ class Pipe():
             torch.cuda.default_stream(self.device_))
 
         self.config_ = config
-        self.data_dispatcher_ = dispatcher.train_data()
+        self.dispatcher_ = dispatcher
+        self.save_step = save_step
 
         # need the config value, so must in the last stage to init
         self.init_partition(model)
@@ -114,14 +116,18 @@ class Pipe():
         assert self.role_ == WorkerRole.HEAD
         assert not self.input_stop_
 
-        try:
-            train_input = next(self.data_dispatcher_)
+        if not self.dispatcher_.check_task_done():
+            train_input = self.dispatcher_.get_train_data()
+            if not train_input:
+                return
+            for lora_config in train_input.lora_batch_data_config_:
+                logging.info(f'load lora: {lora_config.adapter_name_}')
             tokens = torch.tensor(train_input.batch_tokens_,
                                   dtype=torch.int64,
                                   device=self.device_)
             data = self.forward(tokens, train_input)
             self.forward_cnt_ += 1
-        except StopIteration:
+        else:
             # stop
             self.input_stop_ = True
             train_input = None
@@ -129,6 +135,21 @@ class Pipe():
                 [self.forward_cnt_], dtype=torch.long, device="cpu", requires_grad=False)
             assert self.is_stop_signal(data)
             logging.info("Forward done be signaled.")
+        # try:
+        #     train_input = next(self.data_dispatcher_)
+        #     tokens = torch.tensor(train_input.batch_tokens_,
+        #                           dtype=torch.int64,
+        #                           device=self.device_)
+        #     data = self.forward(tokens, train_input)
+        #     self.forward_cnt_ += 1
+        # except StopIteration:
+        #     # stop
+        #     self.input_stop_ = True
+        #     train_input = None
+        #     data = torch.tensor(
+        #         [self.forward_cnt_], dtype=torch.long, device="cpu", requires_grad=False)
+        #     assert self.is_stop_signal(data)
+        #     logging.info("Forward done be signaled.")
 
         self.default_stream_.poll()
         self.send_next_worker(data, train_input)
@@ -150,7 +171,10 @@ class Pipe():
         phony.grad_fn.grad_from_next_worker = message.tensor_data_
         phony.backward()
 
+        self.trainer_step(message.batch_data_.lora_batch_data_config_)
+
         del self.backward_cache_[msg_id]
+
 
     def process_forward(self):
         assert self.role_ != WorkerRole.HEAD
@@ -192,6 +216,47 @@ class Pipe():
                 dtype=torch.long,
                 device=self.device_)
 
+            lora_configs = message.batch_data_.lora_batch_data_config_
+            total_loss = None
+            for lora_config in lora_configs:
+                start_idx = lora_config.batch_start_idx_
+                end_idx = lora_config.batch_end_idx_
+                adapter_name = lora_config.adapter_name_
+                vocab_size = data.shape[-1]
+                loss_input = data[start_idx:end_idx][..., :-1,
+                                                       :].contiguous().view(-1, vocab_size)
+                loss_target = labels[start_idx:end_idx][...,
+                                                        1:].contiguous().view(-1).to(loss_input.device)
+                loss = self.trainer_context_[
+                    adapter_name].loss_fn_(loss_input, loss_target)
+                logging.info(f"    adpter: {adapter_name} loss: {loss}")
+                if total_loss is None:
+                    total_loss = loss
+                else:
+                    total_loss += loss
+
+            total_loss.backward()
+            
+            self.trainer_step(lora_configs)
+
+
+    def trainer_step(self, lora_configs: List[LoraBatchDataConfig]):
+        for lora_config in lora_configs:
+            adapter_name = lora_config.adapter_name_
+            self.trainer_context_[adapter_name].step()
+            adapter_step = self.trainer_context_[adapter_name].step_cnt_
+            logging.info(f"    adpter: {adapter_name} step: {adapter_step}")
+            if adapter_step % self.save_step == 0:
+                self.save_lora_model(adapter_name, f"{adapter_step}")
+            if self.role_ == WorkerRole.HEAD:
+                self.dispatcher_.activate_adapter(adapter_name)
+
+
+    def save_lora_model(self, adapter_name: str, dir_suffix: str = ""):
+        # TODO: support save the pipeline model
+        pass
+
+
     def send_next_worker(self,
                          tensor_data: torch.Tensor,
                          batch_data: MultiLoraBatchData) -> None:
@@ -229,9 +294,11 @@ class Pipe():
         self.n_heads_ = model.n_heads_
         worker_train_paramas: Dict[str,
                                    List[torch.Tensor]] = model.get_train_paramas()
-        self.optimizer_ = create_optimizer_from(
-            self.config_, worker_train_paramas)
-        self.accumulation_step_ = get_accumulation_steps(self.config_)
+        logging.info(self.config_)
+        for lora_config in self.config_.lora_configs_:
+            context = TrainerContext(
+                lora_config, worker_train_paramas[lora_config.adapter_name_])
+            self.trainer_context_[context.adapter_name_] = context
 
         del model
 
