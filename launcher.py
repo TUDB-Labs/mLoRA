@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+import tempfile
 import json
 import fire
 import os
@@ -6,30 +8,14 @@ file_path = ".launcher"
 work_path = os.path.dirname(os.path.abspath(__file__))
 
 
-def evaluate(base_model: str,
-             config: str = "launcher.json",
-             model_dtype: str = "16bit",
-             random_seed: int = 42,
-             log_file: str = "launcher.log",
-             cuda_device: int = 0):
-    assert model_dtype not in ["4bit", "8bit" "16bit"]
-    command = f"CUDA_VISIBLE_DEVICES={cuda_device} python mlora.py"
-    command += f" --base_model {base_model}"
-    command += f" --config {config}"
-    command += f" --load_{model_dtype}"
-    command += f" --seed {random_seed}"
-    command += f" --log_file {log_file}"
-    os.system(command + " --evaluate")
-
-
-def train(base_model: str,
-          config: str = "launcher.json",
-          model_dtype: str = "16bit",
-          load_adapter: bool = False,
-          random_seed: int = 42,
-          log_file: str = "launcher.log",
-          overwrite: bool = False,
-          cuda_device: int = 0):
+def compose_command(base_model: str,
+                    config: str = "launcher.json",
+                    model_dtype: str = "16bit",
+                    load_adapter: bool = False,
+                    random_seed: int = 42,
+                    log_file: str = "launcher.log",
+                    overwrite: bool = False,
+                    cuda_device: int = 0):
     assert model_dtype not in ["4bit", "8bit" "16bit"]
     command = f"CUDA_VISIBLE_DEVICES={cuda_device} python mlora.py"
     command += f" --base_model {base_model}"
@@ -40,31 +26,34 @@ def train(base_model: str,
     command += f" --seed {random_seed}"
     command += f" --log_file {log_file}"
     if overwrite:
-        command += f" overwrite"
-    os.system(command)
+        command += f" --overwrite"
+    return command
 
 
-def run_task(base_model: str,
-             config: str = "launcher.json",
-             model_dtype: str = "16bit",
-             load_adapter: bool = False,
-             random_seed: int = 42,
-             log_file: str = "launcher.log",
-             overwrite: bool = False,
-             cuda_device: int = 0):
-    assert model_dtype not in ["4bit", "8bit" "16bit"]
-    command = f"CUDA_VISIBLE_DEVICES={cuda_device} python mlora.py"
-    command += f" --base_model {base_model}"
-    command += f" --config {config}"
-    command += f" --load_{model_dtype}"
-    if load_adapter:
-        command += f" --load_adapter"
-    command += f" --seed {random_seed}"
-    command += f" --log_file {log_file}"
-    if overwrite:
-        command += f" overwrite"
-    os.system(command)
-    os.system(command + " --evaluate")
+def evaluate(**kwargs):
+    os.system(compose_command(**kwargs) + " --evaluate")
+
+
+def train(**kwargs):
+    os.system(compose_command(**kwargs))
+
+
+def run(config: str = "launcher.json", **kwargs):
+    config = f"{work_path}{os.sep}{config}"
+    with open(config, 'r', encoding='utf8') as fp:
+        config_obj = json.load(fp)
+
+    evaluate_config = config_obj
+    evaluate_config["lora"] = []
+    for lora_config in config_obj["lora"]:
+        if lora_config["task_name"] != "casual":
+            evaluate_config["lora"].append(lora_config)
+
+    os.system(compose_command(config=config, **kwargs))
+    if len(evaluate_config["lora"]) > 0:
+        temp = tempfile.NamedTemporaryFile()
+        json.dump(evaluate_config, temp, indent=4)
+        os.system(compose_command(config=temp.name, **kwargs) + " --evaluate")
 
 
 def gen_config(template_name: str,
@@ -79,7 +68,7 @@ def gen_config(template_name: str,
                test_batch_size: int = 16,
                num_epochs: int = 2,
                group_by_length: bool = False):
-
+    import mlora
     template_name = f"{work_path}{os.sep}{file_path}{os.sep}{template_name}.json"
     with open(template_name, 'r', encoding='utf8') as fp:
         template_obj = json.load(fp)
@@ -91,8 +80,15 @@ def gen_config(template_name: str,
     for lora_template in lora_templates:
         for task_name in task_names.split(';'):
             lora_config = lora_template.copy()
-            lora_config["name"] = f"{task_name.split(':')[-1].replace('-', '_')}_{index}"
-            lora_config["task_name"] = task_name
+            casual_task = (task_name not in mlora.task_dict)
+            if casual_task:
+                lora_config["name"] = f"casual_{index}"
+                lora_config["task_name"] = "casual"
+                lora_config["data"] = task_name
+                lora_config["prompt"] = "template/alpaca.json"
+            else:
+                lora_config["name"] = f"{task_name.split(':')[-1].replace('-', '_')}_{index}"
+                lora_config["task_name"] = task_name
             lora_config["warmup_steps"] = warmup_steps
             lora_config["lr"] = learning_rate
             lora_config["batch_size"] = batch_size
@@ -121,23 +117,14 @@ def show_help():
     print("m-LoRA launcher")
     print("usage: python launcher.py COMMAND [ARGS...]")
     print("command:")
+    print("    gen         generate a configuration from template")
+    print("    run         Automatically training and evaluate")
     print("    evaluate    Run evaluation on existed adapter")
     print("    train       Run training with configuration")
-    print("    run-task    Automatically training and evaluate")
-    print("    Arguments:")
-    print("        --base_model   model name or path")
-    print("        --config       [launcher.json]")
-    print("        --model_dtype  [16bit], 8bit, 4bit")
-    print("        --load_adapter [false]")
-    print("        --random_seed  [42]")
-    print("        --log_file     [launcher.log]")
-    print("        --overwrite    [false]")
-    print("        --cuda_device  [0]")
+    print("    avail       List all available tasks")
+    print("    help        Show help information")
     print("")
-    print("    avail-tasks    List all available tasks")
-    print("")
-    print("    gen-config     generate a configuration from template")
-    print("    Arguments:")
+    print("    Arguments of gen:")
     print("        --template_name    lora, mixlora, mixlora_compare")
     print("        --task_names       task names separate by \';\'")
     print("        --file_name        [launcher.json]")
@@ -151,16 +138,24 @@ def show_help():
     print("        --num_epochs       [2]")
     print("        --group_by_length  [false]")
     print("")
-    print("    help")
+    print("    Arguments of run, train and evaluate:")
+    print("        --base_model   model name or path")
+    print("        --config       [launcher.json]")
+    print("        --model_dtype  [16bit], 8bit, 4bit")
+    print("        --load_adapter [false]")
+    print("        --random_seed  [42]")
+    print("        --log_file     [launcher.log]")
+    print("        --overwrite    [false]")
+    print("        --cuda_device  [0]")
     print("")
 
 
 command_map = {
     "evaluate": evaluate,
     "train": train,
-    "run-task": run_task,
-    "avail-tasks": avail_tasks,
-    "gen-config": gen_config,
+    "run": run,
+    "avail": avail_tasks,
+    "gen": gen_config,
     "help": show_help,
 }
 

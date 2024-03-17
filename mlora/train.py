@@ -37,9 +37,10 @@ class TrainConfig:
         self.optimizer_: torch.optim.Optimizer = None
         task_name = train_config.get("task_name", "casual")
         if task_name == "casual":
-            self.task_ = CasualTask(data_path=train_config["data"],
-                                    prompt_template=train_config["prompt"],
-                                    validation_size=train_config.get("val_set_size", None))
+            self.task_ = CasualTask(
+                data_path=train_config["data"],
+                prompt_template=train_config.get("prompt", None),
+                validation_size=train_config.get("val_set_size", None))
         else:
             self.task_ = task_dict[task_name]
         train_config["dataloader"] = self.task_.loading_data
