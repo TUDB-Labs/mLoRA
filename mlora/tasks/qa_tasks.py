@@ -9,7 +9,7 @@ import logging
 import torch
 
 
-class QA(CommonSenseTask):
+class QuestionAnswerTask(CommonSenseTask):
     def __init__(self, labels: List[str]) -> None:
         super().__init__()
         self.labels_ = labels
@@ -23,7 +23,7 @@ class QA(CommonSenseTask):
         return AutoMetric("accuracy")
 
 
-class ARC(QA):
+class ARC(QuestionAnswerTask):
     def __init__(self, subject: str) -> None:
         super().__init__(["1", "2", "3", "4", "A", "B", "C", "D", "E"])
         assert subject in ["ARC-Easy", "ARC-Challenge"]
@@ -55,7 +55,7 @@ class ARC(QA):
         return ret
 
 
-class Boolq(QA):
+class Boolq(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["true", "false"])
 
@@ -82,7 +82,7 @@ class Boolq(QA):
         return ret
 
 
-class OpenBookQA(QA):
+class OpenBookQA(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["A", "B", "C", "D"])
 
@@ -112,10 +112,44 @@ class OpenBookQA(QA):
         return ret
 
 
+class PIQA(QuestionAnswerTask):
+    def __init__(self) -> None:
+        super().__init__(["a", "b"])
+
+    def loading_data(self,
+                     tokenizer: Tokenizer,
+                     is_train: bool = True) -> List[DataClass]:
+        data = hf_datasets.load_dataset(
+            "piqa")["train" if is_train else "test"]
+        ret: List[DataClass] = []
+        for idx, data_point in enumerate(data):
+            prompt = "Below is an instruction that describes a task. "
+            prompt += "Write a response that appropriately completes the request."
+            prompt += "\n\n### Instruction:\n"
+            prompt += f"Please choose the correct solution to the question: {data_point['goal']}"
+            prompt += f"\n\na. {data_point['sol1']}\n\nb. {data_point['sol2']}"
+            prompt += "\n\nAnswer format: a/b"
+            prompt += "\n\n### Response:\n"
+            prompt += "The correct answer is "
+            answer = self.labels_[data_point["label"]]
+            if is_train:
+                prompt += answer
+                labels = None
+            else:
+                labels = [data_point["label"]]
+            tokens = tokenizer.encode(data=prompt, bos=True, eos=False)
+            ret.append(DataClass(tokens_=tokens, labels_=labels))
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return ret
+
+
 def update_task_dict(task_dict):
     task_dict.update({
         "arc-e": ARC("ARC-Easy"),
         "arc-c": ARC("ARC-Challenge"),
         "boolq": Boolq(),
         "obqa": OpenBookQA(),
+        "piqa": PIQA(),
     })
