@@ -40,6 +40,23 @@ conda activate mlora
 pip install -r requirements.txt
 ```
 
+Secondly, you can use m-LoRA via `launch.py` conveniently:
+```bash
+# Grant execution permission to the file
+chmod +x launch.py
+# Generating configuration
+launch.py gen --template_name lora --task_names yahma/alpaca-cleaned
+# Running the training task
+launch.py run --base_model yahma/llama-7b-hf
+```
+
+For further detailed usage information, please use `help` command:
+```bash
+launch.py help
+```
+
+## m-LoRA
+
 The `mlora.py` code is a starting point for finetuning on various datasets.
 Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
