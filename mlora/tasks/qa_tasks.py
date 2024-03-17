@@ -55,6 +55,33 @@ class ARC(QA):
         return ret
 
 
+class Boolq(QA):
+    def __init__(self) -> None:
+        super().__init__(["true", "false"])
+
+    def loading_data(self,
+                     tokenizer: Tokenizer,
+                     is_train: bool = True) -> List[DataClass]:
+        data = hf_datasets.load_dataset(
+            "google/boolq")["train" if is_train else "validation"]
+        ret: List[DataClass] = []
+        for idx, data_point in enumerate(data):
+            prompt = "Please answer the following question with true or false: " + \
+                f"{data_point['question']}?\nAnswer:"
+            answer = "true" if data_point["answer"] else "false"
+            if is_train:
+                prompt += f" {answer}"
+                labels = None
+            else:
+                labels = [self.labels2id_[answer]]
+            tokens = tokenizer.encode(data=prompt, bos=True, eos=False)
+            ret.append(DataClass(tokens_=tokens, labels_=labels))
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return ret
+
+
 class OpenBookQA(QA):
     def __init__(self) -> None:
         super().__init__(["A", "B", "C", "D"])
@@ -89,5 +116,6 @@ def update_task_dict(task_dict):
     task_dict.update({
         "arc-e": ARC("ARC-Easy"),
         "arc-c": ARC("ARC-Challenge"),
+        "boolq": Boolq(),
         "obqa": OpenBookQA(),
     })
