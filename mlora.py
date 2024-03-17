@@ -119,7 +119,7 @@ def init_adapter_config(config: Dict[str, any],
         lora_weight = None
         config_class = mlora.lora_config_factory(lora_config)
         config_class.adapter_name_ = lora_config["name"]
-        config_class.task_type_ = lora_config.get("task_type", "casual")
+        config_class.task_name_ = lora_config.get("task_name", "casual")
         config_class.device_ = args.device
 
         adapter_file_path = args.dir + os.sep + \
@@ -150,12 +150,12 @@ def init_adapter_config(config: Dict[str, any],
             config_class = mlora.GenerateConfig(
                 adapter_name_=config_class.adapter_name_)
             if not args.disable_prompter:
-                config_class.prompt_template_ = lora_config["prompt"]
+                config_class.prompt_template_ = lora_config.get("prompt", None)
         elif args.evaluate:
             config_class = mlora.EvaluateConfig(
                 adapter_name_=config_class.adapter_name_,
-                task_type_=config_class.task_type_,
-                batch_size_=lora_config["micro_batch_size"])
+                task_name_=config_class.task_name_,
+                batch_size_=lora_config["test_batch_size"])
         else:
             config_class = mlora.TrainConfig(lora_config, config_class)
         config_list.append(config_class)
