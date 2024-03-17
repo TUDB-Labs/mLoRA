@@ -68,7 +68,7 @@ def run_task(base_model: str,
 
 
 def gen_config(template_name: str,
-               task_name: str,
+               task_names: str,
                file_name: str = "launcher.json",
                cutoff_len: int = 512,
                save_step: int = 1000,
@@ -85,16 +85,23 @@ def gen_config(template_name: str,
         template_obj = json.load(fp)
     template_obj["cutoff_len"] = cutoff_len
     template_obj["save_step"] = save_step
-    for idx, lora_config in enumerate(template_obj["lora"]):
-        lora_config["name"] = f"{task_name.split(':')[-1]}_{idx}"
-        lora_config["task_name"] = task_name
-        lora_config["warmup_steps"] = warmup_steps
-        lora_config["lr"] = learning_rate
-        lora_config["batch_size"] = batch_size
-        lora_config["micro_batch_size"] = micro_batch_size
-        lora_config["test_batch_size"] = test_batch_size
-        lora_config["num_epochs"] = num_epochs
-        lora_config["group_by_length"] = group_by_length
+    lora_templates = template_obj["lora"]
+    template_obj["lora"] = []
+    index = 0
+    for lora_template in lora_templates:
+        for task_name in task_names.split(';'):
+            lora_config = lora_template.copy()
+            lora_config["name"] = f"{task_name.split(':')[-1].replace('-', '_')}_{index}"
+            lora_config["task_name"] = task_name
+            lora_config["warmup_steps"] = warmup_steps
+            lora_config["lr"] = learning_rate
+            lora_config["batch_size"] = batch_size
+            lora_config["micro_batch_size"] = micro_batch_size
+            lora_config["test_batch_size"] = test_batch_size
+            lora_config["num_epochs"] = num_epochs
+            lora_config["group_by_length"] = group_by_length
+            template_obj["lora"].append(lora_config)
+            index += 1
 
     config_dir = f"{work_path}{os.sep}{file_name}"
     with open(config_dir, "w") as f:
@@ -132,7 +139,7 @@ def show_help():
     print("    gen-config     generate a configuration from template")
     print("    Arguments:")
     print("        --template_name    lora, mixlora, mixlora_compare")
-    print("        --task_name        glue:cola, glue:mnli, ..., etc.")
+    print("        --task_names       task names separate by \';\'")
     print("        --file_name        [launcher.json]")
     print("        --cutoff_len       [512]")
     print("        --save_step        [1000]")

@@ -41,7 +41,7 @@ class EvaluateConfig:
             self.label_indices_ = None
 
 
-def _dispatch_task_in(tokenizer: Tokenizer, configs: List[EvaluateConfig], max_seq_len: int):
+def _dispatch_task_in(tokenizer: Tokenizer, configs: List[EvaluateConfig], concurrent_jobs: int, max_seq_len: int):
     batch_data_config = []
     sequence_lengths = []
     current_configs = []
@@ -50,6 +50,8 @@ def _dispatch_task_in(tokenizer: Tokenizer, configs: List[EvaluateConfig], max_s
     atten_masks = []
     max_tokens_len = 0
     for config in configs:
+        if len(current_configs) >= concurrent_jobs:
+            break
         if config.batch_start_idx_ >= len(config.data_):
             continue
         config.batch_end_idx_ = min(
@@ -98,6 +100,7 @@ def _dispatch_task_in(tokenizer: Tokenizer, configs: List[EvaluateConfig], max_s
 def evaluate(model: LLMModel,
              tokenizer: Tokenizer,
              configs: List[EvaluateConfig],
+             concurrent_jobs: int = 2,
              max_seq_len: int = 512):
     max_iterations = 0
     for config in configs:
@@ -107,7 +110,7 @@ def evaluate(model: LLMModel,
 
     while True:
         current_configs, sequence_lengths, batch_labels, input_args = _dispatch_task_in(
-            tokenizer, configs, max_seq_len)
+            tokenizer, configs, concurrent_jobs, max_seq_len)
 
         if len(current_configs) == 0:
             break
