@@ -22,11 +22,11 @@ def compose_command(base_model: str,
     command += f" --config {config}"
     command += f" --load_{model_dtype}"
     if load_adapter:
-        command += f" --load_adapter"
+        command += " --load_adapter"
     command += f" --seed {random_seed}"
     command += f" --log_file {log_file}"
     if overwrite:
-        command += f" --overwrite"
+        command += " --overwrite"
     return command
 
 

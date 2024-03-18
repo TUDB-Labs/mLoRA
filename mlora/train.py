@@ -1,7 +1,6 @@
 from mlora.modelargs import LoraConfig
 from mlora.dispatcher import TrainTask, Dispatcher
 from mlora.tasks import CasualTask, task_dict
-from mlora.prompter import Prompter
 from mlora.model import LLMModel
 
 from transformers import get_scheduler
