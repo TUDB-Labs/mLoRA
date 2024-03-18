@@ -14,6 +14,7 @@
             "micro_batch_size": 16,
             "test_batch_size": 64,
             "num_epochs": 20,
+            "use_dora": true,
             "r": 8,
             "lora_alpha": 16,
             "lora_dropout": 0.05,

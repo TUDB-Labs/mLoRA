@@ -82,12 +82,14 @@ class LoraConfig:
     task_name_: str = "casual"
     device_: str = "cuda:0"
     dtype_: torch.dtype = None
+    use_dora_: bool = False
     lora_r_: int = None
     lora_alpha_: int = None
     lora_dropout_: float = None
     target_modules_: Dict[str, bool] = None
 
     def check(self) -> "LoraConfig":
+        assert isinstance(self.use_dora_, bool)
         assert isinstance(self.lora_r_, int) and self.lora_r_ > 0
         assert isinstance(self.lora_alpha_, int) and self.lora_alpha_ > 0
         assert isinstance(self.lora_dropout_,
@@ -100,6 +102,7 @@ class LoraConfig:
         return self
 
     def from_config(self, config: Dict[str, any]) -> "LoraConfig":
+        self.use_dora_ = config.get("use_dora", False)
         self.lora_r_ = config["r"]
         self.lora_alpha_ = config["lora_alpha"]
         self.lora_dropout_ = config["lora_dropout"]
@@ -128,6 +131,8 @@ class LoraConfig:
 
     def export(self) -> Dict[str, any]:
         config = {}
+        if self.use_dora_:
+            config["use_dora"] = True
         config["bias"] = "none"
         config["peft_type"] = "LORA"
         config["task_type"] = "CAUSAL_LM"
@@ -148,10 +153,14 @@ available_routing_strategies = ["mixtral", "switch"]
 
 @dataclass
 class MixConfig(LoraConfig):
+    # expert lora
+    expert_r_: int = None
+    expert_alpha_: int = None
+    expert_dropout_: float = None
     # router config
     router_aux_loss_coef_: float = None
     routing_strategy_: str = None
-    dropout_rate_: float = None
+    ffn_dropout_: float = None
     num_experts_: int = None
     act_fn_: str = None
     # mixtral config
@@ -163,12 +172,16 @@ class MixConfig(LoraConfig):
 
     def check(self) -> "MixConfig":
         super().check()
+        assert isinstance(self.expert_r_, int) and self.expert_r_ > 0
+        assert isinstance(self.expert_alpha_, int) and self.expert_alpha_ > 0
+        assert isinstance(self.expert_dropout_,
+                          float) and self.expert_dropout_ >= 0
         assert isinstance(self.router_aux_loss_coef_,
                           float) and self.router_aux_loss_coef_ >= 0
         assert isinstance(self.routing_strategy_,
                           str) and self.routing_strategy_ in available_routing_strategies
-        assert isinstance(self.dropout_rate_,
-                          float) and self.dropout_rate_ >= 0
+        assert isinstance(self.ffn_dropout_,
+                          float) and self.ffn_dropout_ >= 0
         assert isinstance(self.num_experts_, int) and self.num_experts_ > 0
         assert isinstance(self.act_fn_, str) and self.act_fn_ in ACT2FN
         if self.routing_strategy_ == "mixtral":
@@ -185,10 +198,13 @@ class MixConfig(LoraConfig):
 
     def from_config(self, config: Dict[str, any]) -> "MixConfig":
         super().from_config(config)
+        self.expert_r_ = config.get("expert_r", self.lora_r_)
+        self.expert_alpha_ = config.get("expert_alpha", self.lora_alpha_)
+        self.expert_dropout_ = config.get("expert_dropout", self.lora_dropout_)
         self.router_aux_loss_coef_ = config.get(
             "router_aux_loss_coef", 0.001)  # for training
         self.routing_strategy_ = config["routing_strategy"]
-        self.dropout_rate_ = config.get("ffn_dropout", 0.0)
+        self.ffn_dropout_ = config.get("ffn_dropout", 0.0)
         self.num_experts_ = config["num_experts"]
         # silu for mixtral or gelu_new for switch transformers
         self.act_fn_ = config.get("act_fn", "silu")
@@ -200,13 +216,16 @@ class MixConfig(LoraConfig):
             # expert_capacity = (max_sequence_length / num_experts) * capacity_factor
             # common values of capacity_factor: 1.0, 1.25, 2.0
             self.expert_capacity_ = config.get("expert_capacity", 64)
-            self.jitter_noise_ = config.get("jitter_noise", 0.1)
+            self.jitter_noise_ = config.get("jitter_noise", 0.0)
 
         return self
 
     def export(self) -> Dict[str, any]:
         config = super().export()
         config["peft_type"] = "MIXLORA"
+        config["expert_r"] = self.expert_r_
+        config["expert_alpha"] = self.expert_alpha_
+        config["expert_dropout"] = self.expert_dropout_
         config["routing_strategy"] = self.routing_strategy_
         config["num_experts"] = self.num_experts_
         config["act_fn"] = self.act_fn_
@@ -214,7 +233,6 @@ class MixConfig(LoraConfig):
             config["top_k"] = self.top_k_
         elif self.routing_strategy_ == "switch":
             config["expert_capacity"] = self.expert_capacity_
-            config["jitter_noise"] = self.jitter_noise_
 
         return config
 
