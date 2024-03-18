@@ -34,21 +34,21 @@ class FeedForward(torch.nn.Module):
     def _lora_forward(self, lora_name, act_fn, data):
         # Applying LoRA weights to FFN weights
         if lora_name in self.w1_.loras_:
-            w1 = self.w1_.base_layer_.forward(data) + \
-                self.w1_.loras_[lora_name].forward(data)
+            w1 = self.w1_.loras_[lora_name].forward(
+                self.w1_.base_layer_.forward(data), data)
         else:
             w1 = self.w1_.base_layer_.forward(data)
 
         if lora_name in self.w3_.loras_:
-            w3 = self.w3_.base_layer_.forward(data) + \
-                self.w3_.loras_[lora_name].forward(data)
+            w3 = self.w3_.loras_[lora_name].forward(
+                self.w3_.base_layer_.forward(data), data)
         else:
             w3 = self.w3_.base_layer_.forward(data)
 
         act_result = act_fn(w1) * w3
         if lora_name in self.w2_.loras_:
-            return self.w2_.base_layer_.forward(act_result) + \
-                self.w2_.loras_[lora_name].forward(act_result)
+            return self.w2_.loras_[lora_name].forward(
+                self.w2_.base_layer_.forward(act_result), act_result)
         else:
             return self.w2_.base_layer_.forward(act_result)
 

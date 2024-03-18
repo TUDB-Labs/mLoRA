@@ -85,9 +85,9 @@ class Lora(nn.Module):
         result = self.lora_b_(self.lora_a_(self.dropout_(
             hidden_states.to(torch.float32)))) * self.scaling_
         if self.use_dora_:
-            return residual + self._apply_dora(residual, result)
+            return residual + self._apply_dora(residual, result).to(residual.dtype)
         else:
-            return residual + result
+            return residual + result.to(residual.dtype)
 
 
 class Linear(nn.Module):
