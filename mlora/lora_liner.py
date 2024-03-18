@@ -72,25 +72,22 @@ class Lora(nn.Module):
         self.magnitude_vector_ = nn.Parameter(
             weight_norm, requires_grad=True).to(self.device_)
 
-    def _apply_dora(self, data: torch.Tensor):
+    def _apply_dora(self, residual: torch.Tensor, hidden_states: torch.Tensor):
         lora_weight = self.lora_b_.weight @ self.lora_a_.weight
-        weight = self.base_layer_.weight
         weight_norm = self._get_weight_norm(
-            weight, lora_weight, self.scaling_).detach()
+            self.base_layer_.weight, lora_weight, self.scaling_).detach()
         mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
-        # mikecovlee: setting fan_in_fan_out to False because we only use it for linear
-        result_dora = (mag_norm_scale - 1) * (F.linear(data, weight).to(torch.float32)) + mag_norm_scale * \
-            self.lora_b_(self.lora_a_(data.to(torch.float32))) * self.scaling_
+        result_dora = (mag_norm_scale - 1) * residual.to(torch.float32) + \
+            mag_norm_scale * hidden_states
         return result_dora
 
-    def forward(self, data: torch.Tensor):
-        result_dtype = data.dtype
+    def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor):
+        result = self.lora_b_(self.lora_a_(self.dropout_(
+            hidden_states.to(torch.float32)))) * self.scaling_
         if self.use_dora_:
-            result = self._apply_dora(self.dropout_(data))
+            return residual + self._apply_dora(residual, result)
         else:
-            result = self.lora_b_(
-                self.lora_a_(self.dropout_(data.to(torch.float32)))) * self.scaling_
-        return result.to(result_dtype)
+            return residual + result
 
 
 class Linear(nn.Module):
@@ -125,10 +122,10 @@ class Linear(nn.Module):
 
         self.loras_[adapter_name].reset_parameters(lora_tensor)
 
-    def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
-        # data shape is: batch_size * max_seq_len * dim
-        # result = data @ self.weight_.transpose(0, 1)
-        result = self.base_layer_.forward(data)
+    def forward(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+        # hidden_states shape is: batch_size * max_seq_len * dim
+        # result = hidden_states @ self.weight_.transpose(0, 1)
+        result = self.base_layer_.forward(hidden_states)
 
         if len(self.loras_) == 0:
             return result
@@ -141,7 +138,7 @@ class Linear(nn.Module):
             if adapter_name == "" or adapter_name not in self.loras_:
                 continue
 
-            result[start_idx: end_idx] += self.loras_[
-                adapter_name].forward(data[start_idx:end_idx])
+            result[start_idx: end_idx] = self.loras_[adapter_name].forward(
+                result[start_idx: end_idx], hidden_states[start_idx:end_idx])
 
         return result
