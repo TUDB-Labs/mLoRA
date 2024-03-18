@@ -75,12 +75,14 @@ class LoraConfig:
     task_type_: str = "casual"
     device_: str = "cuda:0"
     dtype_: torch.dtype = None
+    use_dora_: bool = False
     lora_r_: int = None
     lora_alpha_: int = None
     lora_dropout_: float = None
     target_modules_: Dict[str, bool] = None
 
     def check(self) -> "LoraConfig":
+        assert isinstance(self.use_dora_, bool)
         assert isinstance(self.lora_r_, int) and self.lora_r_ > 0
         assert isinstance(self.lora_alpha_, int) and self.lora_alpha_ > 0
         assert isinstance(self.lora_dropout_,
@@ -93,6 +95,7 @@ class LoraConfig:
         return self
 
     def from_config(self, config: Dict[str, any]) -> "LoraConfig":
+        self.use_dora_ = config.get("use_dora", False)
         self.lora_r_ = config["r"]
         self.lora_alpha_ = config["lora_alpha"]
         self.lora_dropout_ = config["lora_dropout"]
@@ -121,6 +124,8 @@ class LoraConfig:
 
     def export(self) -> Dict[str, any]:
         config = {}
+        if self.use_dora_:
+            config["use_dora"] = True
         config["bias"] = "none"
         config["peft_type"] = "LORA"
         config["task_type"] = "CAUSAL_LM"

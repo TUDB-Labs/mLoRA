@@ -638,17 +638,17 @@ class LlamaModel(LLMModel):
                 for lora_layer in lora_layer_list:
                     if adapter_name in lora_layer:
                         train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_a_)
+                            lora_layer[adapter_name].lora_a_.weight)
                         train_paramas[adapter_name].append(
-                            lora_layer[adapter_name].lora_b_)
+                            lora_layer[adapter_name].lora_b_.weight)
                     elif adapter_name in transformer_layer.ffn_.moes_:
                         for expert_idx in range(lora_config.num_experts_):
                             lora_name = f"moe.{adapter_name}.experts.{expert_idx}"
                             if lora_name in lora_layer:
                                 train_paramas[adapter_name].append(
-                                    lora_layer[lora_name].lora_a_)
+                                    lora_layer[lora_name].lora_a_.weight)
                                 train_paramas[adapter_name].append(
-                                    lora_layer[lora_name].lora_b_)
+                                    lora_layer[lora_name].lora_b_.weight)
 
         return train_paramas
 
@@ -676,10 +676,11 @@ class LlamaModel(LLMModel):
                 "q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
             for idx, lora_layer in enumerate(lora_layer_list):
                 if lora_name in lora_layer.loras_:
-                    lora_weight_dict[layer_prefix_name +
-                                     f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_
-                    lora_weight_dict[layer_prefix_name +
-                                     f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_
+                    prefix_name = layer_prefix_name + lora_layer_name_list[idx]
+                    lora_weight_dict[f"{prefix_name}.lora_A.weight"] = lora_layer.loras_[
+                        lora_name].lora_a_.weight
+                    lora_weight_dict[f"{prefix_name}.lora_B.weight"] = lora_layer.loras_[
+                        lora_name].lora_b_.weight
                 elif lora_name in transformer_layer.ffn_.moes_:
                     moe_layer_prefix_name = f"mixlora.layers.{transformer_layer.layer_id_}."
                     for expert_idx in range(transformer_layer.ffn_.moes_[lora_name].experts_):
@@ -689,12 +690,12 @@ class LlamaModel(LLMModel):
                                 moe_layer_prefix_name
                                 + f"experts.{expert_idx}."
                                 + f"{lora_layer_name_list[idx]}.lora_A.weight"
-                            ] = lora_layer.loras_[moe_lora_name].lora_a_
+                            ] = lora_layer.loras_[moe_lora_name].lora_a_.weight
                             lora_weight_dict[
                                 moe_layer_prefix_name
                                 + f"experts.{expert_idx}."
                                 + f"{lora_layer_name_list[idx]}.lora_B.weight"
-                            ] = lora_layer.loras_[moe_lora_name].lora_b_
+                            ] = lora_layer.loras_[moe_lora_name].lora_b_.weight
 
                     lora_weight_dict[
                         moe_layer_prefix_name + "gate.weight"
