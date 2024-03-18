@@ -676,10 +676,11 @@ class LlamaModel(LLMModel):
                 "q_proj", "k_proj", "v_proj", "o_proj", "w1_proj", "w2_proj", "w3_proj"]
             for idx, lora_layer in enumerate(lora_layer_list):
                 if lora_name in lora_layer.loras_:
-                    lora_weight_dict[layer_prefix_name +
-                                     f"{lora_layer_name_list[idx]}.lora_A.weight"] = lora_layer.loras_[lora_name].lora_a_.weight
-                    lora_weight_dict[layer_prefix_name +
-                                     f"{lora_layer_name_list[idx]}.lora_B.weight"] = lora_layer.loras_[lora_name].lora_b_.weight
+                    prefix_name = layer_prefix_name + lora_layer_name_list[idx]
+                    lora_weight_dict[f"{prefix_name}.lora_A.weight"] = lora_layer.loras_[
+                        lora_name].lora_a_.weight
+                    lora_weight_dict[f"{prefix_name}.lora_B.weight"] = lora_layer.loras_[
+                        lora_name].lora_b_.weight
                 elif lora_name in transformer_layer.ffn_.moes_:
                     moe_layer_prefix_name = f"mixlora.layers.{transformer_layer.layer_id_}."
                     for expert_idx in range(transformer_layer.ffn_.moes_[lora_name].experts_):
