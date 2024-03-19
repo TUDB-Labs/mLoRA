@@ -14,7 +14,7 @@ import xformers.ops
 import xformers.ops.fmha.attn_bias
 
 from transformers import AutoModelForCausalLM, AutoConfig
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Set
 from collections import OrderedDict
 
 
@@ -180,6 +180,22 @@ class Transformer(torch.nn.Module):
         data = data + self.w2_.forward(F.silu(w1) * w3, input_args)
 
         return data
+
+    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], Set[str]]:
+        lora_weight_dict = {}
+        target_modules = set([])
+
+        for name, module in self.linear_layer_name_to_module_dict.items():
+            loras: Dict[str, Lora] = module.loras_
+            if lora_name not in loras:
+                continue
+            if name not in target_modules:
+                target_modules.add(name)
+            lora: Lora = loras[lora_name]
+            lora_weight_dict[self.lora_layer_name(name, is_lora_a=True)] = lora.lora_a_
+            lora_weight_dict[self.lora_layer_name(name, is_lora_b=True)] = lora.lora_b_
+
+        return lora_weight_dict, target_modules
 
 
 LlamaSequentialModuleIO = Tuple[torch.Tensor,                         # the input batch tokens

@@ -30,7 +30,7 @@ def trans_to_safetensor(path: str):
     with open(safetensors_json_path, "w") as f:
         f.write(json.dumps(json_data, indent=2))
     print(f"save safetensors index to {safetensors_json_path} done")
-    
+
     # for loading transformer model
     metadata = {"format": "pt"}
 

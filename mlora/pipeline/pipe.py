@@ -11,6 +11,8 @@ from mlora.config import MLoRAConfig
 import torch
 import uuid
 import logging
+import os
+import json
 
 from enum import Enum, auto
 from typing import Dict, List
@@ -77,7 +79,7 @@ class Pipe():
 
         self.config_ = config
         self.dispatcher_ = dispatcher
-        self.save_step = save_step
+        self.save_step = config.trainer_config_.save_step_
 
         # need the config value, so must in the last stage to init
         self.init_partition(model)
@@ -135,21 +137,6 @@ class Pipe():
                 [self.forward_cnt_], dtype=torch.long, device="cpu", requires_grad=False)
             assert self.is_stop_signal(data)
             logging.info("Forward done be signaled.")
-        # try:
-        #     train_input = next(self.data_dispatcher_)
-        #     tokens = torch.tensor(train_input.batch_tokens_,
-        #                           dtype=torch.int64,
-        #                           device=self.device_)
-        #     data = self.forward(tokens, train_input)
-        #     self.forward_cnt_ += 1
-        # except StopIteration:
-        #     # stop
-        #     self.input_stop_ = True
-        #     train_input = None
-        #     data = torch.tensor(
-        #         [self.forward_cnt_], dtype=torch.long, device="cpu", requires_grad=False)
-        #     assert self.is_stop_signal(data)
-        #     logging.info("Forward done be signaled.")
 
         self.default_stream_.poll()
         self.send_next_worker(data, train_input)
@@ -174,7 +161,6 @@ class Pipe():
         self.trainer_step(message.batch_data_.lora_batch_data_config_)
 
         del self.backward_cache_[msg_id]
-
 
     def process_forward(self):
         assert self.role_ != WorkerRole.HEAD
@@ -223,10 +209,8 @@ class Pipe():
                 end_idx = lora_config.batch_end_idx_
                 adapter_name = lora_config.adapter_name_
                 vocab_size = data.shape[-1]
-                loss_input = data[start_idx:end_idx][..., :-1,
-                                                       :].contiguous().view(-1, vocab_size)
-                loss_target = labels[start_idx:end_idx][...,
-                                                        1:].contiguous().view(-1).to(loss_input.device)
+                loss_input = data[start_idx:end_idx][..., :-1, :].contiguous().view(-1, vocab_size)
+                loss_target = labels[start_idx:end_idx][..., 1:].contiguous().view(-1).to(loss_input.device)
                 loss = self.trainer_context_[
                     adapter_name].loss_fn_(loss_input, loss_target)
                 logging.info(f"    adpter: {adapter_name} loss: {loss}")
@@ -236,9 +220,8 @@ class Pipe():
                     total_loss += loss
 
             total_loss.backward()
-            
-            self.trainer_step(lora_configs)
 
+            self.trainer_step(lora_configs)
 
     def trainer_step(self, lora_configs: List[LoraBatchDataConfig]):
         for lora_config in lora_configs:
@@ -251,11 +234,33 @@ class Pipe():
             if self.role_ == WorkerRole.HEAD:
                 self.dispatcher_.activate_adapter(adapter_name)
 
-
     def save_lora_model(self, adapter_name: str, dir_suffix: str = ""):
-        # TODO: support save the pipeline model
-        pass
+        # create saved dir
+        lora_output_dir = adapter_name
+        if dir_suffix != "":
+            lora_output_dir += os.sep + adapter_name + "_" + dir_suffix
+        if not os.path.exists(lora_output_dir):
+            os.makedirs(lora_output_dir)
 
+        # get lora weights
+        lora_weights = {}
+        target_modules = set([])
+        for layer_model in self.model_partition_:
+            wrapper_module = layer_model.wrapper_module_
+            if hasattr(wrapper_module, 'get_lora_weight_dict'):
+                lora_weight, target_module = wrapper_module.get_lora_weight_dict(adapter_name)
+                lora_weights.update(lora_weight)
+                target_modules.update(target_module)
+
+        saved_path = lora_output_dir + os.sep + f"adapter_model_{self.rank_}.bin"
+        logging.info(f'save {adapter_name} to {saved_path}')
+        torch.save(lora_weights, saved_path)
+
+        # save json only on tail worker
+        if self.role_ == WorkerRole.TAIL:
+            context = self.trainer_context_[adapter_name]
+            with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
+                json.dump(context.export_config(), f, indent=4)
 
     def send_next_worker(self,
                          tensor_data: torch.Tensor,
@@ -281,7 +286,8 @@ class Pipe():
         balance = self.balance_[self.rank_]
         start_module_idx = sum(self.balance_[:self.rank_])
         logging.info(
-            f"RANK-{self.rank_} in device {self.device_} to load module layers from {start_module_idx} to {start_module_idx + balance}.")
+            f"RANK-{self.rank_} in device {self.device_} to load module layers "
+            f"from {start_module_idx} to {start_module_idx + balance}.")
 
         seq_model = model.sequential_module()
         del seq_model[:start_module_idx]
@@ -294,14 +300,13 @@ class Pipe():
         self.n_heads_ = model.n_heads_
         worker_train_paramas: Dict[str,
                                    List[torch.Tensor]] = model.get_train_paramas()
-        logging.info(self.config_)
+
         for lora_config in self.config_.lora_configs_:
             context = TrainerContext(
                 lora_config, worker_train_paramas[lora_config.adapter_name_])
             self.trainer_context_[context.adapter_name_] = context
 
         del model
-
         torch.cuda.empty_cache()
 
     def forward(self,
