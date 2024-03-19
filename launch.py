@@ -67,6 +67,7 @@ def gen_config(template_name: str,
                micro_batch_size: int = 4,
                test_batch_size: int = 16,
                num_epochs: int = 2,
+               use_dora: bool = False,
                group_by_length: bool = False):
     import mlora
     template_name = f"{work_path}{os.sep}{file_path}{os.sep}{template_name}.json"
@@ -95,6 +96,7 @@ def gen_config(template_name: str,
             lora_config["micro_batch_size"] = micro_batch_size
             lora_config["test_batch_size"] = test_batch_size
             lora_config["num_epochs"] = num_epochs
+            lora_config["use_dora"] = use_dora
             lora_config["group_by_length"] = group_by_length
             template_obj["lora"].append(lora_config)
             index += 1
