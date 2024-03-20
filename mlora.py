@@ -225,7 +225,9 @@ if __name__ == "__main__":
         inference(model, tokenizer, adapters)
     elif args.evaluate:
         mlora.evaluate(model, tokenizer, adapters,
-                       config["train_lora_simultaneously_num"], config["cutoff_len"])
+                       config["train_lora_simultaneously_num"],
+                       config["cutoff_len"],
+                       config.get("evaluate_result", None))
     else:
         mlora.train(mlora.Dispatcher(config, tokenizer), model,
                     adapters, args.dir, config["save_step"])

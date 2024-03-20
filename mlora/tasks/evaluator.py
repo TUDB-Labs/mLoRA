@@ -6,11 +6,13 @@ from mlora.model import LLMModel
 
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict
 
 import logging
 import torch
 import math
+import json
+import time
 
 
 @dataclass
@@ -101,7 +103,9 @@ def evaluate(model: LLMModel,
              tokenizer: Tokenizer,
              configs: List[EvaluateConfig],
              concurrent_jobs: int = 2,
-             max_seq_len: int = 512):
+             max_seq_len: int = 512,
+             save_file: str = None) -> Dict:
+
     max_iterations = 0
     for config in configs:
         config.prepare(tokenizer)
@@ -145,8 +149,24 @@ def evaluate(model: LLMModel,
             logging.info(
                 f"    step: {config.batch_start_idx_}/{len(config.data_)}")
 
+    results = []
     for config in configs:
+        result = {
+            "adapter_name": config.adapter_name_,
+            "task_name": config.task_name_,
+            "date_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            "metrics": {}
+        }
         logging.info(f"{config.adapter_name_} evaluate result:")
-        result = config.metric_.compute()
-        for name, value in result.items():
+        compute_results = config.metric_.compute()
+        result["metrics"] = compute_results
+        results.append(result)
+        for name, value in compute_results.items():
             logging.info(f"    {name} = {value}")
+
+    if save_file is not None:
+        with open(save_file, "w") as f:
+            json.dump(results, f, indent=4)
+        logging.info(f"saving evaluation result to {save_file}")
+
+    return results
