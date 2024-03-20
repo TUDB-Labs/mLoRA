@@ -63,6 +63,9 @@ parser.add_argument('--rank', type=int, default=-1,
                     help="The device's rank number")
 parser.add_argument('--balance', type=int, nargs="+",
                     help="The model's balance")
+# the argument about the trace mode
+parser.add_argument('--trace', action="store_true",
+                    help="enbale the trace mode.")
 
 
 args = parser.parse_args()
@@ -86,6 +89,10 @@ if __name__ == "__main__":
     mlora.setup_seed(args.seed)
     mlora.setup_logging(args.log_level, args.log_file)
     mlora.setup_cuda_check()
+
+    # enable the trace mode
+    if args.trace:
+        mlora.setup_trace_mode()
 
     # load part of model to device
     partial_model_to_device = None

@@ -5,7 +5,7 @@ from mlora.pipeline.function import RecvOperator, SendOperator
 from mlora.model.model import LLMModel, precompute_mask
 from mlora.model.modelargs import LoraBatchDataConfig, MultiLoraBatchData
 from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
-from mlora.trainer.trainer import MutiTrainerContext
+from mlora.trainer.trainer import MultiTrainerContext
 from mlora.config import MLoRAConfig
 
 import torch
@@ -43,7 +43,7 @@ class Pipe():
 
     config_: MLoRAConfig = None
 
-    multi_trainer_context_: MutiTrainerContext = None
+    multi_trainer_context_: MultiTrainerContext = None
 
     def is_stop_signal(self, data: torch.tensor) -> bool:
         return data.dtype == torch.long and torch.numel(data) == 1
@@ -287,7 +287,7 @@ class Pipe():
         worker_train_paramas: Dict[str,
                                    List[torch.Tensor]] = model.get_train_paramas()
 
-        self.multi_trainer_context_ = MutiTrainerContext(
+        self.multi_trainer_context_ = MultiTrainerContext(
             self.config_, worker_train_paramas)
 
         del model

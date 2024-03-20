@@ -1,5 +1,6 @@
 from mlora.model.modelargs import MultiLoraBatchData
 from mlora.config import LoraConfig
+from mlora.profiler.profiler import set_backward_tracepoint, nvtx_range
 
 import math
 import torch
@@ -9,8 +10,10 @@ import bitsandbytes
 from typing import Dict, Optional, Tuple
 
 
-class Lora():
+class Lora(torch.nn.Module):
     def __init__(self, adapter_name: str):
+        super().__init__()
+
         self.adapter_name_: str = adapter_name
 
         self.lora_a_: torch.Tensor = None
@@ -28,16 +31,38 @@ class Lora():
         self.scaling_ = alpha / r
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        data_ = F.dropout(data, self.dropout_)
-        data_ @= self.lora_a_.transpose(0, 1)
-        data_ @= self.lora_b_.transpose(0, 1)
-        data_ *= self.scaling_
+        with nvtx_range(f"f_dropout_{self.adapter_name_}"):
+            data_ = F.dropout(data, self.dropout_)
+        set_backward_tracepoint(
+            data_.grad_fn, f"b_dropout_{self.adapter_name_}")
+
+        lora_a_t = self.lora_a_.transpose(0, 1)
+        set_backward_tracepoint(
+            lora_a_t.grad_fn, f"b_lora_a_T_{self.adapter_name_}")
+        lora_b_t = self.lora_b_.transpose(0, 1)
+        set_backward_tracepoint(
+            lora_b_t.grad_fn, f"b_lora_b_T_{self.adapter_name_}")
+
+        with nvtx_range(f"f_lora_a_{self.adapter_name_}"):
+            data_ = data_ @ lora_a_t
+        set_backward_tracepoint(data_.grad_fn, "b_lora_a")
+
+        with nvtx_range(f"f_lora_b_{self.adapter_name_}"):
+            data_ = data_ @ lora_b_t
+        set_backward_tracepoint(data_.grad_fn, "b_lora_b")
+
+        with nvtx_range(f"f_scaling_{self.adapter_name_}"):
+            data_ = data_ * self.scaling_
+        set_backward_tracepoint(data_.grad_fn, "b_scaling")
+
         return data_
 
 
-class Linear():
-    # the weight just wrapper the module from LlamaForCausalLM
+class Linear(torch.nn.Module):
     def __init__(self, weight: torch.nn.Module):
+        # the weight just wrapper the module from LlamaForCausalLM
+        super().__init__()
+
         if not isinstance(weight, torch.nn.Linear):
             assert isinstance(weight, bitsandbytes.nn.Linear8bitLt) or isinstance(
                 weight, bitsandbytes.nn.Linear4bit), f"error type - {type(weight)}."
@@ -103,7 +128,9 @@ class Linear():
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
         # data shape is: batch_size * max_seq_len * dim
         # result = data @ self.weight_.transpose(0, 1)
-        result = self.weight_.forward(data)
+        with nvtx_range("f_linear"):
+            result = self.weight_.forward(data)
+        set_backward_tracepoint(result.grad_fn, "b_linear")
 
         if not self.enable_lora_:
             return result
@@ -116,7 +143,20 @@ class Linear():
             if adapter_name == "" or adapter_name not in self.loras_:
                 continue
 
-            result[start_idx: end_idx] += self.loras_[
-                adapter_name].forward(data[start_idx:end_idx])
+            with nvtx_range(f"f_lora_split_({adapter_name})"):
+                lora_data = data[start_idx:end_idx]
+            set_backward_tracepoint(
+                lora_data.grad_fn, f"b_lora_split_({adapter_name})")
 
+            # backward_tracepoint inside the forward function
+            lora_delta = self.loras_[adapter_name].forward(lora_data)
+
+            lora_range = torch.arange(
+                start_idx, end_idx, step=1, device=lora_delta.device)
+            with nvtx_range(f"f_lora_add_({adapter_name})"):
+                result.index_add_(dim=0, index=lora_range, source=lora_delta)
+            set_backward_tracepoint(
+                result.grad_fn, f"b_lora_add_({adapter_name})")
+
+        set_backward_tracepoint(result.grad_fn, "b_lora")
         return result
