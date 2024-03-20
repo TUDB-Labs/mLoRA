@@ -138,6 +138,7 @@ def show_help():
     print("    --micro_batch_size [4]")
     print("    --test_batch_size  [16]")
     print("    --num_epochs       [2]")
+    print("    --use_dora         [false]")
     print("    --group_by_length  [false]")
     print("")
     print("Arguments of run, train and evaluate:")
