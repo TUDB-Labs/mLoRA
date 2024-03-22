@@ -114,23 +114,19 @@ class OpenBookQA(QuestionAnswerTask):
 
 class PIQA(QuestionAnswerTask):
     def __init__(self) -> None:
-        super().__init__(["a", "b"])
+        super().__init__(["A", "B"])
 
     def loading_data(self,
                      tokenizer: Tokenizer,
                      is_train: bool = True) -> List[DataClass]:
         data = hf_datasets.load_dataset(
-            "piqa")["train" if is_train else "test"]
+            "piqa")["train" if is_train else "validation"]
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
-            prompt = "Below is an instruction that describes a task. "
-            prompt += "Write a response that appropriately completes the request."
-            prompt += "\n\n### Instruction:\n"
-            prompt += f"Please choose the correct solution to the question: {data_point['goal']}"
-            prompt += f"\n\na. {data_point['sol1']}\n\nb. {data_point['sol2']}"
-            prompt += "\n\nAnswer format: a/b"
-            prompt += "\n\n### Response:\n"
-            prompt += "The correct answer is "
+            prompt = "Below is a common task along with two possible solutions labeled (A) and (B)."
+            prompt += f" Please select the appropriate solution to achieve the task:\n{data_point['goal']}\n"
+            prompt += f"\n(A) {data_point['sol1']}\n(B) {data_point['sol2']}\n"
+            prompt += "\nCorrect solution:"
             answer = self.labels_[data_point["label"]]
             if is_train:
                 prompt += answer
