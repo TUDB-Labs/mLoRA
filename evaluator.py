@@ -1,16 +1,16 @@
 import mlora
 import torch
+import json
 import fire
 
 
 def main(base_model: str,
-         instruction: str,
-         input: str = None,
-         template: str = None,
+         task_name: str,
          lora_weights: str = None,
          load_16bit: bool = True,
          load_8bit: bool = False,
          load_4bit: bool = False,
+         save_file: str = None,
          device: str = "cuda:0"):
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
@@ -20,18 +20,14 @@ def main(base_model: str,
     tokenizer = mlora.Tokenizer(base_model)
     adapter_name = model.load_adapter_weight(
         lora_weights if lora_weights else "default")
-    generate_paramas = mlora.GenerateConfig(
+    evaluate_paramas = mlora.EvaluateConfig(
         adapter_name_=adapter_name,
-        prompt_template_=template,
-        prompts_=[(instruction, input)])
+        task_name_=task_name)
 
-    output = mlora.generate(model, tokenizer, [generate_paramas],
-                            temperature=0.5, top_p=0.9, max_gen_len=128)
+    output = mlora.evaluate(
+        model, tokenizer, [evaluate_paramas], save_file=save_file)
 
-    for prompt in output[adapter_name]:
-        print(f"\n{'='*10}\n")
-        print(prompt)
-        print(f"\n{'='*10}\n")
+    print(json.dumps(output, indent=4))
 
 
 if __name__ == "__main__":
