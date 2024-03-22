@@ -129,7 +129,7 @@ class PIQA(QuestionAnswerTask):
             prompt += "\nCorrect solution:"
             answer = self.labels_[data_point["label"]]
             if is_train:
-                prompt += answer
+                prompt += f" {answer}"
                 labels = None
             else:
                 labels = [data_point["label"]]
