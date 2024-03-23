@@ -1,6 +1,6 @@
 from mlora.model.model import LLMModel
 from mlora.dispatcher.dispatcher import Dispatcher
-from mlora.config import LoraConfig, OptimConfig
+from mlora.config import LoraConfig, OptimConfig, TrainerConfig
 
 import os
 import json
@@ -16,9 +16,11 @@ class TrainerContext:
     accumulation_step_: int = -1
     step_cnt_: int = -1
     optimizer_: torch.optim.Optimizer = None
+    save_step_: int = 1000
 
     def __init__(self,
                  lora_config: LoraConfig,
+                 tainer_config: TrainerConfig,
                  trainable_params: torch.Tensor):
         self.adapter_name_ = lora_config.adapter_name_
 
@@ -30,6 +32,7 @@ class TrainerContext:
             raise f"error batch_size {self.batch_size_} and micro batch size {self.micro_batch_size_}"
         self.accumulation_step_ = self.batch_size_ / self.micro_batch_size_
         self.step_cnt_ = 0
+        self.save_step_ = tainer_config.save_step_
 
         self.setup_optimizer(lora_config.optim_config_, trainable_params)
 
@@ -79,6 +82,9 @@ class TrainerContext:
             "target_modules": [key for key in self.target_modules_ if self.target_modules_[key]]
         }
 
+    def is_save_step(self) -> bool:
+        return self.step_cnt_ % self.save_step_ == 0
+
 
 class Trainer:
     model_: LLMModel = None
@@ -94,7 +100,9 @@ class Trainer:
         all_trainable_params = self.model_.get_train_paramas()
         for lora_config in lora_configs:
             context = TrainerContext(
-                lora_config, all_trainable_params[lora_config.adapter_name_])
+                lora_config,
+                self.config_.trainer_config_,
+                all_trainable_params[lora_config.adapter_name_])
             context.name_or_path_ = self.model_.name_or_path_
             self.trainer_context_[context.adapter_name_] = context
 
@@ -126,7 +134,7 @@ class Trainer:
                 adapter_name = lora_config.adapter_name_
                 self.trainer_context_[adapter_name].step()
                 adapter_step = self.trainer_context_[adapter_name].step_cnt_
-                if adapter_step % save_step == 0:
+                if self.trainer_context_[adapter_name].is_save_step():
                     self.save_lora_model(adapter_name, f"{adapter_step}")
 
         # flush the grad

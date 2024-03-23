@@ -53,5 +53,6 @@ if __name__ == "__main__":
 
     if check_safetensor_support(model_path):
         print("this model already support safetensors")
-    else:
-        trans_to_safetensor(model_path)
+        exit(0)
+
+    trans_to_safetensor(model_path)

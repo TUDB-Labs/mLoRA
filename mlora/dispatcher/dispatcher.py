@@ -7,9 +7,10 @@ import math
 import json
 import random
 import datasets
+import logging
 
 from dataclasses import dataclass
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Callable
 from collections.abc import Iterable
 
 
@@ -222,7 +223,9 @@ class Dispatcher:
     # the number of simultaneously train lora model
     train_lora_simultaneously_num_: int = 0
 
-    strategy_: str = ""
+    strategy_func_type_ = Callable[[], Dict[str, List[TrainData]]]
+    _strategy_func_: strategy_func_type_ = None
+    strategy_dict_: Dict[str, strategy_func_type_] = {}
 
     def __init__(self,
                  config: MLoRAConfig,
@@ -236,12 +239,25 @@ class Dispatcher:
 
         self.train_lora_candidate_num_ = config.trainer_config_.train_lora_candidate_num_
         self.train_lora_simultaneously_num_ = config.trainer_config_.train_lora_simultaneously_num_
-        self.strategy_ = config.trainer_config_.train_strategy_
+
+        self.rigister_strategies()
+        strategy = config.trainer_config_.train_strategy_
+        if strategy not in self.strategy_dict_:
+            raise f"Unsupported strategy"
+        self._strategy_func_ = self.strategy_dict_[strategy]
 
         # create ready task
         for lora_config in config.lora_configs_:
             self.ready_train_task_.append(
                 TrainTask(self.tokenizer_, lora_config))
+
+    def rigister_strategies(self):
+        self.rigister_strategy("none", self.pipe_dispatch_strategy)
+        self.rigister_strategy("optim", self.optim_dispatch_strategy)
+
+    def rigister_strategy(self, strategy_name: str, strategy_func: strategy_func_type_):
+        self.strategy_dict_[strategy_name] = strategy_func
+        logging.info(f'register strategy: {strategy_name}')
 
     def optim_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
         task_len = {}
@@ -272,7 +288,7 @@ class Dispatcher:
 
         return ret_train_data
 
-    def none_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
+    def pipe_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
         ret_train_data = {}
         cnt = 0
         for task in self.running_train_task_:
@@ -320,6 +336,19 @@ class Dispatcher:
             task for task in self.running_train_task_ if not task.is_train_done()]
         self.done_train_task_.extend(done_task)
 
+    def __padding_data(self,
+                       tokens: List[int],
+                       pad_side: str,
+                       pad_id: int,
+                       batch_seq_len: int) -> List[int]:
+        assert pad_side == "right" or pad_side == "left"
+        while len(tokens) < batch_seq_len:
+            if pad_side == "right":
+                tokens.append(pad_id)
+            else:
+                tokens.insert(0, pad_id)
+        return tokens
+
     def get_test_data(self) -> MultiLoraBatchData:
         pass
 
@@ -327,22 +356,16 @@ class Dispatcher:
         self.__dispatch_task_in()
 
         # get task train data
-        all_train_data: Dict[str, List[TrainData]] = {}
-        if self.strategy_ == "none":
-            all_train_data = self.none_dispatch_strategy()
-        elif self.strategy_ == "optim":
-            all_train_data = self.optim_dispatch_strategy()
-        else:
-            raise "unkown strategy"
+        raw_train_data = self._strategy_func_()
 
         # for pipeline
-        if not all_train_data:
+        if not raw_train_data:
             return None
 
         batch_seq_len: int = -1
         # to align batch token data
-        for adapter in all_train_data:
-            for data in all_train_data[adapter]:
+        for adapter in raw_train_data:
+            for data in raw_train_data[adapter]:
                 batch_seq_len = max(batch_seq_len, len(data.tokens_))
 
         # all prompts and tokens / config
@@ -353,10 +376,10 @@ class Dispatcher:
 
         # batch the all adapter data
         adapter_start_idx: int = 0
-        for adapter in all_train_data:
+        for adapter in raw_train_data:
             adapter_end_idx: int = adapter_start_idx + \
-                len(all_train_data[adapter])
-            for data in all_train_data[adapter]:
+                len(raw_train_data[adapter])
+            for data in raw_train_data[adapter]:
                 tokens: Tokens = data.tokens_.copy()
                 # get the pad token from lora config
                 lora_config = None
@@ -364,13 +387,8 @@ class Dispatcher:
                     if ilora_conf.adapter_name_ == adapter:
                         lora_config = ilora_conf
                 pad_side = lora_config.expand_side_
-                assert pad_side == "right" or pad_side == "left"
                 # pad the tokens to align
-                while len(tokens) < batch_seq_len:
-                    if pad_side == "right":
-                        tokens.append(self.tokenizer_.pad_id_)
-                    else:
-                        tokens.insert(0, self.tokenizer_.pad_id_)
+                tokens = self.__padding_data(tokens, pad_side, self.tokenizer_.pad_id_, batch_seq_len)
                 batch_tokens.append(tokens)
                 additional_mask.append(self.tokenizer_.mask_from(tokens))
 

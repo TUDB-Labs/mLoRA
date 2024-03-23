@@ -42,9 +42,7 @@ class Pipe():
 
     config_: MLoRAConfig = None
 
-    loss_fn_: torch.nn.Module = torch.nn.CrossEntropyLoss()
     trainer_context_: Dict[str, TrainerContext] = {}
-    save_step: int = 1000
 
     def is_stop_signal(self, data: torch.tensor) -> bool:
         return data.dtype == torch.long and torch.numel(data) == 1
@@ -55,8 +53,7 @@ class Pipe():
                  dispatcher: PipelineDispatcher,
                  device: torch.device,
                  rank: int,
-                 balance: List[int],
-                 save_step: int = 1000) -> None:
+                 balance: List[int]) -> None:
         self.world_size_ = torch.cuda.device_count()
         assert self.world_size_ == len(balance)
 
@@ -79,7 +76,6 @@ class Pipe():
 
         self.config_ = config
         self.dispatcher_ = dispatcher
-        self.save_step = config.trainer_config_.save_step_
 
         # need the config value, so must in the last stage to init
         self.init_partition(model)
@@ -105,6 +101,10 @@ class Pipe():
                 break
 
         logging.info("Pipe done and to stop.")
+
+        logging.info("Save all model...")
+        self.save_all_model()
+
         # clear the pipeline resource
         self.stop()
 
@@ -228,13 +228,17 @@ class Pipe():
             adapter_name = lora_config.adapter_name_
             self.trainer_context_[adapter_name].step()
             adapter_step = self.trainer_context_[adapter_name].step_cnt_
-            logging.info(f"    adpter: {adapter_name} step: {adapter_step}")
-            if adapter_step % self.save_step == 0:
-                self.save_lora_model(adapter_name, f"{adapter_step}")
+            logging.debug(f"    adpter: {adapter_name} step: {adapter_step}")
+            if self.trainer_context_[adapter_name].is_save_step():
+                self.save_model(adapter_name, f"{adapter_step}")
             if self.role_ == WorkerRole.HEAD:
                 self.dispatcher_.activate_adapter(adapter_name)
 
-    def save_lora_model(self, adapter_name: str, dir_suffix: str = ""):
+    def save_all_model(self):
+        for self.trainer_context_ in self.trainer_context_.values():
+            self.save_model(self.trainer_context_.adapter_name_, "final")
+
+    def save_model(self, adapter_name: str, dir_suffix: str = ""):
         # create saved dir
         lora_output_dir = adapter_name
         if dir_suffix != "":
@@ -303,7 +307,9 @@ class Pipe():
 
         for lora_config in self.config_.lora_configs_:
             context = TrainerContext(
-                lora_config, worker_train_paramas[lora_config.adapter_name_])
+                lora_config,
+                self.config_.trainer_config_,
+                worker_train_paramas[lora_config.adapter_name_])
             self.trainer_context_[context.adapter_name_] = context
 
         del model

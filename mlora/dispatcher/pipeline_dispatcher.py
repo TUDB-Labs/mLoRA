@@ -26,7 +26,10 @@ class PipelineDispatcher(Dispatcher):
             return self._adapter_lock_[adapter_name]
         return True
 
-    def none_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
+    def rigister_strategies(self):
+        self.rigister_strategy("pipe", self.pipe_dispatch_strategy)
+
+    def pipe_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
         ret_train_data = {}
         cnt = 0
         for task in self.running_train_task_:
@@ -43,6 +46,3 @@ class PipelineDispatcher(Dispatcher):
         time.sleep(1 / 100000)
         return ret_train_data
 
-    def optim_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
-        # TODO: implement the optim_dispatch_strategy
-        return self.none_dispatch_strategy()

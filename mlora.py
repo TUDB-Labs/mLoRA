@@ -20,6 +20,9 @@ import mlora
 import argparse
 import logging
 
+from typing import Any
+
+
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
 parser.add_argument('--base_model', type=str, required=True,
@@ -72,6 +75,10 @@ def train(config: mlora.MLoRAConfig, llm_model: mlora.LLMModel, dispatcher: mlor
     trainer = mlora.Trainer(llm_model, dispatcher, config.lora_configs_)
     trainer.train()
 
+def get_dispatcher_cls(args: Any) -> type[mlora.Dispatcher]:
+    if args.pipeline:
+        return mlora.PipelineDispatcher 
+    return mlora.Dispatcher
 
 # Main Function
 if __name__ == "__main__":
@@ -81,7 +88,6 @@ if __name__ == "__main__":
     mlora.setup_cuda_check()
 
     # load part of model to device
-    device = args.device
     partial_model_to_device = None
     if args.pipeline:
         assert args.rank != -1
@@ -91,11 +97,10 @@ if __name__ == "__main__":
 
         partial_model_to_device = [
             index + sum(args.balance[:args.rank])for index in range(0, args.balance[args.rank])]
-        device = f"cuda:{args.rank}"
 
     tokenizer, model = mlora.load_base_model(args.base_model,
                                              args.model_type,
-                                             device,
+                                             args.device,
                                              args.load_4bit,
                                              args.load_8bit,
                                              partial_model_to_device)
@@ -105,14 +110,14 @@ if __name__ == "__main__":
         config = mlora.MLoRAConfig(args.config)
         mlora.init_lora_model(model, config.lora_configs_)
 
-    dispatcher_ctx = mlora.PipelineDispatcher if args.pipeline else mlora.Dispatcher
-    dispatcher = dispatcher_ctx(config, tokenizer)
+    dispatcher_cls = get_dispatcher_cls(args)
+    dispatcher = dispatcher_cls(config, tokenizer)
 
     if args.pipeline:
         pipe = mlora.Pipe(model,
                           config,
                           dispatcher,
-                          device,
+                          args.device,
                           args.rank,
                           args.balance)
         exit(pipe.run())
