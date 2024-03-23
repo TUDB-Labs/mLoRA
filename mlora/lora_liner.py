@@ -39,7 +39,14 @@ class Lora(nn.Module):
         self.use_dora_: bool = config.use_dora_
         self.magnitude_vector_: nn.Parameter = None
 
-    def reset_parameters(self, lora_tensor=(None, None)):
+    def _get_weight_norm(self) -> torch.Tensor:
+        # calculate L2 norm of weight matrix, column-wise
+        lora_weight = self.lora_b_.weight @ self.lora_a_.weight
+        weight = self.base_layer_.weight + self.scaling_ * lora_weight
+        weight_norm = torch.linalg.norm(weight, dim=1, dtype=torch.float32)
+        return weight_norm
+
+    def reset_parameters(self, lora_tensor=(None, None)) -> None:
         # if the lora_tensor is not (None, None), use it to init the lora weight
         assert isinstance(lora_tensor, Tuple)
         assert len(lora_tensor) == 2
@@ -55,38 +62,23 @@ class Lora(nn.Module):
                 self.lora_b_.weight.copy_(lora_tensor[1])
 
         if self.use_dora_:
-            self.dora_init()
+            self.magnitude_vector_ = nn.Parameter(
+                self._get_weight_norm(), requires_grad=True).to(self.device_)
 
-    # Copied from HuggingFace PEFT
-    def _get_weight_norm(self, weight, lora_weight, scaling) -> torch.Tensor:
-        # calculate L2 norm of weight matrix, column-wise
-        weight = weight + scaling * lora_weight
-        weight_norm = torch.linalg.norm(weight, dim=1, dtype=torch.float32)
-        return weight_norm
-
-    def dora_init(self):
-        lora_weight = self.lora_b_.weight @ self.lora_a_.weight
-        weight_norm = self._get_weight_norm(
-            self.base_layer_.weight, lora_weight, self.scaling_)
-        self.magnitude_vector_ = nn.Parameter(
-            weight_norm, requires_grad=True).to(self.device_)
-
-    def _apply_dora(self, residual: torch.Tensor, hidden_states: torch.Tensor):
-        lora_weight = self.lora_b_.weight @ self.lora_a_.weight
-        weight_norm = self._get_weight_norm(
-            self.base_layer_.weight, lora_weight, self.scaling_).detach()
+    def _apply_dora(self, residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        weight_norm = self._get_weight_norm().detach()
         mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
-        result_dora = (mag_norm_scale - 1) * residual.to(torch.float32) + \
-            mag_norm_scale * hidden_states
+        result_dora = mag_norm_scale * residual + mag_norm_scale * hidden_states
         return result_dora
 
-    def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor):
+    def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = residual.to(torch.float32)
         result = self.lora_b_(self.lora_a_(self.dropout_(
             hidden_states.to(torch.float32)))) * self.scaling_
         if self.use_dora_:
-            return residual + self._apply_dora(residual, result).to(residual.dtype)
+            return self._apply_dora(residual, result).to(hidden_states.dtype)
         else:
-            return residual + result.to(residual.dtype)
+            return (residual + result).to(hidden_states.dtype)
 
 
 class Linear(nn.Module):
