@@ -13,6 +13,7 @@ import uuid
 import logging
 import os
 import json
+import time
 
 from enum import Enum, auto
 from typing import Dict, List
@@ -102,7 +103,7 @@ class Pipe():
 
         logging.info("Pipe done and to stop.")
 
-        logging.info("Save all model...")
+        logging.info("saving all models...")
         self.save_all_model()
 
         # clear the pipeline resource
@@ -121,6 +122,8 @@ class Pipe():
         if not self.dispatcher_.check_task_done():
             train_input = self.dispatcher_.get_train_data()
             if not train_input:
+                # avoid the busy loop
+                time.sleep(1 / 10000000)
                 return
             for lora_config in train_input.lora_batch_data_config_:
                 logging.info(f'load lora: {lora_config.adapter_name_}')
@@ -248,13 +251,11 @@ class Pipe():
 
         # get lora weights
         lora_weights = {}
-        target_modules = set([])
         for layer_model in self.model_partition_:
             wrapper_module = layer_model.wrapper_module_
             if hasattr(wrapper_module, 'get_lora_weight_dict'):
-                lora_weight, target_module = wrapper_module.get_lora_weight_dict(adapter_name)
+                lora_weight, _ = wrapper_module.get_lora_weight_dict(adapter_name)
                 lora_weights.update(lora_weight)
-                target_modules.update(target_module)
 
         saved_path = lora_output_dir + os.sep + f"adapter_model_{self.rank_}.bin"
         logging.info(f'save {adapter_name} to {saved_path}')

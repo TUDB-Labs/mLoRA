@@ -2,8 +2,6 @@ from mlora.dispatcher.dispatcher import Dispatcher, TrainData
 from mlora.tokenizer.tokenizer import Tokenizer
 from mlora.config import MLoRAConfig
 
-import time
-
 from typing import Dict, List
 
 
@@ -43,5 +41,5 @@ class PipelineDispatcher(Dispatcher):
             cnt += 1
             if cnt >= self.train_lora_simultaneously_num_:
                 break
-        time.sleep(1 / 100000)
+
         return ret_train_data

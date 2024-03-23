@@ -469,29 +469,18 @@ class LlamaModel(LLMModel):
 
         return train_paramas
 
-    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], List[str]]:
+    def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], Set[str]]:
         # return the lora weight dict and target lora module's name
         #   for example, lora_weight_dict = {"self_atten.q_proj.lora_A.weight", tensor}
         #                target_modules   = ["q_proj", "k_proj"]
         lora_weight_dict = {}
-        target_modules = []
+        target_modules = set([])
 
         # each transformer layer
         for transformer_layer in self.layers_:
-            name_module_dict: Dict[str,
-                                   Linear] = transformer_layer.linear_layer_name_to_module_dict
-            # each linear layer in transformer layer
-            for name, module in name_module_dict.items():
-                loras: Dict[str, Lora] = module.loras_
-                if lora_name not in loras:
-                    continue
-                if name not in target_modules:
-                    target_modules.append(name)
-                lora: Lora = loras[lora_name]
-                lora_weight_dict[transformer_layer.lora_layer_name(
-                    name, is_lora_a=True)] = lora.lora_a_
-                lora_weight_dict[transformer_layer.lora_layer_name(
-                    name, is_lora_b=True)] = lora.lora_b_
+            lora_weight, target_module = transformer_layer.get_lora_weight_dict(lora_name)
+            lora_weight_dict.update(lora_weight)
+            target_modules.update(target_module)
 
         return lora_weight_dict, target_modules
 
