@@ -45,4 +45,3 @@ class PipelineDispatcher(Dispatcher):
                 break
         time.sleep(1 / 100000)
         return ret_train_data
-

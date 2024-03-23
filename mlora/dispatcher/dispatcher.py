@@ -243,7 +243,7 @@ class Dispatcher:
         self.rigister_strategies()
         strategy = config.trainer_config_.train_strategy_
         if strategy not in self.strategy_dict_:
-            raise f"Unsupported strategy"
+            raise "Unsupported strategy"
         self._strategy_func_ = self.strategy_dict_[strategy]
 
         # create ready task

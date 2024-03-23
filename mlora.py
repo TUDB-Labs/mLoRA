@@ -75,10 +75,12 @@ def train(config: mlora.MLoRAConfig, llm_model: mlora.LLMModel, dispatcher: mlor
     trainer = mlora.Trainer(llm_model, dispatcher, config.lora_configs_)
     trainer.train()
 
+
 def get_dispatcher_cls(args: Any) -> type[mlora.Dispatcher]:
     if args.pipeline:
-        return mlora.PipelineDispatcher 
+        return mlora.PipelineDispatcher
     return mlora.Dispatcher
+
 
 # Main Function
 if __name__ == "__main__":
