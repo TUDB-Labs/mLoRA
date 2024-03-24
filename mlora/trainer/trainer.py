@@ -128,6 +128,9 @@ class MutiTrainerContext:
     def step(self, adapter_name: str):
         self.trainer_context_[adapter_name].step()
 
+    def finish(self, adapter_name: str):
+        self.trainer_context_[adapter_name].finish()
+
     def is_save_step(self, adapter_name: str) -> bool:
         return self.trainer_context_[adapter_name].is_save_step()
 
@@ -167,8 +170,8 @@ class Trainer:
                     self.save_lora_model(adapter_name, f"{step_cnt}")
 
         # flush the grad
-        for adapter_name in self.trainer_context_:
-            self.trainer_context_[adapter_name].finish()
+        for adapter_name in self.multi_trainer_context_.trainer_context_:
+            self.multi_trainer_context_.finish(adapter_name)
             self.save_lora_model(adapter_name)
 
     def save_lora_model(self, adapter_name: str, dir_suffix: str = ""):
@@ -184,6 +187,6 @@ class Trainer:
         torch.save(lora_weight_dict, lora_output_dir +
                    os.sep + "adapter_model.bin")
 
-        adapter_config = self.trainer_context_[adapter_name].export_config()
+        adapter_config = self.multi_trainer_context_.get_trainer_context(adapter_name).export_config()
         with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)
