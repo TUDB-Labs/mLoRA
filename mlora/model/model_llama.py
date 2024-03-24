@@ -1,4 +1,4 @@
-from mlora.common import nvtx_wrapper
+from mlora.common import nvtx_wrapper, is_offload_device
 from mlora.config import LoraConfig
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.model.model import LLMModel, repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
@@ -6,7 +6,6 @@ from mlora.model.LoraLiner import Linear, Lora
 from mlora.model.RMSNorm import RMSNorm
 from mlora.model.Embedding import Embedding
 from mlora.checkpoint.recompute import CheckpointRecomputeFunction
-from mlora.utils import is_offload_device
 
 import logging
 import torch

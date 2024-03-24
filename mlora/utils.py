@@ -96,7 +96,3 @@ def init_lora_model(llm_model: LLMModel, lora_configs: List[LoraConfig]):
             f'init the lora adapter {lora_config.adapter_name_} weight.')
 
         llm_model.init_lora_weight(lora_config, lora_weight)
-
-
-def is_offload_device(device: torch.device):
-    return device == torch.device("meta")

@@ -9,3 +9,7 @@ def nvtx_wrapper(func: Callable,
         with torch.cuda.nvtx.range(msg=msg):
             return func(*args, **kwargs)
     return wrap
+
+
+def is_offload_device(device: torch.device):
+    return device == torch.device("meta")
