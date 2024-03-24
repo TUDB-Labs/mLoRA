@@ -20,6 +20,7 @@ import mlora
 import argparse
 import logging
 
+
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
 parser.add_argument('--base_model', type=str, required=True,
@@ -69,8 +70,14 @@ args = parser.parse_args()
 
 # to get test result and want early stop it
 def train(config: mlora.MLoRAConfig, llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
-    trainer = mlora.Trainer(llm_model, dispatcher, config.lora_configs_)
+    trainer = mlora.Trainer(llm_model, dispatcher, config)
     trainer.train()
+
+
+def get_dispatcher_cls() -> type[mlora.Dispatcher]:
+    if args.pipeline:
+        return mlora.PipelineDispatcher
+    return mlora.Dispatcher
 
 
 # Main Function
@@ -103,13 +110,21 @@ if __name__ == "__main__":
         config = mlora.MLoRAConfig(args.config)
         mlora.init_lora_model(model, config.lora_configs_)
 
+    dispatcher_cls = get_dispatcher_cls()
+    dispatcher = dispatcher_cls(config, tokenizer)
+
     if args.pipeline:
-        raise NotImplementedError
+        pipe = mlora.Pipe(model,
+                          config,
+                          dispatcher,
+                          args.device,
+                          args.rank,
+                          args.balance)
+        exit(pipe.run())
 
     if args.evaluate:
         evaluator: mlora.Evaluator = mlora.EvaluatorFactory().create(
             model, tokenizer, args.evaluate, args.evaluate_data)
         evaluator.evaluate()
     else:
-        dispatcher = mlora.Dispatcher(config, tokenizer)
         train(config, model, dispatcher)

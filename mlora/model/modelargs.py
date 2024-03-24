@@ -53,7 +53,8 @@ class LLMModelArgs:
             logging.warning(
                 "Shrink max sequence length to window size of sliding window attention.")
             self.max_seq_len_ = config.sliding_window
-        self.rope_theta_ = config.rope_theta
+        if hasattr(config, "rope_theta"):
+            self.rope_theta_ = config.rope_theta
 
 
 @dataclass

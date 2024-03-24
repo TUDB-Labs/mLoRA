@@ -10,6 +10,8 @@ from mlora.evaluator.evaluator_factory import EvaluatorFactory
 from mlora.evaluator.evaluator import Evaluator
 from mlora.trainer.trainer import Trainer
 from mlora.dispatcher.dispatcher import Dispatcher
+from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
+from mlora.pipeline.pipe import Pipe
 
 __all__ = [
     "Tokenizer",
@@ -31,5 +33,8 @@ __all__ = [
     "EvaluatorFactory",
     "Evaluator",
     # Trainer
-    "Trainer"
+    "Trainer",
+    # pipeline parallelism
+    "Pipe",
+    "PipelineDispatcher"
 ]

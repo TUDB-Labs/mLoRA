@@ -46,6 +46,7 @@ class RecvOperator(torch.autograd.Function):
 
         ctx.msg_id_ = msg.msg_id_
         ctx.transport_ = transport
+        ctx.batch_data_ = msg.batch_data_
 
         return msg.tensor_data_ * phony
 
@@ -65,7 +66,7 @@ class RecvOperator(torch.autograd.Function):
             msg_type_=PipeMessageType.GRADIENTS,
             msg_id_=ctx.msg_id_,
             tensor_data_=grad_output,
-            batch_data_=None,
+            batch_data_=ctx.batch_data_,
         ))
 
         return (None, None, None)
