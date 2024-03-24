@@ -109,9 +109,8 @@ if __name__ == "__main__":
         assert args.config is not None, "error: Argument --config are required."
         config = mlora.MLoRAConfig(args.config)
         mlora.init_lora_model(model, config.lora_configs_)
-
-    dispatcher_cls = get_dispatcher_cls()
-    dispatcher = dispatcher_cls(config, tokenizer)
+        dispatcher_cls = get_dispatcher_cls()
+        dispatcher = dispatcher_cls(config, tokenizer)
 
     if args.pipeline:
         pipe = mlora.Pipe(model,
