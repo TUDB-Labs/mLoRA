@@ -5,7 +5,7 @@ from mlora.pipeline.function import RecvOperator, SendOperator
 from mlora.model.model import LLMModel, precompute_mask
 from mlora.model.modelargs import LoraBatchDataConfig, MultiLoraBatchData
 from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
-from mlora.trainer.trainer import TrainerContext
+from mlora.trainer.trainer import MutiTrainerContext, TrainerContext
 from mlora.config import MLoRAConfig
 
 import torch
@@ -43,7 +43,7 @@ class Pipe():
 
     config_: MLoRAConfig = None
 
-    trainer_context_: Dict[str, TrainerContext] = {}
+    multi_trainer_context_: MutiTrainerContext = None
 
     def is_stop_signal(self, data: torch.tensor) -> bool:
         return data.dtype == torch.long and torch.numel(data) == 1
@@ -208,22 +208,7 @@ class Pipe():
                 device=self.device_)
 
             lora_configs = message.batch_data_.lora_batch_data_config_
-            total_loss = None
-            for lora_config in lora_configs:
-                start_idx = lora_config.batch_start_idx_
-                end_idx = lora_config.batch_end_idx_
-                adapter_name = lora_config.adapter_name_
-                vocab_size = data.shape[-1]
-                loss_input = data[start_idx:end_idx][..., :-1, :].contiguous().view(-1, vocab_size)
-                loss_target = labels[start_idx:end_idx][..., 1:].contiguous().view(-1).to(loss_input.device)
-                loss = self.trainer_context_[
-                    adapter_name].loss_fn_(loss_input, loss_target)
-                logging.info(f"    adpter: {adapter_name} loss: {loss}")
-                if total_loss is None:
-                    total_loss = loss
-                else:
-                    total_loss += loss
-
+            total_loss = self.multi_trainer_context_.calc_loss(message.batch_data_, data)
             total_loss.backward()
 
             self.trainer_step(lora_configs)
@@ -231,17 +216,16 @@ class Pipe():
     def trainer_step(self, lora_configs: List[LoraBatchDataConfig]):
         for lora_config in lora_configs:
             adapter_name = lora_config.adapter_name_
-            self.trainer_context_[adapter_name].step()
-            adapter_step = self.trainer_context_[adapter_name].step_cnt_
-            logging.debug(f"    adpter: {adapter_name} step: {adapter_step}")
-            if self.trainer_context_[adapter_name].is_save_step():
-                self.save_model(adapter_name, f"{adapter_step}")
+            self.multi_trainer_context_.step(adapter_name)
+            step_cnt = self.multi_trainer_context_.get_step_cnt(adapter_name)
+            if self.multi_trainer_context_.is_save_step(adapter_name):
+                self.save_model(adapter_name, f"{step_cnt}")
             if self.role_ == WorkerRole.HEAD:
                 self.dispatcher_.activate_adapter(adapter_name)
 
     def save_all_model(self):
-        for self.trainer_context_ in self.trainer_context_.values():
-            self.save_model(self.trainer_context_.adapter_name_, "final")
+        for adapter_name in self.multi_trainer_context_.trainer_context_:
+            self.save_model(adapter_name, "final")
 
     def save_model(self, adapter_name: str, dir_suffix: str = ""):
         # create saved dir
@@ -265,7 +249,7 @@ class Pipe():
 
         # save json only on tail worker
         if self.role_ == WorkerRole.TAIL:
-            context = self.trainer_context_[adapter_name]
+            context = self.multi_trainer_context_.get_trainer_context(adapter_name)
             with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
                 json.dump(context.export_config(), f, indent=4)
 
@@ -308,12 +292,8 @@ class Pipe():
         worker_train_paramas: Dict[str,
                                    List[torch.Tensor]] = model.get_train_paramas()
 
-        for lora_config in self.config_.lora_configs_:
-            context = TrainerContext(
-                lora_config,
-                self.config_.trainer_config_,
-                worker_train_paramas[lora_config.adapter_name_])
-            self.trainer_context_[context.adapter_name_] = context
+        self.multi_trainer_context_ = MutiTrainerContext(
+            self.config_, worker_train_paramas)
 
         del model
         torch.cuda.empty_cache()

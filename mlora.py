@@ -70,7 +70,7 @@ args = parser.parse_args()
 
 # to get test result and want early stop it
 def train(config: mlora.MLoRAConfig, llm_model: mlora.LLMModel, dispatcher: mlora.Dispatcher):
-    trainer = mlora.Trainer(llm_model, dispatcher, config.lora_configs_)
+    trainer = mlora.Trainer(llm_model, dispatcher, config)
     trainer.train()
 
 
