@@ -6,6 +6,7 @@ from mlora.model.LoraLiner import Linear, Lora
 from mlora.model.RMSNorm import RMSNorm
 from mlora.model.Embedding import Embedding
 from mlora.checkpoint.recompute import CheckpointRecomputeFunction
+from mlora.utils import is_offload_device
 
 import logging
 import torch
@@ -437,7 +438,7 @@ class LlamaModel(LLMModel):
         def get_all_linear_layer(layer: Transformer):
             assert isinstance(layer, Transformer), f"error type {type(layer)}"
             # transformer in disk do not return the train paramas
-            if layer.w1_.device_ == torch.device("meta"):
+            if is_offload_device(layer.w1_.device_):
                 logging.debug(
                     f"Layer-{layer.layer_id_} do not be load in the worker, skip.")
                 return []

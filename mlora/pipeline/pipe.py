@@ -174,7 +174,7 @@ class Pipe():
             PipeMessageType.ACTIVATIONS, block=False)
         if message is None:
             return
-        logging.info(
+        logging.debug(
             f"Recv the activations - {str(message.msg_id_)[:8]} from {message.src_}")
 
         # use RecvOperator get the real data
@@ -190,6 +190,8 @@ class Pipe():
             self.forward_cnt_ += 1
             data = self.forward(data, message.batch_data_)
 
+        # stop signal may arrive before the activation
+        # so we check forward cnt to assure all activations have been processed
         if self.stop_signal_ is not None and self.stop_signal_.item() == self.forward_cnt_:
             self.forward_stop_ = True
 

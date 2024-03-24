@@ -20,8 +20,6 @@ import mlora
 import argparse
 import logging
 
-from typing import Any
-
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
@@ -76,7 +74,7 @@ def train(config: mlora.MLoRAConfig, llm_model: mlora.LLMModel, dispatcher: mlor
     trainer.train()
 
 
-def get_dispatcher_cls(args: Any) -> type[mlora.Dispatcher]:
+def get_dispatcher_cls() -> type[mlora.Dispatcher]:
     if args.pipeline:
         return mlora.PipelineDispatcher
     return mlora.Dispatcher
@@ -112,7 +110,7 @@ if __name__ == "__main__":
         config = mlora.MLoRAConfig(args.config)
         mlora.init_lora_model(model, config.lora_configs_)
 
-    dispatcher_cls = get_dispatcher_cls(args)
+    dispatcher_cls = get_dispatcher_cls()
     dispatcher = dispatcher_cls(config, tokenizer)
 
     if args.pipeline:

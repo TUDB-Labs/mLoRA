@@ -252,7 +252,7 @@ class Dispatcher:
                 TrainTask(self.tokenizer_, lora_config))
 
     def rigister_strategies(self):
-        self.rigister_strategy("none", self.pipe_dispatch_strategy)
+        self.rigister_strategy("none", self.none_dispatch_strategy)
         self.rigister_strategy("optim", self.optim_dispatch_strategy)
 
     def rigister_strategy(self, strategy_name: str, strategy_func: strategy_func_type_):
@@ -288,7 +288,7 @@ class Dispatcher:
 
         return ret_train_data
 
-    def pipe_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
+    def none_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
         ret_train_data = {}
         cnt = 0
         for task in self.running_train_task_:
