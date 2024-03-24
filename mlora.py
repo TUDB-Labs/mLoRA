@@ -62,6 +62,10 @@ parser.add_argument('--log_file', type=str,
                     help='Save log to specific file.')
 parser.add_argument('--overwrite', action="store_true",
                     help='Overwrite adapter model when older one existed.')
+parser.add_argument('--deterministic', action="store_true",
+                    help='Use deterministic algorithms to improve the reproducibility.')
+parser.add_argument('--disable_tf32', action="store_true",
+                    help='Disable TensorFloat32 for Ampere devices.')
 
 args = parser.parse_args()
 
@@ -210,6 +214,18 @@ if __name__ == "__main__":
         logging.error(
             'm-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
         exit(-1)
+
+    # For evaluation
+    if args.deterministic:
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+    else:
+        torch.backends.cudnn.benchmark = True
+
+    if args.disable_tf32:
+        torch.backends.cuda.matmul.allow_tf32 = False
+    else:
+        torch.backends.cuda.matmul.allow_tf32 = True
 
     setup_seed(args.seed)
 
