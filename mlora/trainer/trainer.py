@@ -1,3 +1,4 @@
+from mlora.profiler.profiler import set_backward_tracepoint, grad_fn_nvtx_wrapper_by_tracepoint, nvtx_range
 from mlora.model.model import LLMModel
 from mlora.dispatcher.dispatcher import Dispatcher
 from mlora.config import LoraConfig, MLoRAConfig, OptimConfig, TrainerConfig
@@ -87,7 +88,7 @@ class TrainerContext:
         return self.step_cnt_ % self.save_step_ == 0
 
 
-class MutiTrainerContext:
+class MultiTrainerContext:
     trainer_context_: Dict[str, TrainerContext] = {}
 
     def __init__(self,
@@ -144,7 +145,7 @@ class MutiTrainerContext:
 class Trainer:
     model_: LLMModel = None
     dispatcher_: Dispatcher = None
-    multi_trainer_context_: MutiTrainerContext = None
+    multi_trainer_context_: MultiTrainerContext = None
 
     def __init__(self,
                  model: LLMModel,
@@ -153,19 +154,26 @@ class Trainer:
         self.model_ = model
         self.dispatcher_ = dispatcher
         all_trainable_params = self.model_.get_train_paramas()
-        self.multi_trainer_context_ = MutiTrainerContext(config, all_trainable_params)
+        self.multi_trainer_context_ = MultiTrainerContext(
+            config, all_trainable_params)
 
-    def train(self, save_step: int = 2000) -> None:
+    def train(self) -> None:
         for train_data in self.dispatcher_.train_data():
             output = self.model_.forward(train_data)
 
-            total_loss = self.multi_trainer_context_.calc_loss(train_data, output)
+            with nvtx_range("f_calc_loss"):
+                total_loss = self.multi_trainer_context_.calc_loss(
+                    train_data, output)
+
+            set_backward_tracepoint(total_loss.grad_fn, "b_loss")
+            grad_fn_nvtx_wrapper_by_tracepoint(total_loss.grad_fn)
             total_loss.backward()
 
             for lora_config in train_data.lora_batch_data_config_:
                 adapter_name = lora_config.adapter_name_
                 self.multi_trainer_context_.step(adapter_name)
-                step_cnt = self.multi_trainer_context_.get_step_cnt(adapter_name)
+                step_cnt = self.multi_trainer_context_.get_step_cnt(
+                    adapter_name)
                 if self.multi_trainer_context_.is_save_step(adapter_name):
                     self.save_lora_model(adapter_name, f"{step_cnt}")
 
@@ -187,6 +195,7 @@ class Trainer:
         torch.save(lora_weight_dict, lora_output_dir +
                    os.sep + "adapter_model.bin")
 
-        adapter_config = self.multi_trainer_context_.get_trainer_context(adapter_name).export_config()
+        adapter_config = self.multi_trainer_context_.get_trainer_context(
+            adapter_name).export_config()
         with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)

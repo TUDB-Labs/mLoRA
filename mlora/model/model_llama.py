@@ -1,4 +1,5 @@
-from mlora.common import nvtx_wrapper, is_offload_device
+from mlora.common import is_offload_device
+from mlora.profiler.profiler import set_backward_tracepoint, nvtx_wrapper, nvtx_range
 from mlora.config import LoraConfig
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.model.model import LLMModel, repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
@@ -134,11 +135,19 @@ class Transformer(torch.nn.Module):
                 input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
-        attention_norm_data = self.attention_norm_.forward(data)
+        with nvtx_range(f"f_attention_norm_{self.layer_id_}"):
+            attention_norm_data = self.attention_norm_.forward(data)
+        set_backward_tracepoint(
+            attention_norm_data.grad_fn, f"b_attention_norm_{self.layer_id_}")
 
-        xq = self.wq_.forward(attention_norm_data, input_args)
-        xk = self.wk_.forward(attention_norm_data, input_args)
-        xv = self.wv_.forward(attention_norm_data, input_args)
+        with nvtx_range(f"f_q_{self.layer_id_}"):
+            xq = self.wq_.forward(attention_norm_data, input_args)
+
+        with nvtx_range(f"f_k_{self.layer_id_}"):
+            xk = self.wk_.forward(attention_norm_data, input_args)
+
+        with nvtx_range(f"f_v_{self.layer_id_}"):
+            xv = self.wv_.forward(attention_norm_data, input_args)
 
         # conver shape to multi head
         # the shape is batch_size * number_of_head * seq_len * dim_of_head
@@ -153,7 +162,12 @@ class Transformer(torch.nn.Module):
         assert xq.dtype == xk.dtype
         cos = self.cos_[:max_seq_len].to(xq.dtype)
         sin = self.sin_[:max_seq_len].to(xq.dtype)
-        xq, xk = apply_rotary_emb(xq, xk, cos, sin)
+
+        with nvtx_range(f"f_rotray_emb_{self.layer_id_}"):
+            xq, xk = apply_rotary_emb(xq, xk, cos, sin)
+
+        set_backward_tracepoint(xq.grad_fn, "b_q_rope")
+        set_backward_tracepoint(xk.grad_fn, "b_k_rope")
 
         # for llama2 need to repeat the heads
         # before dim: batch_size, n_kv_head, seq_len, head_dim
@@ -161,25 +175,66 @@ class Transformer(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
+        set_backward_tracepoint(xk.grad_fn, "b_k_rep")
+        set_backward_tracepoint(xv.grad_fn, "b_v_rep")
+
         # must align with xformers memory efficient attention
         xq = xq.transpose(1, 2)
+        set_backward_tracepoint(xq.grad_fn, "b_q_T")
+
         xk = xk.transpose(1, 2)
+        set_backward_tracepoint(xk.grad_fn, "b_k_T")
+
         xv = xv.transpose(1, 2)
-        attention_score = xformers.ops.memory_efficient_attention(
-            xq, xk, xv, mask)
+        set_backward_tracepoint(xv.grad_fn, "b_v_T")
+
+        with nvtx_range(f"f_attention_{self.layer_id_}"):
+            attention_score = xformers.ops.memory_efficient_attention(
+                xq, xk, xv, mask)
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
+        set_backward_tracepoint(attention_score.grad_fn, "b_attention")
 
         # get output attention score
-        data = data + self.wo_.forward(attention_score, input_args)
+        with nvtx_range(f"f_o_{self.layer_id_}"):
+            wo = self.wo_.forward(attention_score, input_args)
+
+        with nvtx_range(f"f_o_add_{self.layer_id_}"):
+            data = data + wo
+        set_backward_tracepoint(data.grad_fn, "b_o_add")
 
         # feed forward fully connected
-        score_norm_data = self.ffn_norm_.forward(data)
-        w1 = self.w1_.forward(score_norm_data, input_args)
-        w3 = self.w3_.forward(score_norm_data, input_args)
+        with nvtx_range(f"f_ffn_norm_{self.layer_id_}"):
+            score_norm_data = self.ffn_norm_.forward(data)
+        set_backward_tracepoint(score_norm_data.grad_fn,
+                                f"b_ffn_norm_{self.layer_id_}")
 
-        data = data + self.w2_.forward(F.silu(w1) * w3, input_args)
+        with nvtx_range(f"f_w1_{self.layer_id_}"):
+            w1 = self.w1_.forward(score_norm_data, input_args)
 
-        return data
+        with nvtx_range(f"f_w3_{self.layer_id_}"):
+            w3 = self.w3_.forward(score_norm_data, input_args)
+
+        # same as: data = data + w2_forward(F.silu(w1) * w3, input_args)
+        with nvtx_range(f"f_silu_w2_{self.layer_id_}"):
+            w1_silu = F.silu(w1)
+        set_backward_tracepoint(
+            w1_silu.grad_fn, f"b_silu_w2_{self.layer_id_}")
+
+        with nvtx_range(f"f_w1_m_w3_{self.layer_id_}"):
+            mlp_output = w1_silu * w3
+        set_backward_tracepoint(
+            mlp_output.grad_fn, f"b_w1_m_w3_{self.layer_id_}")
+
+        with nvtx_range(f"f_w2_{self.layer_id_}"):
+            mlp_output = self.w2_.forward(mlp_output, input_args)
+        set_backward_tracepoint(
+            mlp_output.grad_fn, f"b_w2_{self.layer_id_}")
+
+        with nvtx_range(f"f_w2_add_{self.layer_id_}"):
+            mlp_output = data + mlp_output
+        set_backward_tracepoint(mlp_output.grad_fn, "b_w2_add")
+
+        return mlp_output
 
     def get_lora_weight_dict(self, lora_name: str) -> Tuple[Dict[str, torch.Tensor], Set[str]]:
         lora_weight_dict = {}
@@ -192,8 +247,10 @@ class Transformer(torch.nn.Module):
             if name not in target_modules:
                 target_modules.add(name)
             lora: Lora = loras[lora_name]
-            lora_weight_dict[self.lora_layer_name(name, is_lora_a=True)] = lora.lora_a_
-            lora_weight_dict[self.lora_layer_name(name, is_lora_b=True)] = lora.lora_b_
+            lora_weight_dict[self.lora_layer_name(
+                name, is_lora_a=True)] = lora.lora_a_
+            lora_weight_dict[self.lora_layer_name(
+                name, is_lora_b=True)] = lora.lora_b_
 
         return lora_weight_dict, target_modules
 
@@ -225,33 +282,41 @@ class LlamaSequentialWrapper(torch.nn.Module):
         assert isinstance(input[3], bool)
 
         # auto catch the input argument
+        @nvtx_wrapper("f_embedding")
         def embedding_forward():
             output = self.wrapper_module_.forward(input[0])
             if input[-1]:
                 output = output.requires_grad_(True)
             return (output, ) + input[1:]
 
+        @nvtx_wrapper("f_transformer")
         def transformer_forward():
             if input[-1]:
                 output = CheckpointRecomputeFunction.apply(
                     self.wrapper_module_.forward, *input[:-1])
+                set_backward_tracepoint(output.grad_fn, "b_checkpoint")
             else:
                 output = self.wrapper_module_.forward(*input[:-1])
+                set_backward_tracepoint(output.grad_fn, "b_transformer")
             return (output, ) + input[1:]
 
+        @nvtx_wrapper("f_rmsnorm")
         def rmsnorm_forward():
             output = self.wrapper_module_.forward(input[0])
+            set_backward_tracepoint(output.grad_fn, "b_rmsnorm")
             return (output, ) + input[1:]
 
+        @nvtx_wrapper("f_output")
         def output_layer_forward():
             output = self.wrapper_module_.forward(input[0])
+            set_backward_tracepoint(output.grad_fn, "b_output")
             return (output, ) + input[1:]
 
         forward_func_dict = {
-            "Embedding": nvtx_wrapper(embedding_forward, "embedding"),
-            "Transformer": nvtx_wrapper(transformer_forward, "transformer"),
-            "RMSNorm": nvtx_wrapper(rmsnorm_forward, "rmsnorm"),
-            "OutputLayer": nvtx_wrapper(output_layer_forward, "output"),
+            "Embedding": embedding_forward,
+            "Transformer": transformer_forward,
+            "RMSNorm": rmsnorm_forward,
+            "OutputLayer": output_layer_forward,
         }
 
         module_name = self.name()
@@ -478,7 +543,8 @@ class LlamaModel(LLMModel):
 
         # each transformer layer
         for transformer_layer in self.layers_:
-            lora_weight, target_module = transformer_layer.get_lora_weight_dict(lora_name)
+            lora_weight, target_module = transformer_layer.get_lora_weight_dict(
+                lora_name)
             lora_weight_dict.update(lora_weight)
             target_modules.update(target_module)
 

@@ -12,6 +12,7 @@ from mlora.trainer.trainer import Trainer
 from mlora.dispatcher.dispatcher import Dispatcher
 from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
 from mlora.pipeline.pipe import Pipe
+from mlora.profiler.profiler import setup_trace_mode
 
 __all__ = [
     "Tokenizer",
@@ -29,6 +30,8 @@ __all__ = [
     "load_base_model",
     "init_lora_model",
     "MLoRAConfig",
+    # profiler function
+    "setup_trace_mode",
     # evaluateor
     "EvaluatorFactory",
     "Evaluator",

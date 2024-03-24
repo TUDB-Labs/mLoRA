@@ -3,6 +3,7 @@ from mlora.checkpoint.checkpoint import (check_backward_validity,
                                          get_device_states,
                                          set_device_states,
                                          detach_variable)
+from mlora.profiler.profiler import tensors_nvtx_wrapper_by_tracepoint
 
 import torch
 
@@ -61,9 +62,10 @@ class CheckpointRecomputeFunction(torch.autograd.Function):
                     torch.cuda.amp.autocast(**ctx.gpu_autocast_kwargs), \
                     torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):
                 outputs = ctx.run_function(*detached_inputs)
-
-        if isinstance(outputs, torch.Tensor):
-            outputs = (outputs,)
+                if isinstance(outputs, torch.Tensor):
+                    outputs = (outputs,)
+                # only in enable grad context can wrapper the tracepoint
+                tensors_nvtx_wrapper_by_tracepoint(outputs)
 
         outputs_with_grad = []
         args_with_grad = []
