@@ -5,7 +5,7 @@ from mlora.pipeline.function import RecvOperator, SendOperator
 from mlora.model.model import LLMModel, precompute_mask
 from mlora.model.modelargs import LoraBatchDataConfig, MultiLoraBatchData
 from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
-from mlora.trainer.trainer import MutiTrainerContext, TrainerContext
+from mlora.trainer.trainer import MutiTrainerContext
 from mlora.config import MLoRAConfig
 
 import torch
@@ -202,11 +202,6 @@ class Pipe():
 
         # tail worker need to calc the backward
         if not self.forward_stop_ and not self.is_stop_signal(message.tensor_data_):
-            labels = torch.tensor(
-                message.batch_data_.batch_tokens_,
-                dtype=torch.long,
-                device=self.device_)
-
             lora_configs = message.batch_data_.lora_batch_data_config_
             total_loss = self.multi_trainer_context_.calc_loss(message.batch_data_, data)
             total_loss.backward()
