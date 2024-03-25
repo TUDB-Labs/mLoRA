@@ -4,9 +4,35 @@ from mlora.modelargs import LoraConfig
 import math
 import torch
 import torch.nn as nn
-import bitsandbytes
+import bitsandbytes as bnb
 
 from typing import Dict, Tuple
+
+
+def is_quantized(weight: torch.nn.Parameter):
+    cls_name = weight.__class__.__name__
+    return cls_name in ("Params4bit", "Int8Params")
+
+
+def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
+    cls_name = weight.__class__.__name__
+    if cls_name not in ("Params4bit", "Int8Params"):
+        return weight
+
+    if cls_name == "Params4bit":
+        return bnb.functional.dequantize_4bit(weight.data, weight.quant_state)
+
+    if state.SCB is None:
+        state.SCB = weight.SCB
+
+    im = torch.eye(weight.data.shape[-1]).contiguous().half().to(weight.device)
+    im, imt, SCim, SCimt, coo_tensorim = bnb.functional.double_quant(im)
+    im, Sim = bnb.functional.transform(im, "col32")
+    if state.CxB is None:
+        state.CxB, state.SB = bnb.functional.transform(
+            weight.data, to_order=state.formatB)
+    out32, Sout32 = bnb.functional.igemmlt(im, state.CxB, Sim, state.SB)
+    return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
 
 
 class Lora(nn.Module):
@@ -39,10 +65,10 @@ class Lora(nn.Module):
         self.use_dora_: bool = config.use_dora_
         self.magnitude_vector_: nn.Parameter = None
 
-    def _get_weight_norm(self) -> torch.Tensor:
+    def _get_weight_norm(self, weight) -> torch.Tensor:
         # calculate L2 norm of weight matrix, column-wise
         lora_weight = self.lora_b_.weight @ self.lora_a_.weight
-        weight = self.base_layer_.weight + self.scaling_ * lora_weight
+        weight = weight + self.scaling_ * lora_weight
         weight_norm = torch.linalg.norm(weight, dim=1, dtype=torch.float32)
         return weight_norm
 
@@ -62,23 +88,33 @@ class Lora(nn.Module):
                 self.lora_b_.weight.copy_(lora_tensor[1])
 
         if self.use_dora_:
+            weight = self.base_layer_.weight
+            quant_state = getattr(self.base_layer_, "state", None)
+            weight = dequantize_bnb_weight(weight, state=quant_state)
             self.magnitude_vector_ = nn.Parameter(
-                self._get_weight_norm(), requires_grad=True).to(self.device_)
-
-    def _apply_dora(self, residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
-        weight_norm = self._get_weight_norm().detach()
-        mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
-        result_dora = mag_norm_scale * residual + mag_norm_scale * hidden_states
-        return result_dora
+                self._get_weight_norm(weight), requires_grad=True).to(self.device_)
 
     def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = residual.to(torch.float32)
-        result = self.lora_b_(self.lora_a_(self.dropout_(
+        result_lora = self.lora_b_(self.lora_a_(self.dropout_(
             hidden_states.to(torch.float32)))) * self.scaling_
         if self.use_dora_:
-            return self._apply_dora(residual, result).to(hidden_states.dtype)
+            weight = self.base_layer_.weight
+            if is_quantized(weight):
+                # for 8bit and 4bit quantization
+                quant_state = getattr(self.base_layer_, "state", None)
+                weight = dequantize_bnb_weight(
+                    weight, state=quant_state).to(torch.float32)
+                residual = torch.nn.functional.linear(hidden_states, weight)
+            else:
+                # for full precision or half precision
+                weight = weight.to(torch.float32)
+            weight_norm = self._get_weight_norm(weight).detach()
+            mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
+            result = mag_norm_scale * residual + mag_norm_scale * result_lora
         else:
-            return (residual + result).to(hidden_states.dtype)
+            result = residual + result_lora
+        return result.to(hidden_states.dtype)
 
 
 class Linear(nn.Module):
@@ -86,8 +122,8 @@ class Linear(nn.Module):
         super().__init__()
 
         if not isinstance(base_layer, nn.Linear):
-            assert isinstance(base_layer, bitsandbytes.nn.Linear8bitLt) or isinstance(
-                base_layer, bitsandbytes.nn.Linear4bit), f"error type - {type(base_layer)}."
+            assert isinstance(base_layer, bnb.nn.Linear8bitLt) or isinstance(
+                base_layer, bnb.nn.Linear4bit), f"error type - {type(base_layer)}."
         else:
             base_layer.requires_grad_(False)
 
@@ -102,7 +138,7 @@ class Linear(nn.Module):
         if adapter_name is None:
             adapter_name = lora_config.adapter_name_
 
-        if isinstance(self.base_layer_, bitsandbytes.nn.Linear4bit):
+        if isinstance(self.base_layer_, bnb.nn.Linear4bit):
             out_dim, in_dim = self.base_layer_.out_features, self.base_layer_.in_features
         else:
             out_dim, in_dim = self.base_layer_.weight.shape
