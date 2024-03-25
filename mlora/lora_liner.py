@@ -105,7 +105,8 @@ class Lora(nn.Module):
                 quant_state = getattr(self.base_layer_, "state", None)
                 weight = dequantize_bnb_weight(
                     weight, state=quant_state).to(torch.float32)
-                residual = torch.nn.functional.linear(hidden_states, weight)
+                residual = torch.nn.functional.linear(
+                    hidden_states.to(torch.float32), weight)
             else:
                 # for full precision or half precision
                 weight = weight.to(torch.float32)
