@@ -43,15 +43,15 @@ parser.add_argument('--disable_adapter', action="store_true",
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
 parser.add_argument('--fp16', action='store_true',
-                    help='Load model in float16 precision')
+                    help='Load base model in float16 precision')
 parser.add_argument('--bf16', action='store_true',
-                    help='Load model in bfloat16 precision')
+                    help='Load base model in bfloat16 precision')
 parser.add_argument('--tf32', action="store_true",
                     help='Use tfloat32 instead of float32 if available')
 parser.add_argument('--load_8bit', action="store_true",
-                    help='Load model with 8bit quantization')
+                    help='Load base model with 8bit quantization')
 parser.add_argument('--load_4bit', action="store_true",
-                    help='Load model with 4bit quantization')
+                    help='Load base model with 4bit quantization')
 parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
 parser.add_argument('--config', type=str, required=True,
