@@ -31,29 +31,12 @@ class Lora(torch.nn.Module):
         self.scaling_ = alpha / r
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
-        with nvtx_range(f"f_dropout_{self.adapter_name_}"):
-            data_ = F.dropout(data, self.dropout_)
-        set_backward_tracepoint(
-            data_.grad_fn, f"b_dropout_{self.adapter_name_}")
+        data_ = F.dropout(data, self.dropout_)
 
-        lora_a_t = self.lora_a_.transpose(0, 1)
-        set_backward_tracepoint(
-            lora_a_t.grad_fn, f"b_lora_a_T_{self.adapter_name_}")
-        lora_b_t = self.lora_b_.transpose(0, 1)
-        set_backward_tracepoint(
-            lora_b_t.grad_fn, f"b_lora_b_T_{self.adapter_name_}")
+        data_ = data_ @ self.lora_a_.transpose(0, 1)
+        data_ = data_ @ self.lora_b_.transpose(0, 1)
 
-        with nvtx_range(f"f_lora_a_{self.adapter_name_}"):
-            data_ = data_ @ lora_a_t
-        set_backward_tracepoint(data_.grad_fn, "b_lora_a")
-
-        with nvtx_range(f"f_lora_b_{self.adapter_name_}"):
-            data_ = data_ @ lora_b_t
-        set_backward_tracepoint(data_.grad_fn, "b_lora_b")
-
-        with nvtx_range(f"f_scaling_{self.adapter_name_}"):
-            data_ = data_ * self.scaling_
-        set_backward_tracepoint(data_.grad_fn, "b_scaling")
+        data_ = data_ * self.scaling_
 
         return data_
 
@@ -61,6 +44,7 @@ class Lora(torch.nn.Module):
 class Linear(torch.nn.Module):
     def __init__(self, weight: torch.nn.Module):
         # the weight just wrapper the module from LlamaForCausalLM
+        # the name for debug
         super().__init__()
 
         if not isinstance(weight, torch.nn.Linear):
@@ -128,12 +112,12 @@ class Linear(torch.nn.Module):
     def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
         # data shape is: batch_size * max_seq_len * dim
         # result = data @ self.weight_.transpose(0, 1)
+        if not self.enable_lora_:
+            return self.weight_.forward(data)
+
         with nvtx_range("f_linear"):
             result = self.weight_.forward(data)
         set_backward_tracepoint(result.grad_fn, "b_linear")
-
-        if not self.enable_lora_:
-            return result
 
         for lora_config in input_args.lora_batch_data_config_:
             adapter_name = lora_config.adapter_name_
@@ -143,20 +127,17 @@ class Linear(torch.nn.Module):
             if adapter_name == "" or adapter_name not in self.loras_:
                 continue
 
-            with nvtx_range(f"f_lora_split_({adapter_name})"):
+            with nvtx_range(f"f_lora_{adapter_name}"):
                 lora_data = data[start_idx:end_idx]
-            set_backward_tracepoint(
-                lora_data.grad_fn, f"b_lora_split_({adapter_name})")
 
-            # backward_tracepoint inside the forward function
-            lora_delta = self.loras_[adapter_name].forward(lora_data)
+                # backward_tracepoint inside the forward function
+                lora_delta = self.loras_[adapter_name].forward(lora_data)
 
-            lora_range = torch.arange(
-                start_idx, end_idx, step=1, device=lora_delta.device)
-            with nvtx_range(f"f_lora_add_({adapter_name})"):
+                lora_range = torch.arange(
+                    start_idx, end_idx, step=1, device=lora_delta.device)
                 result.index_add_(dim=0, index=lora_range, source=lora_delta)
-            set_backward_tracepoint(
-                result.grad_fn, f"b_lora_add_({adapter_name})")
 
-        set_backward_tracepoint(result.grad_fn, "b_lora")
+            set_backward_tracepoint(
+                result.grad_fn, f"b_lora_{adapter_name}")
+
         return result

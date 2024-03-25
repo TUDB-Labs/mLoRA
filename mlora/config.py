@@ -4,10 +4,10 @@ from typing import Dict, List
 
 
 class DictConfig:
+    __params_map: Dict[str, str] = {}
 
     def __init__(self, config: Dict[str, str]) -> None:
-        params_map: Dict[str, str] = {}
-        self.init(params_map, config)
+        self.init(self.__params_map, config)
 
     def init(self,
              params_map: Dict[str, str],
@@ -20,29 +20,34 @@ class OptimConfig(DictConfig):
     optim_: str = ""
     lr_: float = 0.0
 
+    __params_map: Dict[str, str] = {
+        "lr_": "lr",
+        "optim_": "optim"
+    }
+
     def __init__(self, config: Dict[str, str]) -> None:
         super().__init__(config)
-        params_map = {
-            "lr_": "lr",
-            "optim_": "optim"
-        }
-        self.init(params_map, config)
+        self.init(self.__params_map, config)
 
 
 class SGDOptimConfig(OptimConfig):
     momentum_: float = 0.0
 
+    __params_map: Dict[str, str] = {
+        "momentum_": "momentum"
+    }
+
     def __init__(self, config: Dict[str, str]) -> None:
         super().__init__(config)
-        params_map = {
-            "momentum_": "momentum"
-        }
-        self.init(params_map, config)
+        self.init(self.__params_map, config)
 
 
 class AdamWOptimConfig(OptimConfig):
+    __params_map: Dict[str, str] = {}
+
     def __init__(self, config: Dict[str, str]) -> None:
         super().__init__(config)
+        self.init(self.__params_map, config)
 
 
 class LoraConfig(DictConfig):
@@ -70,28 +75,29 @@ class LoraConfig(DictConfig):
     val_set_size_: int = -1
     cutoff_len_: int = -1
 
+    __params_map: Dict[str, str] = {
+        "adapter_name_": "name",
+        "r_": "r",
+        "lora_alpha_": "alpha",
+        "lora_dropout_": "dropout",
+        "target_": "target_modules",
+
+        "batch_size_": "batch_size",
+        "micro_batch_size_": "micro_batch_size",
+        "test_batch_size_": "test_batch_size",
+        "num_epochs_": "num_epochs",
+
+        "data_": "data",
+        "test_data_": "test_data",
+        "prompt_": "prompt",
+
+        "group_by_length_": "group_by_length",
+        "expand_side_": "expand_side",
+    }
+
     def __init__(self, config: Dict[str, str]):
         super().__init__(config)
-        params_map = {
-            "adapter_name_": "name",
-            "r_": "r",
-            "lora_alpha_": "alpha",
-            "lora_dropout_": "dropout",
-            "target_": "target_modules",
-
-            "batch_size_": "batch_size",
-            "micro_batch_size_": "micro_batch_size",
-            "test_batch_size_": "test_batch_size",
-            "num_epochs_": "num_epochs",
-
-            "data_": "data",
-            "test_data_": "test_data",
-            "prompt_": "prompt",
-
-            "group_by_length_": "group_by_length",
-            "expand_side_": "expand_side",
-        }
-        self.init(params_map, config)
+        self.init(self.__params_map, config)
 
         if config["optim"] == "adamw":
             self.optim_config_ = AdamWOptimConfig(config)
@@ -109,17 +115,18 @@ class TrainerConfig(DictConfig):
     train_lora_simultaneously_num_: int = 2
     train_strategy_: str = "optim"
 
+    __params_map: Dict[str, str] = {
+        "cutoff_len_": "cutoff_len",
+        "save_step_": "save_step",
+        "early_stop_test_step_": "early_stop_test_step",
+        "train_lora_candidate_num_": "train_lora_candidate_num",
+        "train_lora_simultaneously_num_": "train_lora_simultaneously_num",
+        "train_strategy_": "train_strategy"
+    }
+
     def __init__(self, config: Dict[str, str]):
         super().__init__(config)
-        params_map = {
-            "cutoff_len_": "cutoff_len",
-            "save_step_": "save_step",
-            "early_stop_test_step_": "early_stop_test_step",
-            "train_lora_candidate_num_": "train_lora_candidate_num",
-            "train_lora_simultaneously_num_": "train_lora_simultaneously_num",
-            "train_strategy_": "train_strategy"
-        }
-        self.init(params_map, config)
+        self.init(self.__params_map, config)
 
 
 class MLoRAConfig:
