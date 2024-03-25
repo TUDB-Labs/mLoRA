@@ -42,12 +42,16 @@ parser.add_argument('--disable_adapter', action="store_true",
                     help="Disable the adapter modules")
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
-parser.add_argument('--load_16bit', action='store_true',
-                    help='Load model in half precision')
+parser.add_argument('--fp16', action='store_true',
+                    help='Load model in float16 precision')
+parser.add_argument('--bf16', action='store_true',
+                    help='Load model in bfloat16 precision')
+parser.add_argument('--tf32', action="store_true",
+                    help='Use tfloat32 instead of float32 if available')
 parser.add_argument('--load_8bit', action="store_true",
-                    help='Load model in 8bit mode')
+                    help='Load model with 8bit quantization')
 parser.add_argument('--load_4bit', action="store_true",
-                    help='Load model in 4bit mode')
+                    help='Load model with 4bit quantization')
 parser.add_argument('--device', type=str, default='cuda:0',
                     help='Specify which GPU to be used, default is cuda:0')
 parser.add_argument('--config', type=str, required=True,
@@ -59,18 +63,22 @@ parser.add_argument('--dir', type=str, default=".",
 parser.add_argument('--disable_log', action="store_true",
                     help='Disable logging.')
 parser.add_argument('--log_file', type=str,
-                    help='Save log to specific file.')
+                    help='Save log to specific file')
 parser.add_argument('--overwrite', action="store_true",
-                    help='Overwrite adapter model when older one existed.')
+                    help='Overwrite adapter model when older one existed')
+parser.add_argument('--debug', action="store_true",
+                    help='Enabling debugging mode')
+parser.add_argument('--deterministic', action="store_true",
+                    help='Use deterministic algorithms to improve the reproducibility')
 
 args = parser.parse_args()
 
 
 # Functions
 def setup_seed(seed):
+    random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    random.seed(seed)
 
 
 def query_yes_no(question, default="no"):
@@ -102,7 +110,8 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
         path=args.base_model,
         device=args.device,
         bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
-        load_dtype=torch.bfloat16 if args.load_16bit else torch.float32
+        load_dtype=(torch.bfloat16 if args.bf16 else (
+            torch.float16 if args.fp16 else torch.float32))
     )
 
     tokenizer = mlora.Tokenizer(args.base_model)
@@ -191,6 +200,9 @@ def inference(llm_model: mlora.LLMModel,
 
 # Main Function
 if __name__ == "__main__":
+    if args.debug:
+        torch.autograd.set_detect_anomaly(True)
+
     if args.inference or args.evaluate:
         args.load_adapter = True
 
@@ -210,6 +222,20 @@ if __name__ == "__main__":
         logging.error(
             'm-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
         exit(-1)
+
+    if args.deterministic:
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+    else:
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.deterministic = False
+
+    if args.tf32:
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+    else:
+        torch.backends.cudnn.allow_tf32 = False
+        torch.backends.cuda.matmul.allow_tf32 = False
 
     setup_seed(args.seed)
 

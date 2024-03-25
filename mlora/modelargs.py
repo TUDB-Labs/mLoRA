@@ -166,6 +166,7 @@ class MixConfig(LoraConfig):
 
     def check(self) -> "MixConfig":
         super().check()
+        assert isinstance(self.expert_use_dora_, bool)
         assert isinstance(self.expert_r_, int) and self.expert_r_ > 0
         assert isinstance(self.expert_alpha_, int) and self.expert_alpha_ > 0
         assert isinstance(self.expert_dropout_,
@@ -176,8 +177,6 @@ class MixConfig(LoraConfig):
                           float) and self.router_init_range_ >= 0
         assert isinstance(self.routing_strategy_,
                           str) and self.routing_strategy_ in available_routing_strategies
-        assert isinstance(self.ffn_dropout_,
-                          float) and self.ffn_dropout_ >= 0
         assert isinstance(self.num_experts_, int) and self.num_experts_ > 0
         assert isinstance(self.act_fn_, str) and self.act_fn_ in ACT2FN
         if self.routing_strategy_ == "mixtral":
@@ -189,11 +188,14 @@ class MixConfig(LoraConfig):
                               int) and self.expert_capacity_ > 0
             assert isinstance(self.jitter_noise_,
                               float) and self.jitter_noise_ >= 0
+            assert isinstance(self.ffn_dropout_,
+                              float) and self.ffn_dropout_ >= 0
 
         return self
 
     def from_config(self, config: Dict[str, any]) -> "MixConfig":
         super().from_config(config)
+        self.expert_use_dora_ = config.get("expert_use_dora", self.use_dora_)
         self.expert_r_ = config.get("expert_r", self.lora_r_)
         self.expert_alpha_ = config.get("expert_alpha", self.lora_alpha_)
         self.expert_dropout_ = config.get("expert_dropout", self.lora_dropout_)
@@ -220,6 +222,8 @@ class MixConfig(LoraConfig):
     def export(self) -> Dict[str, any]:
         config = super().export()
         config["peft_type"] = "MIXLORA"
+        if self.expert_use_dora_:
+            config["expert_use_dora"] = self.expert_use_dora_
         config["expert_r"] = self.expert_r_
         config["expert_alpha"] = self.expert_alpha_
         config["expert_dropout"] = self.expert_dropout_
