@@ -10,23 +10,31 @@ work_path = os.path.dirname(os.path.abspath(__file__))
 
 def compose_command(base_model: str,
                     config: str = "mlora.json",
-                    model_dtype: str = "16bit",
                     load_adapter: bool = False,
                     random_seed: int = 42,
+                    cuda_device: int = 0,
                     log_file: str = "mlora.log",
                     overwrite: bool = False,
-                    cuda_device: int = 0):
-    assert model_dtype not in ["4bit", "8bit" "16bit"]
+                    quantize: str = None,
+                    dtype: str = "bf16",
+                    tf32: bool = True):
+    assert quantize in (None, "4bit", "8bit")
+    assert dtype in ("fp32", "fp16", "bf16")
     command = f"CUDA_VISIBLE_DEVICES={cuda_device} python mlora.py"
     command += f" --base_model {base_model}"
     command += f" --config {config}"
-    command += f" --load_{model_dtype}"
     if load_adapter:
         command += " --load_adapter"
     command += f" --seed {random_seed}"
     command += f" --log_file {log_file}"
     if overwrite:
         command += " --overwrite"
+    if quantize is not None:
+        command += f" --load_{quantize}"
+    if dtype in ("fp16", "bf16"):
+        command += f" --{dtype}"
+    if tf32:
+        command += " --tf32"
     return command
 
 
@@ -149,12 +157,14 @@ def show_help():
     print("Arguments of run, train and evaluate:")
     print("    --base_model   model name or path")
     print("    --config       [mlora.json]")
-    print("    --model_dtype  [16bit], 8bit, 4bit")
     print("    --load_adapter [false]")
     print("    --random_seed  [42]")
+    print("    --cuda_device  [0]")
     print("    --log_file     [mlora.log]")
     print("    --overwrite    [false]")
-    print("    --cuda_device  [0]")
+    print("    --quantize     [none], 4bit, 8bit")
+    print("    --dtype        [bf16], fp16, fp32")
+    print("    --tf32         [true]")
     print("")
 
 

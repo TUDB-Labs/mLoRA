@@ -4,7 +4,6 @@ from mlora.mix_lora import moe_layer_factory
 
 from typing import List, Optional
 import torch
-import math
 
 
 class FeedForward(torch.nn.Module):
@@ -57,8 +56,8 @@ class FeedForward(torch.nn.Module):
         self.moes_[config.adapter_name_] = moe_layer_factory(
             in_features, config)
         if gate is None:
-            torch.nn.init.kaiming_normal_(
-                self.moes_[config.adapter_name_].gate_.weight, a=math.sqrt(5))
+            torch.nn.init.normal_(
+                self.moes_[config.adapter_name_].gate_.weight, mean=0.0, std=config.router_init_range_)
         else:
             with torch.no_grad():
                 self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
