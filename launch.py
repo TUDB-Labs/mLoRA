@@ -58,14 +58,15 @@ def run(config: str = "mlora.json", **kwargs):
 
 def gen_config(template_name: str,
                task_names: str,
+               adapter_name: str = None,
                file_name: str = "mlora.json",
                cutoff_len: int = 512,
                save_step: int = 1000,
-               warmup_steps: float = 0.2,
-               learning_rate: float = 1e-4,
+               warmup_steps: float = 0,
+               learning_rate: float = 2e-4,
                batch_size: int = 16,
-               micro_batch_size: int = 4,
-               test_batch_size: int = 16,
+               micro_batch_size: int = 8,
+               test_batch_size: int = 32,
                num_epochs: int = 2,
                use_dora: bool = False,
                group_by_length: bool = False):
@@ -90,6 +91,10 @@ def gen_config(template_name: str,
             else:
                 lora_config["name"] = f"{task_name.split(':')[-1].replace('-', '_')}_{index}"
                 lora_config["task_name"] = task_name
+
+            if adapter_name is not None:
+                lora_config["name"] = f"{adapter_name}_{index}"
+
             lora_config["warmup_steps"] = warmup_steps
             lora_config["lr"] = learning_rate
             lora_config["batch_size"] = batch_size
@@ -132,7 +137,7 @@ def show_help():
     print("    --file_name        [mlora.json]")
     print("    --cutoff_len       [512]")
     print("    --save_step        [1000]")
-    print("    --warmup_steps     [0.2]")
+    print("    --warmup_steps     [0]")
     print("    --learning_rate    [1e-4]")
     print("    --batch_size       [16]")
     print("    --micro_batch_size [4]")
