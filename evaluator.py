@@ -22,7 +22,8 @@ def main(base_model: str,
         lora_weights if lora_weights else "default")
     evaluate_paramas = mlora.EvaluateConfig(
         adapter_name_=adapter_name,
-        task_name_=task_name)
+        task_name_=task_name,
+        batch_size_=32)
 
     output = mlora.evaluate(
         model, tokenizer, [evaluate_paramas], save_file=save_file)
