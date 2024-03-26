@@ -56,7 +56,9 @@ def run(config: str = "mlora.json", **kwargs):
         if lora_config["task_name"] != "casual":
             evaluate_config["lora"].append(lora_config)
 
-    os.system(compose_command(config=config, **kwargs))
+    if os.system(compose_command(config=config, **kwargs)) != 0:
+        return
+
     if len(evaluate_config["lora"]) > 0:
         temp = tempfile.NamedTemporaryFile("w+t")
         json.dump(evaluate_config, temp, indent=4)
