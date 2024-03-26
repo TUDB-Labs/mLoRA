@@ -129,6 +129,7 @@ class SequenceClassificationTask(BasicTask):
         else:
             data = hf_datasets.load_dataset(self.task_name_)
         data = data[self.subset_map_[0] if is_train else self.subset_map_[1]]
+        logging.info(f"Preparing data for {self.task_name_.upper()}")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
             inputs, labels, flags = self.dataload_function_(data_point)

@@ -34,6 +34,7 @@ class ARC(QuestionAnswerTask):
                      is_train: bool = True) -> List[DataClass]:
         data = hf_datasets.load_dataset(
             "allenai/ai2_arc", self.subject_)["train" if is_train else "test"]
+        logging.info(f"Preparing data for {self.subject_}")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
             prompt = "Please choose the correct answer to the question: " + \
@@ -64,6 +65,7 @@ class Boolq(QuestionAnswerTask):
                      is_train: bool = True) -> List[DataClass]:
         data = hf_datasets.load_dataset(
             "google/boolq")["train" if is_train else "validation"]
+        logging.info("Preparing data for BoolQ")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
             prompt = "Please answer the following question with true or false: " + \
@@ -91,6 +93,7 @@ class OpenBookQA(QuestionAnswerTask):
                      is_train: bool = True) -> List[DataClass]:
         data = hf_datasets.load_dataset(
             "allenai/openbookqa", "main")["train" if is_train else "test"]
+        logging.info("Preparing data for OpenBookQA")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
             prompt = "Please choose the correct answer to the question: " + \
@@ -121,6 +124,7 @@ class PIQA(QuestionAnswerTask):
                      is_train: bool = True) -> List[DataClass]:
         data = hf_datasets.load_dataset(
             "piqa")["train" if is_train else "validation"]
+        logging.info("Preparing data for PIQA")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
             prompt = "Below is a common task along with two possible solutions labeled (A) and (B)."
