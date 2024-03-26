@@ -142,7 +142,7 @@ def show_help():
     print("    help        Show help information")
     print("")
     print("Arguments of gen:")
-    print("    --template_name    lora, mixlora, mixlora_compare")
+    print("    --template_name    lora, mixlora, etc.")
     print("    --task_names       task names separate by \';\'")
     print("    --file_name        [mlora.json]")
     print("    --cutoff_len       [512]")
