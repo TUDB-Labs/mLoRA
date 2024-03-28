@@ -48,6 +48,31 @@ class MixtralSparseMoe(torch.nn.Module):
         self.act_ = ACT2FN[config.act_fn_]
         self.experts_ = config.num_experts_
         self.topk_ = config.top_k_
+        self.router_profile_: bool = False
+        self.profiler_: List[int] = None
+
+    def _profiling(self,
+                   batch_size: int,
+                   sequence_length: int,
+                   selected_experts: torch.Tensor) -> None:
+        if not self.router_profile_:
+            return
+
+        router_statistic_ = list(0 for _ in range(self.experts_))
+        for selected in selected_experts.tolist():
+            for idx in selected:
+                router_statistic_[idx] += 1
+
+        if self.profiler_ is None:
+            self.profiler_ = list(0 for _ in range(self.experts_))
+            for idx in range(self.experts_):
+                self.profiler_[idx] = (
+                    router_statistic_[idx] / batch_size) / sequence_length
+        else:
+            for idx in range(self.experts_):
+                pressure = (
+                    router_statistic_[idx] / batch_size) / sequence_length
+                self.profiler_[idx] = (self.profiler_[idx] + pressure) / 2
 
     def forward(self, expert_fn, hidden_states: torch.Tensor) -> Tuple:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -58,6 +83,9 @@ class MixtralSparseMoe(torch.nn.Module):
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(
             routing_weights, self.topk_, dim=-1)
+
+        self._profiling(batch_size, sequence_length, selected_experts)
+
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)

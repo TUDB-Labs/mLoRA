@@ -1,4 +1,4 @@
-from mlora.modelargs import DataClass, LoraBatchDataConfig, MultiLoraBatchData
+from mlora.modelargs import DataClass, LoraBatchDataConfig, MultiLoraBatchData, MixConfig
 from mlora.tasks.common import BasicTask, BasicMetric
 from mlora.tasks.common import CommonSenseTask, task_dict
 from mlora.tokenizer import Tokenizer
@@ -20,6 +20,7 @@ class EvaluateConfig:
     adapter_name_: str = None
     task_name_: str = None
     batch_size_: int = 16
+    router_profile_: bool = False
     # Do not set these manually
     task_: BasicTask = None
     data_: List[DataClass] = None
@@ -111,6 +112,9 @@ def evaluate(model: LLMModel,
         config.prepare(tokenizer)
         if len(config.data_) > max_iterations:
             max_iterations = len(config.data_)
+        for layer in model.layers_:
+            layer.ffn_.moes_[
+                config.adapter_name_].router_profile_ = config.router_profile_
 
     while True:
         current_configs, sequence_lengths, batch_labels, input_args = _dispatch_task_in(
@@ -128,6 +132,18 @@ def evaluate(model: LLMModel,
             start_idx = output.batch_start_idx_
             end_idx = output.batch_end_idx_
             logits = output.logits
+
+            if config.router_profile_:
+                adapter_config = model.adapter_configs_[config.adapter_name_]
+                if isinstance(adapter_config, MixConfig):
+                    router_statistic_ = list(
+                        0 for _ in range(adapter_config.num_experts_))
+                    for layer in model.layers_:
+                        for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name_].profiler_):
+                            router_statistic_[idx] += val
+                    for idx, val in enumerate(router_statistic_):
+                        logging.info(
+                            f"{config.adapter_name_}: expert {idx}, load = {val/32}")
 
             batch_size = logits.shape[0]
             pooled_logits = logits[torch.arange(
@@ -160,6 +176,18 @@ def evaluate(model: LLMModel,
         logging.info(f"{config.adapter_name_} evaluate result:")
         compute_results = config.metric_.compute()
         result["metrics"] = compute_results
+        if config.router_profile_:
+            adapter_config = model.adapter_configs_[config.adapter_name_]
+            if isinstance(adapter_config, MixConfig):
+                router_statistic_ = list(
+                    0 for _ in range(adapter_config.num_experts_))
+                for layer in model.layers_:
+                    for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name_].profiler_):
+                        router_statistic_[idx] += val
+                    layer.ffn_.moes_[config.adapter_name_].profiler_ = None
+                result["router_profile"] = list(
+                    val/32 for val in router_statistic_)
+
         results.append(result)
         for name, value in compute_results.items():
             logging.info(f"    {name} = {value}")

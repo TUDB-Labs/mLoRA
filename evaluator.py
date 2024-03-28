@@ -1,3 +1,4 @@
+import logging
 import mlora
 import torch
 import json
@@ -11,7 +12,14 @@ def main(base_model: str,
          load_8bit: bool = False,
          load_4bit: bool = False,
          save_file: str = None,
+         batch_size: int = 32,
+         router_profile: bool = False,
          device: str = "cuda:0"):
+
+    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
+                        level=logging.INFO,
+                        handlers=[logging.StreamHandler()],
+                        force=True)
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
                                              bits=(8 if load_8bit else (
@@ -23,7 +31,8 @@ def main(base_model: str,
     evaluate_paramas = mlora.EvaluateConfig(
         adapter_name_=adapter_name,
         task_name_=task_name,
-        batch_size_=32)
+        batch_size_=batch_size,
+        router_profile_=router_profile)
 
     output = mlora.evaluate(
         model, tokenizer, [evaluate_paramas], save_file=save_file)
