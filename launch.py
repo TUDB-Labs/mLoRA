@@ -79,6 +79,7 @@ def gen_config(template_name: str,
                test_batch_size: int = 32,
                num_epochs: int = 2,
                use_dora: bool = False,
+               multi_task: bool = False,
                group_by_length: bool = False):
     import mlora
     template_name = f"{work_path}{os.sep}{file_path}{os.sep}{template_name}.json"
@@ -89,10 +90,15 @@ def gen_config(template_name: str,
     lora_templates = template_obj["lora"]
     template_obj["lora"] = []
     index = 0
+    if multi_task:
+        task_names = [task_names]
+    else:
+        task_names = task_names.split(';')
+
     for lora_template in lora_templates:
-        for task_name in task_names.split(';'):
+        for task_name in task_names:
             lora_config = lora_template.copy()
-            casual_task = (task_name not in mlora.task_dict)
+            casual_task = (not multi_task and task_name not in mlora.task_dict)
             if casual_task:
                 lora_config["name"] = f"casual_{index}"
                 lora_config["task_name"] = "casual"

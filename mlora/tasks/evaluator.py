@@ -112,6 +112,8 @@ def evaluate(model: LLMModel,
         config.prepare(tokenizer)
         if len(config.data_) > max_iterations:
             max_iterations = len(config.data_)
+        if not isinstance(model.adapter_configs_[config.adapter_name_], MixConfig):
+            continue
         for layer in model.layers_:
             layer.ffn_.moes_[
                 config.adapter_name_].router_profile_ = config.router_profile_

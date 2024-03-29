@@ -160,14 +160,21 @@ def init_adapter_config(config: Dict[str, any],
                 adapter_name_=config_class.adapter_name_)
             if not args.disable_prompter:
                 config_class.prompt_template_ = lora_config.get("prompt", None)
+            config_list.append(config_class)
         elif args.evaluate:
-            config_class = mlora.EvaluateConfig(
-                adapter_name_=config_class.adapter_name_,
-                task_name_=config_class.task_name_,
-                batch_size_=lora_config["test_batch_size"])
+            if ';' in config_class.task_name_:
+                for task_name in config_class.task_name_.split(';'):
+                    config_list.append(mlora.EvaluateConfig(
+                        adapter_name_=config_class.adapter_name_,
+                        task_name_=task_name,
+                        batch_size_=lora_config["test_batch_size"]))
+            else:
+                config_list.append(mlora.EvaluateConfig(
+                    adapter_name_=config_class.adapter_name_,
+                    task_name_=config_class.task_name_,
+                    batch_size_=lora_config["test_batch_size"]))
         else:
-            config_class = mlora.TrainConfig(lora_config, config_class)
-        config_list.append(config_class)
+            config_list.append(mlora.TrainConfig(lora_config, config_class))
 
     return config_list
 

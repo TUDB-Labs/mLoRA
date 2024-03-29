@@ -1,6 +1,6 @@
 from mlora.modelargs import LoraConfig
 from mlora.dispatcher import TrainTask, Dispatcher
-from mlora.tasks import CasualTask, task_dict
+from mlora.tasks import CasualTask, MultiTask, task_dict
 from mlora.model import LLMModel
 
 from transformers import get_scheduler
@@ -40,6 +40,8 @@ class TrainConfig:
                 data_path=train_config["data"],
                 prompt_template=train_config.get("prompt", None),
                 validation_size=train_config.get("val_set_size", None))
+        elif ';' in task_name:
+            self.task_ = MultiTask(task_name)
         else:
             self.task_ = task_dict[task_name]
         train_config["dataloader"] = self.task_.loading_data

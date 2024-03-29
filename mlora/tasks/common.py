@@ -166,3 +166,25 @@ class CommonSenseTask(BasicTask):
 
 
 task_dict = {}
+
+
+# Multi-Task (Only for train)
+class MultiTask(BasicTask):
+    def __init__(self, task_names: str) -> None:
+        super().__init__()
+        self.task_type_ = "multi_task"
+        self.label_dtype_ = None
+        self.task_list_: List[BasicTask] = []
+        task_names = task_names.split(';')
+        for name in task_names:
+            self.task_list_.append(task_dict[name])
+
+    def loading_data(self,
+                     tokenizer: Tokenizer,
+                     is_train: bool = True) -> List[DataClass]:
+        logging.info(f"Preparing data for {len(self.task_list_)} tasks")
+        data: List[DataClass] = []
+        assert is_train
+        for task in self.task_list_:
+            data.extend(task.loading_data(tokenizer, is_train))
+        return data
