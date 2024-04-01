@@ -66,37 +66,49 @@ def run(config: str = "mlora.json", **kwargs):
         os.system(compose_command(config=temp.name, **kwargs) + " --evaluate")
 
 
-def gen_config(template_name: str,
-               task_names: str,
-               adapter_name: str = None,
-               file_name: str = "mlora.json",
-               cutoff_len: int = 512,
-               save_step: int = 1000,
-               warmup_steps: float = 0,
-               learning_rate: float = 2e-4,
-               batch_size: int = 16,
-               micro_batch_size: int = 8,
-               test_batch_size: int = 32,
-               num_epochs: int = 2,
-               use_dora: bool = False,
-               multi_task: bool = False,
-               group_by_length: bool = False):
+def update_record(dict_: dict, key_, value_):
+    if value_ is not None:
+        dict_[key_] = value_
+
+
+def gen_config(
+        # essential
+        template: str,
+        tasks: str,
+        # optional
+        adapter_name: str = None,
+        file_name: str = "mlora.json",
+        # default value provided by template
+        cutoff_len: int = None,
+        save_step: int = None,
+        lr_scheduler: str = None,
+        warmup_steps: float = None,
+        learning_rate: float = None,
+        batch_size: int = None,
+        micro_batch_size: int = None,
+        test_batch_size: int = None,
+        num_epochs: int = None,
+        loraplus_lr_ratio: float = None,
+        use_dora: bool = None,
+        use_rslora: bool = None,
+        multi_task: bool = None,
+        group_by_length: bool = None):
     import mlora
-    template_name = f"{work_path}{os.sep}{file_path}{os.sep}{template_name}.json"
-    with open(template_name, 'r', encoding='utf8') as fp:
+    template = f"{work_path}{os.sep}{file_path}{os.sep}{template}.json"
+    with open(template, 'r', encoding='utf8') as fp:
         template_obj = json.load(fp)
-    template_obj["cutoff_len"] = cutoff_len
-    template_obj["save_step"] = save_step
+    update_record(template_obj, "cutoff_len", cutoff_len)
+    update_record(template_obj, "save_step", save_step)
     lora_templates = template_obj["lora"]
     template_obj["lora"] = []
     index = 0
     if multi_task:
-        task_names = [task_names]
+        tasks = [tasks]
     else:
-        task_names = task_names.split(';')
+        tasks = tasks.split(';')
 
     for lora_template in lora_templates:
-        for task_name in task_names:
+        for task_name in tasks:
             lora_config = lora_template.copy()
             casual_task = (not multi_task and task_name not in mlora.task_dict)
             if casual_task:
@@ -111,14 +123,17 @@ def gen_config(template_name: str,
             if adapter_name is not None:
                 lora_config["name"] = f"{adapter_name}_{index}"
 
-            lora_config["warmup_steps"] = warmup_steps
-            lora_config["lr"] = learning_rate
-            lora_config["batch_size"] = batch_size
-            lora_config["micro_batch_size"] = micro_batch_size
-            lora_config["test_batch_size"] = test_batch_size
-            lora_config["num_epochs"] = num_epochs
-            lora_config["use_dora"] = use_dora
-            lora_config["group_by_length"] = group_by_length
+            update_record(lora_config, "scheduler_type", lr_scheduler)
+            update_record(lora_config, "warmup_steps", warmup_steps)
+            update_record(lora_config, "lr", learning_rate)
+            update_record(lora_config, "batch_size", batch_size)
+            update_record(lora_config, "micro_batch_size", micro_batch_size)
+            update_record(lora_config, "test_batch_size", test_batch_size)
+            update_record(lora_config, "num_epochs", num_epochs)
+            update_record(lora_config, "loraplus_lr_ratio", loraplus_lr_ratio)
+            update_record(lora_config, "use_dora", use_dora)
+            update_record(lora_config, "use_rslora", use_rslora)
+            update_record(lora_config, "group_by_length", group_by_length)
             template_obj["lora"].append(lora_config)
             index += 1
 
@@ -148,19 +163,22 @@ def show_help():
     print("    help        Show help information")
     print("")
     print("Arguments of gen:")
-    print("    --template_name    lora, mixlora, etc.")
-    print("    --task_names       task names separate by \';\'")
-    print("    --file_name        [mlora.json]")
-    print("    --cutoff_len       [512]")
-    print("    --save_step        [1000]")
-    print("    --warmup_steps     [0]")
-    print("    --learning_rate    [1e-4]")
-    print("    --batch_size       [16]")
-    print("    --micro_batch_size [4]")
-    print("    --test_batch_size  [16]")
-    print("    --num_epochs       [2]")
-    print("    --use_dora         [false]")
-    print("    --group_by_length  [false]")
+    print("    --template          lora, mixlora, etc.")
+    print("    --tasks             task names separate by \';\'")
+    print("    --adapter_name      default is task name")
+    print("    --file_name         [mlora.json]")
+    print("    --cutoff_len")
+    print("    --save_step")
+    print("    --warmup_steps")
+    print("    --learning_rate")
+    print("    --loraplus_lr_ratio")
+    print("    --batch_size")
+    print("    --micro_batch_size")
+    print("    --test_batch_size")
+    print("    --num_epochs")
+    print("    --use_dora")
+    print("    --use_rslora")
+    print("    --group_by_length")
     print("")
     print("Arguments of run, train and evaluate:")
     print("    --base_model   model name or path")

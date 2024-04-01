@@ -17,7 +17,7 @@ This is an actively developing fork of the official m-LoRA repository, focusing 
 
 Please note that the functions, interfaces, and performance of this fork are slightly different from the original m-LoRA. We cannot guarantee compatibility. For production use, please prefer the [original m-LoRA](https://github.com/TUDB-Labs/multi-lora-fine-tune).
 
-## Models
+## Supported Pre-trained Models
 
 |         | Model                                                    | # Parameters    |
 |---------|----------------------------------------------------------|-----------------|
@@ -25,6 +25,36 @@ Please note that the functions, interfaces, and performance of this fork are sli
 | &check; | [LLaMA-2](https://huggingface.co/meta-llama)             | 7B/13B/70B      |
 | &check; | [Qwen-2](https://qwenlm.github.io)                       | 4B/7B/14B/72B   |
 | &check; | [Mistral](https://mistral.ai)                            | 7B              |
+
+## Supported LoRA Variants
+
+|         | LoRA Variants                                            | Arguments*                |
+|---------|----------------------------------------------------------|---------------------------|
+| &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0` |
+| &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `use_dora: true`          |
+| &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `use_rslora: true`        |
+
+*: Arguments of configuration file
+
+## Supported Quantize Methods
+
+|         | Quantize Methods      | Arguments*    |
+|---------|-----------------------|---------------|
+| &check; | Tensor Float 32       | `--tf32`      |
+| &check; | Half Precision (FP16) | `--fp16`      |
+| &check; | Brain Float 16        | `--bf16`      |
+| &check; | 8bit Quantize         | `--load_8bit` |
+| &check; | 4bit Quantize         | `--load_4bit` |
+
+*: Arguments of `mlora.py`
+
+m-LoRA offers support for various model accuracy and quantization methods. By default, m-LoRA utilizes full precision (Float32), but users can opt for half precision (Float16) using `--fp16` or BrainFloat16 using `--bf16`. Enabling half precision reduces the model size by half, and for further reduction, quantization methods can be employed.
+
+Quantization can be activated using `--load_4bit` for 4-bit quantization or `--load_8bit` for 8-bit quantization. However, when only quantization is enabled, m-LoRA utilizes Float32 for calculations. To achieve memory savings during training, users can combine quantization and half-precision modes.
+
+It's crucial to note that regardless of the settings, **LoRA weights are always calculated and stored at full precision**. For maintaining calculation accuracy, m-LoRA framework mandates the use of full precision for calculations when accuracy is imperative.
+
+For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can be utilized to enable full-precision calculation acceleration.
 
 ## Quickstart
 
@@ -45,7 +75,7 @@ Secondly, you can use m-LoRA via `launch.py` conveniently:
 # Grant execution permission to the file
 chmod +x launch.py
 # Generating configuration
-launch.py gen --template_name lora --task_names yahma/alpaca-cleaned
+launch.py gen --template lora --tasks yahma/alpaca-cleaned
 # Running the training task
 launch.py run --base_model yahma/llama-7b-hf
 ```
@@ -73,16 +103,6 @@ For further detailed usage information, please use `--help` option:
 python mlora.py --help
 ```
 
-## Model Precision
-
-m-LoRA offers support for various model accuracy and quantization methods. By default, m-LoRA utilizes full precision (Float32), but users can opt for half precision (Float16) using `--fp16` or BrainFloat16 using `--bf16`. Enabling half precision reduces the model size by half, and for further reduction, quantization methods can be employed.
-
-Quantization can be activated using `--load_4bit` for 4-bit quantization or `--load_8bit` for 8-bit quantization. However, when only quantization is enabled, m-LoRA utilizes Float32 for calculations. To achieve memory savings during training, users can combine quantization and half-precision modes.
-
-It's crucial to note that regardless of the settings, **LoRA weights are always calculated and stored at full precision**. For maintaining calculation accuracy, m-LoRA framework mandates the use of full precision for calculations when accuracy is imperative.
-
-For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can be utilized to enable full-precision calculation acceleration.
-
 ## Contributing
 We welcome contributions to improve this repository! Please review the contribution guidelines before submitting pull requests or issues.
 
@@ -109,7 +129,7 @@ Please cite the repo if you use the code in this repo.
 ```
 
 ## Copyright
-Copyright © 2023 All Rights Reserved.
+Copyright © 2023-2024 All Rights Reserved.
 
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
 

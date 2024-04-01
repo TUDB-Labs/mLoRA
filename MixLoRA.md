@@ -43,96 +43,91 @@ This is an example of LoRA training configuration. You can find instructions at 
 MixLoRA have two routing strategies: top-k routing (like *Mixtral*) and top-1 switch routing (like *Switch Transformers*), can be configured with `"routing_strategy": "mixtral"` or `"routing_strategy": "switch"`.
 
 **Top-k Routing**
-```
+```json
 {
   ...
   "routing_strategy": "mixtral",
+  "router_init_range": 0.02,
   "num_experts": 8,
   "act_fn": "silu",
   "top_k": 2,
+  "router_aux_loss_coef": 0.01,
   ...
 }
 ```
 
 **Top-1 Switch Routing**
-```
+```json
 {
   ...
   "routing_strategy": "switch",
+  "router_init_range": 0.02,
   "num_experts": 8,
   "act_fn": "gelu_new",
   "expert_capacity": 32,
   "jitter_noise": 0.1,
   "ffn_dropout": 0.1,
+  "router_aux_loss_coef": 0.01,
+  "router_z_loss_coef": 0.01,
   ...
 }
 ```
 You can add these items into training configurations to enable the MixLoRA architecture.
+
+If you want to control the lora settings of experts separately, just add `"expert_lora"` block to the config:
+```json
+{
+  ...
+  "expert_lora": {
+    "r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05
+  },
+  ...
+}
+```
 ## Create MixLoRA model
 
 Basic command for creating a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
-CUDA_VISIBLE_DEVICES=0 python mlora.py \
-  --base_model yahma/llama-7b-hf \
-  --config ./config/alpaca_mixlora.json \
-  --load_8bit
+./launch.py gen --template mixlora --tasks yahma/alpaca-cleaned
+./launch.py run --base_model yahma/llama-7b-hf
 ```
 Please note that once the MixLoRA model is created, the number of experts in the model cannot be changed.
 
-## Fine-tuning MixLoRA model
-
-The MixLoRA model can also undergo further fine-tuning.
-Basic command for finetuning a model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
-```bash
-CUDA_VISIBLE_DEVICES=0 python mlora.py \
-  --base_model yahma/llama-7b-hf \
-  --config ./config/alpaca_mixlora.json \
-  --load_8bit \
-  --load_adapter
-```
-
 ## Evaluate MixLoRA model
 
-Currently, MixLoRA supports evaluation only through the m-LoRA framework.
-```bash
-CUDA_VISIBLE_DEVICES=0 python mlora.py \
-  --base_model yahma/llama-7b-hf \
-  --config ./config/alpaca_mixlora.json \
-  --load_8bit \
-  --inference
-```
-This apporach allows inference multiple MixLoRA and LoRA adapters simultaneously. We also provide a WebUI and an example for inference.
 ```bash
 # Run WebUI of Inference
 CUDA_VISIBLE_DEVICES=0 python inference.py \
   --base_model yahma/llama-7b-hf \
   --lora_weights scu-kdde/alpaca-mixlora-7b \
   --template template/alpaca.json \
-  --load_8bit
+  --load_16bit
 
 # Simply Generate
 CUDA_VISIBLE_DEVICES=0 python generate.py \
   --base_model yahma/llama-7b-hf \
   --lora_weights scu-kdde/alpaca-mixlora-7b \
   --template template/alpaca.json \
-  --load_8bit \
+  --load_16bit \
   --instruction "What is m-LoRA?"
 ```
 
 ## Citation
 Please cite the repo if you use the code in this repo.
 ```bibtex
-@misc{Mix-LoRA,
-  author = {Dengchun, Li and Tingfeng, Lan and Zhengmao, Ye and Lei, Duan and Mingjie, Tang},
-  title = {MixLoRA: Resource-Efficient Model with Mix-of-Experts Architecture for Enhanced LoRA Performance},
-  year = {2023},
+@misc{MixLoRA,
+  author = {Dengchun, Li and Yingzi, Ma and Naizheng, Wang and Mingjie, Tang},
+  title = {MixLoRA: Enhancing Large Language Models Fine-Tuning with LoRA based Mixture of Experts},
+  year = {2024},
   publisher = {GitHub},
-  howpublished = {\url{https://github.com/TUDB-Labs/multi-lora-fine-tune}},
+  howpublished = {\url{https://github.com/mikecovlee/mlora}},
 }
 ```
 
 ## Copyright
-Copyright © 2023 All Rights Reserved.
+Copyright © 2023-2024 All Rights Reserved.
 
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
 
