@@ -89,7 +89,7 @@ class Lora(nn.Module):
             if self.initializer_ == "original":
                 nn.init.kaiming_uniform_(self.lora_a_.weight, a=math.sqrt(5))
             elif self.initializer_ == "gaussian":
-                nn.init.normal_(self.lora_a_.weight, std=1/self.r_)
+                nn.init.normal_(self.lora_a_.weight, std=1 / self.r_)
             else:
                 raise ValueError(f"Unknown initialization {self.initializer_}")
             nn.init.zeros_(self.lora_b_.weight)

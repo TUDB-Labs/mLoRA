@@ -242,7 +242,6 @@ class Transformer(torch.nn.Module):
         self.dtype_ = args.dtype_
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
-        adapter_name = config.adapter_name_
         target = config.target_modules_
         linear_layer_list = [self.wk_, self.wq_, self.wv_,
                              self.wo_, self.ffn_.w1_, self.ffn_.w2_, self.ffn_.w3_]
