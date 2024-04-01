@@ -279,12 +279,7 @@ class Transformer(torch.nn.Module):
                             lora_b = weight[lora_b_name]
 
                         linear_layer_list[idx].init_lora_weight(
-                            LoraConfig(adapter_name_=f"moe.{adapter_name}.experts.{expert_idx}",
-                                       device_=config.device_,
-                                       use_dora_=config.expert_use_dora_,
-                                       lora_r_=config.expert_r_,
-                                       lora_alpha_=config.expert_alpha_,
-                                       lora_dropout_=config.expert_dropout_), (lora_a, lora_b))
+                            config.expert_config(expert_idx), (lora_a, lora_b))
                 else:
                     lora_a = None
                     lora_b = None
