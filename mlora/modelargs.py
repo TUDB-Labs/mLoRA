@@ -1,12 +1,19 @@
 from transformers.activations import ACT2FN
-from typing import List, Dict, Callable
+from typing import Any, List, Dict, Callable
 from dataclasses import dataclass
 
 import torch
 
 
 Tokens = List[int]
+Labels = List[Any]
 Masks = List[bool]
+
+
+@dataclass
+class DataClass:
+    tokens_: Tokens = None
+    labels_: Labels = None
 
 
 @dataclass
@@ -72,7 +79,7 @@ class MultiLoraBatchData:
 @dataclass
 class LoraConfig:
     adapter_name_: str = ""
-    task_type_: str = "casual"
+    task_name_: str = "casual"
     device_: str = "cuda:0"
     dtype_: torch.dtype = None
     use_dora_: bool = False

@@ -1,7 +1,6 @@
 from mlora.modelargs import LoraConfig
 from mlora.dispatcher import TrainTask, Dispatcher
-from mlora.tasks import CasualTask, classification_tasks
-from mlora.prompter import Prompter
+from mlora.tasks import CasualTask, MultiTask, task_dict
 from mlora.model import LLMModel
 
 from transformers import get_scheduler
@@ -35,14 +34,17 @@ class TrainConfig:
         self.accumulation_step_: int = None
         self.accumulation_step_cnt_: int = 0
         self.optimizer_: torch.optim.Optimizer = None
-        task_type = train_config.get("task_type", "casual")
-        if task_type == "casual":
-            self.task_ = CasualTask(prompter=Prompter(train_config["prompt"]))
+        task_name = train_config.get("task_name", "casual")
+        if task_name == "casual":
+            self.task_ = CasualTask(
+                data_path=train_config["data"],
+                prompt_template=train_config.get("prompt", None),
+                validation_size=train_config.get("val_set_size", None))
+        elif ';' in task_name:
+            self.task_ = MultiTask(task_name)
         else:
-            self.task_ = classification_tasks[task_type]
-        train_config["dataloader"] = self.task_.dataload_function
-        if "task_type" in train_config and "data" not in train_config:
-            train_config["data"] = train_config["task_type"]
+            self.task_ = task_dict[task_name]
+        train_config["dataloader"] = self.task_.loading_data
 
     def prepare(self, train_paramas: List[torch.Tensor]):
         if self.batch_size_ < self.micro_batch_size_ or self.batch_size_ % self.micro_batch_size_ != 0:

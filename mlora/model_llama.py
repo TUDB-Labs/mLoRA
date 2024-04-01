@@ -6,7 +6,7 @@ from mlora.feed_forward import FeedForward
 from mlora.lora_liner import Linear
 from mlora.generate import GenerateConfig
 from mlora.mix_lora import router_loss_factory
-from mlora.tasks import classification_tasks
+from mlora.tasks import SequenceClassificationTask, task_dict
 
 import torch
 import torch.nn.functional as F
@@ -487,17 +487,18 @@ class LlamaModel(LLMModel):
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
         self.adapter_configs_[config.adapter_name_] = config
         # init output layer
-        if config.task_type_ == "casual":
-            output_layer = CasualOutputLayer(
-                vocab_size=self.vocab_size_,
-                weight=self.lm_head_)
-        else:
+        if config.task_name_ in task_dict and isinstance(task_dict[config.task_name_], SequenceClassificationTask):
             output_layer = ClassificationOutputLayer(
-                **classification_tasks[config.task_type_].init_kwargs(),
+                **task_dict[config.task_name_].init_kwargs(),
                 hidden_size=self.dim_,
                 pad_token_id=self.pad_token_id_,
                 device=self.device_,
                 weight=weight)
+        else:
+            output_layer = CasualOutputLayer(
+                vocab_size=self.vocab_size_,
+                weight=self.lm_head_)
+
         self.output_.layers_[config.adapter_name_] = output_layer
         if config.adapter_name_ == "default" and weight is None:
             return

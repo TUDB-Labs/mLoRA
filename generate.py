@@ -8,7 +8,7 @@ def main(base_model: str,
          input: str = None,
          template: str = None,
          lora_weights: str = None,
-         load_16bit: bool = False,
+         load_16bit: bool = True,
          load_8bit: bool = False,
          load_4bit: bool = False,
          device: str = "cuda:0"):
@@ -18,16 +18,12 @@ def main(base_model: str,
                                                  4 if load_4bit else None)),
                                              load_dtype=torch.bfloat16 if load_16bit else torch.float32)
     tokenizer = mlora.Tokenizer(base_model)
-
-    if lora_weights:
-        adapter_name = model.load_adapter_weight(lora_weights)
-        generate_paramas = model.get_generate_paramas()[adapter_name]
-    else:
-        adapter_name = model.load_adapter_weight("default")
-        generate_paramas = mlora.GenerateConfig(adapter_name_=adapter_name)
-
-    generate_paramas.prompt_template_ = template
-    generate_paramas.prompts_ = [(instruction, input)]
+    adapter_name = model.load_adapter_weight(
+        lora_weights if lora_weights else "default")
+    generate_paramas = mlora.GenerateConfig(
+        adapter_name_=adapter_name,
+        prompt_template_=template,
+        prompts_=[(instruction, input)])
 
     output = mlora.generate(model, tokenizer, [generate_paramas],
                             temperature=0.5, top_p=0.9, max_gen_len=128)
