@@ -103,6 +103,15 @@ For further detailed usage information, please use `--help` option:
 python mlora.py --help
 ```
 
+## Flash Attention 2 Support
+
+m-LoRA supports training and inference with flash attention 2, but you need to install the flash attention 2 dependency by hand.
+```bash
+pip install ninja==1.10.2.4
+pip install flash-attn==2.3.6 --no-build-isolation
+```
+After installation, you can use m-LoRA with `--flash_attn` argument.
+
 ## Contributing
 We welcome contributions to improve this repository! Please review the contribution guidelines before submitting pull requests or issues.
 

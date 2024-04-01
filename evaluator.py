@@ -11,6 +11,7 @@ def main(base_model: str,
          load_16bit: bool = True,
          load_8bit: bool = False,
          load_4bit: bool = False,
+         flash_attn: bool = False,
          save_file: str = None,
          batch_size: int = 32,
          router_profile: bool = False,
@@ -22,6 +23,7 @@ def main(base_model: str,
                         force=True)
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
+                                             attn_impl="flash_attention_2" if flash_attn else "auto",
                                              bits=(8 if load_8bit else (
                                                  4 if load_4bit else None)),
                                              load_dtype=torch.bfloat16 if load_16bit else torch.float32)
