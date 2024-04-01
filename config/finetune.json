@@ -28,6 +28,7 @@
                 "w2_proj": false,
                 "w3_proj": false
             },
+            "use_rslora": true,
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",

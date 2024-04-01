@@ -82,7 +82,13 @@ class LoraConfig:
     task_name_: str = "casual"
     device_: str = "cuda:0"
     dtype_: torch.dtype = None
+    # Weight-Decomposed Low-Rank Adaptation
     use_dora_: bool = False
+    # Rank-Stabilized LoRA
+    # sets the adapter scaling factor to `alpha/math.sqrt(r)`
+    use_rslora_: bool = False
+    # can be original or gaussian
+    lora_init_: str = "original"
     lora_r_: int = None
     lora_alpha_: int = None
     lora_dropout_: float = None
@@ -90,6 +96,9 @@ class LoraConfig:
 
     def check(self) -> "LoraConfig":
         assert isinstance(self.use_dora_, bool)
+        assert isinstance(self.use_rslora_, bool)
+        assert isinstance(self.lora_init_, str) and self.lora_init_ in [
+            "original", "gaussian"]
         assert isinstance(self.lora_r_, int) and self.lora_r_ > 0
         assert isinstance(self.lora_alpha_, int) and self.lora_alpha_ > 0
         assert isinstance(self.lora_dropout_,
@@ -103,6 +112,8 @@ class LoraConfig:
 
     def from_config(self, config: Dict[str, any]) -> "LoraConfig":
         self.use_dora_ = config.get("use_dora", False)
+        self.use_rslora_ = config.get("use_rslora", False)
+        self.lora_init_ = config.get("lora_init", "original")
         self.lora_r_ = config["r"]
         self.lora_alpha_ = config["lora_alpha"]
         self.lora_dropout_ = config["lora_dropout"]
@@ -133,6 +144,8 @@ class LoraConfig:
         config = {}
         if self.use_dora_:
             config["use_dora"] = True
+        if self.use_rslora_:
+            config["use_rslora"] = True
         config["bias"] = "none"
         config["peft_type"] = "LORA"
         config["task_type"] = "CAUSAL_LM"

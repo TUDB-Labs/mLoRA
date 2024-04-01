@@ -47,9 +47,15 @@ class Lora(nn.Module):
         self.base_layer_ = base_layer
         self.device_ = torch.device(device)
 
+        self.initializer_ = config.lora_init_
         self.r_ = config.lora_r_
         self.alpha_ = config.lora_alpha_
-        self.scaling_ = self.alpha_ / self.r_
+
+        if config.use_rslora_:
+            self.scaling_ = self.alpha_ / math.sqrt(self.r_)
+        else:
+            self.scaling_ = self.alpha_ / self.r_
+
         self.in_features_, self.out_features_ = shape
 
         if config.lora_dropout_ > 0.0:
@@ -80,7 +86,12 @@ class Lora(nn.Module):
             lora_tensor[0], torch.Tensor) and isinstance(lora_tensor[1], torch.Tensor))
 
         if lora_tensor == (None, None):
-            nn.init.kaiming_uniform_(self.lora_a_.weight, a=math.sqrt(5))
+            if self.initializer_ == "original":
+                nn.init.kaiming_uniform_(self.lora_a_.weight, a=math.sqrt(5))
+            elif self.initializer_ == "gaussian":
+                nn.init.normal_(self.lora_a_.weight, std=1/self.r_)
+            else:
+                raise ValueError(f"Unknown initialization {self.initializer_}")
             nn.init.zeros_(self.lora_b_.weight)
         else:
             with torch.no_grad():
