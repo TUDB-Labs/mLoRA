@@ -141,8 +141,60 @@ For further detailed usage information, please use `--help` option:
 ```bash
 python mlora.py --help
 ```
+
+## Running m-LoRA in Multi-GPUs(Experimental Feature)
+m-LoRA employs a distinctive approach to pipeline parallelism for executing parallel tasks across multiple GPUs. Below are parameters designed to facilitate the use of Multi-GPUs.
+
+- `--pipeline`: enables support for multi-GPU setups.
+- `--rank`: specifies the worker's index in the pipeline (ranging from 0 to the number of GPUs minus 1).
+- `--device`: specifies the device for loading weights.
+- `--balance`: defines a sequence indicating the number of layers that should be loaded by the worker at a specific index.
+
+Currently, only weights in the safetensors format are supported. If you have weights in the Hugging Face PyTorch format, you can use the following code to convert them:
+
+```bash
+python trans_to_safetensors.py --model_path /home/local_model
+```
+
+Suppose the model has 35 layers(32 transformer layers and 3 other layers). Here are basic commands for finetuning this model on 4 GPUs platform:
+
+```bash
+python mlora.py \
+  --base_model /home/local_model \
+  --config ./config/alpaca.json \
+  --pipeline \
+  --rank 0 \
+  --device cuda:0 \
+  --balance 9 9 9 8 &
+
+python mlora.py \
+  --base_model /home/local_model \
+  --config ./config/alpaca.json \
+  --pipeline \
+  --rank 1 \
+  --device cuda:1 \
+  --balance 9 9 9 8 &
+
+python mlora.py \
+  --base_model /home/local_model \
+  --config ./config/alpaca.json \
+  --pipeline \
+  --rank 2 \
+  --device cuda:2 \
+  --balance 9 9 9 8 &
+
+python mlora.py \
+  --base_model /home/local_model \
+  --config ./config/alpaca.json \
+  --pipeline \
+  --rank 3 \
+  --device cuda:3 \
+  --balance 9 9 9 8 &
+```
+
 ## Demo on Colab
 You can run finetune on Colab by following this example: [Google Colab Example](https://colab.research.google.com/drive/13ABrrcOv5iG1TCdKGZvxy9QN6YwPpOoI?usp=sharing). Make sure to switch the runtime environment to GPU before running it.
+
 ## Webui for m-LoRA
 You can run finetune through webui by following the instructions in the ‘webui/Instruction.md’.Make sure to switch the runtime environment to GPU before running it.
 
