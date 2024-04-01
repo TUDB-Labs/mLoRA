@@ -42,6 +42,8 @@ parser.add_argument('--disable_adapter', action="store_true",
                     help="Disable the adapter modules")
 parser.add_argument('--tokenizer', type=str,
                     help='Path to or name of tokenizer')
+parser.add_argument('--flash_attn', action='store_true',
+                    help='Use flash attention 2 if available')
 parser.add_argument('--fp16', action='store_true',
                     help='Load base model in float16 precision')
 parser.add_argument('--bf16', action='store_true',
@@ -111,6 +113,7 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     model = mlora.LlamaModel.from_pretrained(
         path=args.base_model,
         device=args.device,
+        attn_impl="flash_attention_2" if args.flash_attn else "auto",
         bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
         load_dtype=(torch.bfloat16 if args.bf16 else (
             torch.float16 if args.fp16 else torch.float32))

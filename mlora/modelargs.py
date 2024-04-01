@@ -28,6 +28,7 @@ class TokenizerArgs:
 @dataclass
 class LLMModelArgs:
     name_or_path_: str = ""
+    device_: str = ""
     dim_: int = 4096
     multiple_of_: int = 256
     n_heads_: int = 32
@@ -39,7 +40,13 @@ class LLMModelArgs:
     pad_token_id_: int = -1
     rope_theta_: float = 10000.0
     max_seq_len_: int = 2048
-    device_: str = ""
+    # swa
+    use_sliding_window_: bool = None
+    max_window_layers_: int = None
+    sliding_window_: int = None
+    # auto, eager, xformers, flash_attention_2
+    attn_implementation_: str = "auto"
+    # data type
     dtype_: torch.dtype = None
 
 

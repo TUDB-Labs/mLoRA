@@ -1,5 +1,6 @@
 from mlora.modelargs import LLMModelArgs, LLMModelOutput, MultiLoraBatchData
 from mlora.modelargs import Masks, LoraConfig, MixConfig, lora_config_factory
+from mlora.attention import LlamaAttention, FlashAttentionClass
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import LLMOutput, LLMModel
 from mlora.feed_forward import FeedForward
@@ -7,16 +8,14 @@ from mlora.lora_liner import Linear
 from mlora.generate import GenerateConfig
 from mlora.mix_lora import router_loss_factory
 from mlora.tasks import SequenceClassificationTask, task_dict
+from mlora.utils import _is_package_available
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import xformers.ops
-import xformers.ops.fmha.attn_bias
 from typing import List, Dict, Tuple, Optional
 from huggingface_hub import snapshot_download
-from transformers import BitsAndBytesConfig
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from collections import OrderedDict
 import logging
 import json
@@ -58,43 +57,6 @@ def precompute_mask(input_tokens: torch.Tensor,
     mask.requires_grad_(False)
 
     return mask.to(device=device, dtype=dtype)
-
-
-def precompute_rope_angle(dim: int, seq_len: int,
-                          theta: float = 10000.0,
-                          device: str = None) -> Tuple[torch.Tensor, torch.Tensor]:
-    inv_freq = 1.0 / \
-        (theta ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
-    t = torch.arange(seq_len, device=device,
-                     dtype=torch.int64).to(inv_freq.dtype)
-    freqs = torch.outer(t, inv_freq)
-    emb = torch.cat((freqs, freqs), dim=-1)
-    emb.requires_grad_(False)
-
-    # cos(angle), sin(angle)
-    return (emb.cos(), emb.sin())
-
-
-def rotate_half(x):
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
-                     cos: torch.Tensor, sin: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    q_embed = (xq * cos) + (rotate_half(xq) * sin)
-    k_embed = (xk * cos) + (rotate_half(xk) * sin)
-    return q_embed, k_embed
 
 
 class LlamaRMSNorm(torch.nn.Module):
@@ -216,86 +178,16 @@ class LlamaOutputLayer(torch.nn.Module):
         return outputs
 
 
-class LlamaAttention(torch.nn.Module):
-    def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
-                 args: LLMModelArgs, layer_idx: int):
-        super().__init__()
-        # attention
-        self.wq_: Linear = wq  # dim * dim
-        self.wk_: Linear = wk  # dim * dim
-        self.wv_: Linear = wv  # dim * dim
-        self.wo_: Linear = wo  # dim * dim
-        # cos and sin
-        self.cos_, self.sin_ = precompute_rope_angle(
-            args.dim_ // args.n_heads_, args.max_seq_len_, args.rope_theta_, args.device_)
-        # other arg
-        self.layer_id_ = layer_idx
-        self.n_heads_ = args.n_heads_
-        self.n_kv_heads_ = args.n_kv_heads_
-        self.n_rep_ = self.n_heads_ // self.n_kv_heads_
-        self.head_dim_ = args.dim_ // args.n_heads_
-        self.dtype_ = args.dtype_
-
-    def _scaled_dot_product_attention(self, xq, xk, xv, attention_mask):
-        attention_score = torch.matmul(
-            xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim_)
-        if attention_mask is not None:
-            attention_score = attention_score + attention_mask
-        attention_score = F.softmax(
-            attention_score, dim=-1, dtype=torch.float32).to(xq.dtype)
-        attention_score = torch.matmul(attention_score, xv)
-        attention_score = attention_score.transpose(1, 2).contiguous()
-        return attention_score
-
-    def _xformers_attention(self, xq, xk, xv, attention_mask):
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
-        attention_score = xformers.ops.memory_efficient_attention(
-            xq, xk, xv, attention_mask)
-        return attention_score
-
-    def forward(self,
-                hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None):
-        batch_size, max_seq_len, _ = hidden_states.shape
-
-        xq = self.wq_.forward(hidden_states, input_args)
-        xk = self.wk_.forward(hidden_states, input_args)
-        xv = self.wv_.forward(hidden_states, input_args)
-
-        # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-
-        # apply rotary embedding
-        assert xq.dtype == xk.dtype
-        cos = self.cos_[:max_seq_len].to(xq.dtype)
-        sin = self.sin_[:max_seq_len].to(xq.dtype)
-        xq, xk = apply_rotary_emb(xq, xk, cos, sin)
-
-        # for llama2 need to repeat the heads
-        # before dim: batch_size, n_kv_head, seq_len, head_dim
-        # after dim: batch_size, n_head, seq_len, head_dim
-        xk = repeat_kv(xk, self.n_rep_)
-        xv = repeat_kv(xv, self.n_rep_)
-
-        if input_args.inference_mode_:
-            attention_score = self._scaled_dot_product_attention(
-                xq, xk, xv, attention_mask)
-        else:
-            attention_score = self._xformers_attention(
-                xq, xk, xv, attention_mask)
-
-        attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
-
-        # get output attention score
-        return self.wo_.forward(attention_score, input_args)
+def llama_attention_factory(model_type: str, wq: Linear, wk: Linear,
+                            wv: Linear, wo: Linear, args: LLMModelArgs, layer_idx: int):
+    if args.attn_implementation_ in ["auto", "eager", "xformers"]:
+        return LlamaAttention(wq, wk, wv, wo, args, layer_idx, args.attn_implementation_)
+    elif args.attn_implementation_ == "flash_attention_2":
+        assert _is_package_available("flash_attn")
+        return FlashAttentionClass[model_type](wq, wk, wv, wo, args, layer_idx)
+    else:
+        raise ValueError(
+            f"Unknown attention implementation {args.attn_implementation_}")
 
 
 class LlamaDecoderLayer(torch.nn.Module):
@@ -309,8 +201,7 @@ class LlamaDecoderLayer(torch.nn.Module):
         self.ffn_: FeedForward = None
         # other arg
         self.layer_id_ = layer_idx
-        self.n_heads_ = args.n_heads_
-        self.head_dim_ = args.dim_ // args.n_heads_
+        self.dim_ = args.dim_
         self.norm_eps_ = args.norm_eps_
         self.dtype_ = args.dtype_
 
@@ -324,8 +215,7 @@ class LlamaDecoderLayer(torch.nn.Module):
         if isinstance(config, MixConfig):
             # Inject LoRA configs into FFN layer
             gate_layer_name = f"mixlora.layers.{self.layer_id_}.gate.weight"
-            self.ffn_.init_moe_weight(in_features=self.n_heads_ * self.head_dim_,
-                                      config=config,
+            self.ffn_.init_moe_weight(in_features=self.dim_, config=config,
                                       gate=weight if weight is None else weight[gate_layer_name])
 
             moe_layer_name_list = ["w1_proj", "w2_proj", "w3_proj"]
@@ -442,6 +332,7 @@ class LlamaModel(LLMModel):
         self.seq_module_: torch.nn.Sequential = None
 
         # configs
+        self.attn_implementation_ = args.attn_implementation_
         self.norm_eps_ = args.norm_eps_
         self.device_ = args.device_
         self.n_heads_ = args.n_heads_
@@ -462,13 +353,21 @@ class LlamaModel(LLMModel):
                               dtype=torch.int64, device=self.device_)
 
         # prepare mask
-        mask = precompute_mask(
-            input_tokens=tokens,
-            n_heads=1 if input.inference_mode_ else self.n_heads_,
-            device=self.device_,
-            additional_mask=input.attention_masks_,
-            diagonal=input.inference_seq_pos_ + 1 if input.inference_mode_ else 1,
-            dtype=self.dtype_)
+        if self.attn_implementation_ == "flash_attention_2":
+            if input.attention_masks_ is not None and 0 in input.attention_masks_:
+                # 2d mask is passed through the layers
+                mask = torch.tensor(input.attention_masks_,
+                                    dtype=torch.int64, device=self.device_)
+            else:
+                mask = None
+        else:
+            mask = precompute_mask(
+                input_tokens=tokens,
+                n_heads=1 if input.inference_mode_ else self.n_heads_,
+                device=self.device_,
+                additional_mask=input.attention_masks_,
+                diagonal=input.inference_seq_pos_ + 1 if input.inference_mode_ else 1,
+                dtype=self.dtype_)
 
         # routing data
         router_logits: List[List] = list(
@@ -532,6 +431,7 @@ class LlamaModel(LLMModel):
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
+                        attn_impl: str = "auto",
                         load_dtype: torch.dtype = torch.bfloat16,
                         compute_dtype: torch.dtype = torch.bfloat16,
                         double_quant: bool = True,
@@ -590,6 +490,8 @@ class LlamaModel(LLMModel):
         llama_model.requires_grad_(False)
 
         llama_args = LLMModelArgs()
+        llama_args.attn_implementation_ = attn_impl
+        logging.info(f"Use {attn_impl} as attention implementation.")
         llama_args.name_or_path_ = llama_model.config.name_or_path
         llama_args.dim_ = llama_model.config.hidden_size
         llama_args.n_heads_ = llama_model.config.num_attention_heads
@@ -600,10 +502,12 @@ class LlamaModel(LLMModel):
         llama_args.vocab_size_ = llama_model.config.vocab_size
         llama_args.max_seq_len_ = 4096 if not hasattr(
             llama_model.config, "max_sequence_length") else llama_model.config.max_sequence_length
-        if hasattr(llama_model.config, "sliding_window") and llama_args.max_seq_len_ > llama_model.config.sliding_window:
-            logging.warning(f"Shrink max sequence length {llama_args.max_seq_len_} to " +
-                            f"window size {llama_model.config.sliding_window} of sliding window attention.")
-            llama_args.max_seq_len_ = llama_model.config.sliding_window
+        if hasattr(llama_model.config, "use_sliding_window"):
+            llama_args.use_sliding_window_ = llama_model.config.use_sliding_window
+        if hasattr(llama_model.config, "max_window_layers"):
+            llama_args.max_window_layers_ = llama_model.config.max_window_layers
+        if hasattr(llama_model.config, "sliding_window"):
+            llama_args.sliding_window_ = llama_model.config.sliding_window
         llama_args.pad_token_id_ = llama_model.config.pad_token_id
         llama_args.rope_theta_ = llama_model.config.rope_theta
         if llama_args.pad_token_id_ is None:
@@ -626,7 +530,8 @@ class LlamaModel(LLMModel):
         for idx, layer in enumerate(llama_model.model.layers):
             model.layers_[idx].attn_norm_ = LlamaRMSNorm(
                 layer.input_layernorm.weight, model.norm_eps_)
-            model.layers_[idx].attn_ = LlamaAttention(
+            model.layers_[idx].attn_ = llama_attention_factory(
+                model_type=llama_model.config.model_type,
                 wq=Linear(layer.self_attn.q_proj, device=device),
                 wk=Linear(layer.self_attn.k_proj, device=device),
                 wv=Linear(layer.self_attn.v_proj, device=device),
