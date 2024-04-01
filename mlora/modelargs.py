@@ -79,10 +79,9 @@ class MultiLoraBatchData:
 
 @dataclass
 class LoraConfig:
-    adapter_name_: str = ""
-    task_name_: str = "casual"
-    device_: str = "cuda:0"
-    dtype_: torch.dtype = None
+    adapter_name: str = ""
+    task_name: str = "casual"
+    device: str = "cuda:0"
     # Weight-Decomposed Low-Rank Adaptation
     use_dora_: bool = False
     # Rank-Stabilized LoRA
@@ -257,8 +256,8 @@ class MixConfig(LoraConfig):
             config = copy.deepcopy(super())
         else:
             config = copy.deepcopy(self.expert_config_)
-        config.adapter_name_ = f"moe.{self.adapter_name_}.experts.{expert_idx}"
-        config.device_ = self.device_
+        config.adapter_name = f"moe.{self.adapter_name}.experts.{expert_idx}"
+        config.device = self.device
         return config
 
 

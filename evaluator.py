@@ -29,10 +29,10 @@ def main(base_model: str,
     adapter_name = model.load_adapter_weight(
         lora_weights if lora_weights else "default")
     evaluate_paramas = mlora.EvaluateConfig(
-        adapter_name_=adapter_name,
-        task_name_=task_name,
-        batch_size_=batch_size,
-        router_profile_=router_profile)
+        adapter_name=adapter_name,
+        task_name=task_name,
+        batch_size=batch_size,
+        router_profile=router_profile)
 
     output = mlora.evaluate(
         model, tokenizer, [evaluate_paramas], save_file=save_file)

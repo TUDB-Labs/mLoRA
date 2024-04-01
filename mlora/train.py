@@ -15,7 +15,7 @@ class TrainConfig:
     def __init__(self,
                  train_config: Dict[str, any],
                  lora_config: LoraConfig):
-        self.adapter_name_ = lora_config.adapter_name_
+        self.adapter_name_ = lora_config.adapter_name
         self.batch_size_ = train_config["batch_size"]
         self.micro_batch_size_ = train_config.get(
             "micro_batch_size", self.batch_size_)

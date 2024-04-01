@@ -17,10 +17,10 @@ import time
 
 @dataclass
 class EvaluateConfig:
-    adapter_name_: str = None
-    task_name_: str = None
-    batch_size_: int = 16
-    router_profile_: bool = False
+    adapter_name: str = None
+    task_name: str = None
+    batch_size: int = 16
+    router_profile: bool = False
     # Do not set these manually
     task_: BasicTask = None
     data_: List[DataClass] = None
@@ -30,7 +30,7 @@ class EvaluateConfig:
     batch_end_idx_: int = 0
 
     def prepare(self, tokenizer: Tokenizer, device: str = "cuda:0"):
-        self.task_ = task_dict[self.task_name_]
+        self.task_ = task_dict[self.task_name]
         self.data_ = self.task_.loading_data(tokenizer, False)
         self.metric_ = self.task_.loading_metric()
         if isinstance(self.task_, CommonSenseTask):
@@ -48,11 +48,11 @@ class EvaluateConfig:
 def _prepare_tasks(model, tokenizer, configs):
     for config in configs:
         config.prepare(tokenizer)
-        if not isinstance(model.adapter_configs_[config.adapter_name_], MixConfig):
+        if not isinstance(model.adapter_configs_[config.adapter_name], MixConfig):
             continue
         for layer in model.layers_:
             layer.ffn_.moes_[
-                config.adapter_name_].router_profile_ = config.router_profile_
+                config.adapter_name].router_profile_ = config.router_profile
 
 
 def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
@@ -69,7 +69,7 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
         if config.batch_start_idx_ >= len(config.data_):
             continue
         config.batch_end_idx_ = min(
-            config.batch_start_idx_ + config.batch_size_, len(config.data_))
+            config.batch_start_idx_ + config.batch_size, len(config.data_))
         batch_start_idx = len(batch_tokens)
         for idx in range(config.batch_start_idx_, config.batch_end_idx_):
             if idx >= len(config.data_):
@@ -88,7 +88,7 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
 
         config.batch_start_idx_ = config.batch_end_idx_
         current_configs.append(config)
-        batch_data_config.append(LoraBatchDataConfig(adapter_name_=config.adapter_name_,
+        batch_data_config.append(LoraBatchDataConfig(adapter_name_=config.adapter_name,
                                                      batch_start_idx_=batch_start_idx, batch_end_idx_=len(batch_tokens)))
 
     if max_tokens_len < max_seq_len:
@@ -119,18 +119,18 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         end_idx = output.batch_end_idx_
         logits = output.logits
 
-        if config.router_profile_:
+        if config.router_profile:
             adapter_config = model.adapter_configs_[
-                config.adapter_name_]
+                config.adapter_name]
             if isinstance(adapter_config, MixConfig):
                 router_statistic_ = list(
                     0 for _ in range(adapter_config.num_experts_))
                 for layer in model.layers_:
-                    for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name_].profiler_):
+                    for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name].profiler_):
                         router_statistic_[idx] += val
                 for idx, val in enumerate(router_statistic_):
                     logging.info(
-                        f"{config.adapter_name_}: expert {idx}, load = {val/32}")
+                        f"{config.adapter_name}: expert {idx}, load = {val/32}")
 
         batch_size = logits.shape[0]
         pooled_logits = logits[torch.arange(
@@ -149,7 +149,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         metric.add_batch(predictions=pooled_logits.detach().cpu(),
                          references=labels.detach().cpu())
         logging.info(
-            f"{config.adapter_name_}, {config.task_name_} evaluate data:")
+            f"{config.adapter_name}, {config.task_name}")
         logging.info(
             f"    step: {config.batch_start_idx_}/{len(config.data_)}")
 
@@ -158,22 +158,22 @@ def _compute_result(model, configs, save_file):
     results = []
     for config in configs:
         result = {
-            "adapter_name": config.adapter_name_,
-            "task_name": config.task_name_,
+            "adapter_name": config.adapter_name,
+            "task_name": config.task_name,
             "date_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
             "metrics": {}
         }
         compute_results = config.metric_.compute()
         result["metrics"] = compute_results
-        if config.router_profile_:
-            adapter_config = model.adapter_configs_[config.adapter_name_]
+        if config.router_profile:
+            adapter_config = model.adapter_configs_[config.adapter_name]
             if isinstance(adapter_config, MixConfig):
                 router_statistic_ = list(
                     0 for _ in range(adapter_config.num_experts_))
                 for layer in model.layers_:
-                    for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name_].profiler_):
+                    for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name].profiler_):
                         router_statistic_[idx] += val
-                    layer.ffn_.moes_[config.adapter_name_].profiler_ = None
+                    layer.ffn_.moes_[config.adapter_name].profiler_ = None
                 result["router_profile"] = list(
                     val / 32 for val in router_statistic_)
 
@@ -240,7 +240,7 @@ def evaluate(model: LLMModel,
                 retrying_count = retrying_steps
                 for config in current_configs:
                     config.batch_start_idx_ = config.rollback_start_idx_
-                    logging.info(f"{config.adapter_name_}, {config.task_name_} " +
+                    logging.info(f"{config.adapter_name}, {config.task_name}: " +
                                  f"rollback to {config.batch_start_idx_}/{len(config.data_)}")
                 continue
             else:

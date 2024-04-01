@@ -42,9 +42,9 @@ class MixtralSparseMoe(torch.nn.Module):
     def __init__(self, in_features: int, config: MixConfig) -> None:
         super().__init__()
 
-        self.adapter_name_: str = config.adapter_name_
+        self.adapter_name_: str = config.adapter_name
         self.gate_ = torch.nn.Linear(
-            in_features, config.num_experts_, bias=False, device=config.device_, dtype=torch.float32)
+            in_features, config.num_experts_, bias=False, device=config.device, dtype=torch.float32)
         self.act_ = ACT2FN[config.act_fn_]
         self.experts_ = config.num_experts_
         self.topk_ = config.top_k_
@@ -190,10 +190,10 @@ class SwitchSparseMoe(torch.nn.Module):
     def __init__(self, in_features: int, config: MixConfig) -> None:
         super().__init__()
 
-        self.adapter_name_: str = config.adapter_name_
+        self.adapter_name_: str = config.adapter_name
         self.dtype_: torch.dtype = torch.float32
         self.gate_ = torch.nn.Linear(
-            in_features, config.num_experts_, bias=False, device=config.device_, dtype=self.dtype_)
+            in_features, config.num_experts_, bias=False, device=config.device, dtype=self.dtype_)
         self.act_ = ACT2FN[config.act_fn_]
         self.experts_: int = config.num_experts_
         self.dropout_ = torch.nn.Dropout(

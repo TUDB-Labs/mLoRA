@@ -53,14 +53,14 @@ class FeedForward(torch.nn.Module):
 
     # MixLoRA
     def init_moe_weight(self, in_features: int, config: MixConfig, gate: Optional[torch.Tensor] = None):
-        self.moes_[config.adapter_name_] = moe_layer_factory(
+        self.moes_[config.adapter_name] = moe_layer_factory(
             in_features, config)
         if gate is None:
             torch.nn.init.normal_(
-                self.moes_[config.adapter_name_].gate_.weight, mean=0.0, std=config.router_init_range_)
+                self.moes_[config.adapter_name].gate_.weight, mean=0.0, std=config.router_init_range_)
         else:
             with torch.no_grad():
-                self.moes_[config.adapter_name_].gate_.weight.copy_(gate)
+                self.moes_[config.adapter_name].gate_.weight.copy_(gate)
 
     def _expert_forward_callback(self, moe_name, act_fn, expert_idx, data):
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"

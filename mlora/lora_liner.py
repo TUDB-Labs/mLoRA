@@ -148,7 +148,7 @@ class Linear(nn.Module):
                          lora_tensor=(None, None),
                          adapter_name=None):
         if adapter_name is None:
-            adapter_name = lora_config.adapter_name_
+            adapter_name = lora_config.adapter_name
 
         if isinstance(self.base_layer_, bnb.nn.Linear4bit):
             out_dim, in_dim = self.base_layer_.out_features, self.base_layer_.in_features

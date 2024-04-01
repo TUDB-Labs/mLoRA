@@ -479,11 +479,11 @@ class LlamaModel(LLMModel):
         return output
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
-        self.adapter_configs_[config.adapter_name_] = config
+        self.adapter_configs_[config.adapter_name] = config
         # init output layer
-        if config.task_name_ in task_dict and isinstance(task_dict[config.task_name_], SequenceClassificationTask):
+        if config.task_name in task_dict and isinstance(task_dict[config.task_name], SequenceClassificationTask):
             output_layer = ClassificationOutputLayer(
-                **task_dict[config.task_name_].init_kwargs(),
+                **task_dict[config.task_name].init_kwargs(),
                 hidden_size=self.dim_,
                 pad_token_id=self.pad_token_id_,
                 device=self.device_,
@@ -493,8 +493,8 @@ class LlamaModel(LLMModel):
                 vocab_size=self.vocab_size_,
                 weight=self.lm_head_)
 
-        self.output_.layers_[config.adapter_name_] = output_layer
-        if config.adapter_name_ == "default" and weight is None:
+        self.output_.layers_[config.adapter_name] = output_layer
+        if config.adapter_name == "default" and weight is None:
             return
         # init transformer layers
         for transformer_layer in self.layers_:
@@ -622,7 +622,7 @@ class LlamaModel(LLMModel):
         generate_paramas = {}
         for adapter_name in self.adapter_configs_.keys():
             generate_paramas[adapter_name] = GenerateConfig(
-                adapter_name_=adapter_name)
+                adapter_name=adapter_name)
         return generate_paramas
 
     def get_lora_weight_dict(self, lora_name: str) -> Dict[str, torch.Tensor]:
@@ -697,11 +697,11 @@ class LlamaModel(LLMModel):
                 path = snapshot_download(repo_id=path, repo_type="model")
             with open(path + os.sep + "adapter_config.json", 'r', encoding='utf8') as fp:
                 lora_config = lora_config_factory(json.load(fp))
-            lora_config.adapter_name_ = adapter_name
+            lora_config.adapter_name = adapter_name
             lora_weight = torch.load(
                 path + os.sep + "adapter_model.bin", map_location=self.device_)
         else:
-            lora_config = LoraConfig(adapter_name_=path)
+            lora_config = LoraConfig(adapter_name=path)
             lora_weight = None
         self.init_lora_layer_weight(lora_config, lora_weight)
         return adapter_name

@@ -64,7 +64,7 @@ class Iteratorize:
 def main(base_model: str,
          template: str = None,
          lora_weights: str = "",
-         load_16bit: bool = False,
+         load_16bit: bool = True,
          load_8bit: bool = False,
          load_4bit: bool = False,
          device: str = "cuda:0",
@@ -82,9 +82,10 @@ def main(base_model: str,
     else:
         model.load_adapter_weight("default")
 
-    generation_config = model.get_generate_paramas()["default"]
+    generation_config: mlora.GenerateConfig = model.get_generate_paramas()[
+        "default"]
 
-    generation_config.prompt_template_ = template
+    generation_config.prompt_template = template
 
     def evaluate(
         instruction,
@@ -100,16 +101,16 @@ def main(base_model: str,
         if len(input) == 0:
             input = None
 
-        generation_config.prompts_ = [(instruction, input)]
+        generation_config.prompts = [(instruction, input)]
+        generation_config.temperature = temperature
+        generation_config.top_p = top_p
+        generation_config.top_k = top_k
+        generation_config.repetition_penalty = repetition_penalty
 
         generate_params = {
             "model": model,
             "tokenizer": tokenizer,
             "configs": [generation_config],
-            "temperature": temperature,
-            "top_p": top_p,
-            "top_k": top_k,
-            "repetition_penalty": repetition_penalty,
             "max_gen_len": max_new_tokens,
         }
 

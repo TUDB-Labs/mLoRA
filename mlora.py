@@ -129,15 +129,15 @@ def init_adapter_config(config: Dict[str, any],
     for lora_config in config["lora"]:
         lora_weight = None
         config_class = mlora.lora_config_factory(lora_config)
-        config_class.adapter_name_ = lora_config["name"]
-        config_class.task_name_ = lora_config.get("task_name", "casual")
-        config_class.device_ = args.device
+        config_class.adapter_name = lora_config["name"]
+        config_class.task_name = lora_config.get("task_name", "casual")
+        config_class.device = args.device
 
         adapter_file_path = args.dir + os.sep + \
-            config_class.adapter_name_ + os.sep + "adapter_model.bin"
+            config_class.adapter_name + os.sep + "adapter_model.bin"
         if args.load_adapter:
             adapter_config_path = args.dir + os.sep + \
-                config_class.adapter_name_ + os.sep + "adapter_config.json"
+                config_class.adapter_name + os.sep + "adapter_config.json"
             logging.info(f"Load adapter: {adapter_file_path}")
             with open(adapter_config_path, 'r', encoding='utf8') as fp:
                 adapter_config = json.load(fp)
@@ -162,22 +162,22 @@ def init_adapter_config(config: Dict[str, any],
         llm_model.init_lora_layer_weight(config_class, lora_weight)
         if args.inference:
             config_class = mlora.GenerateConfig(
-                adapter_name_=config_class.adapter_name_)
+                adapter_name=config_class.adapter_name)
             if not args.disable_prompter:
-                config_class.prompt_template_ = lora_config.get("prompt", None)
+                config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            if ';' in config_class.task_name_:
-                for task_name in config_class.task_name_.split(';'):
+            if ';' in config_class.task_name:
+                for task_name in config_class.task_name.split(';'):
                     config_list.append(mlora.EvaluateConfig(
-                        adapter_name_=config_class.adapter_name_,
-                        task_name_=task_name,
-                        batch_size_=lora_config["test_batch_size"]))
+                        adapter_name=config_class.adapter_name,
+                        task_name=task_name,
+                        batch_size=lora_config["test_batch_size"]))
             else:
                 config_list.append(mlora.EvaluateConfig(
-                    adapter_name_=config_class.adapter_name_,
-                    task_name_=config_class.task_name_,
-                    batch_size_=lora_config["test_batch_size"]))
+                    adapter_name=config_class.adapter_name,
+                    task_name=config_class.task_name,
+                    batch_size=lora_config["test_batch_size"]))
         else:
             config_list.append(mlora.TrainConfig(lora_config, config_class))
 
@@ -198,7 +198,7 @@ def inference(llm_model: mlora.LLMModel,
         if input_raw == "QUIT":
             return
         for config in adapters:
-            config.prompts_ = [input_raw]
+            config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
         outputs = mlora.generate(llm_model, tokenizer, adapters,
                                  stream_callback=callback)

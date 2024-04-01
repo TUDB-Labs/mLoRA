@@ -21,12 +21,13 @@ def main(base_model: str,
     adapter_name = model.load_adapter_weight(
         lora_weights if lora_weights else "default")
     generate_paramas = mlora.GenerateConfig(
-        adapter_name_=adapter_name,
-        prompt_template_=template,
-        prompts_=[(instruction, input)])
+        adapter_name=adapter_name,
+        prompt_template=template,
+        prompts=[(instruction, input)],
+        temperature=0.5, top_p=0.9)
 
-    output = mlora.generate(model, tokenizer, [generate_paramas],
-                            temperature=0.5, top_p=0.9, max_gen_len=128)
+    output = mlora.generate(
+        model, tokenizer, [generate_paramas], max_gen_len=128)
 
     for prompt in output[adapter_name]:
         print(f"\n{'='*10}\n")

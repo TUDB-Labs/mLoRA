@@ -11,9 +11,16 @@ import torch
 
 @dataclass
 class GenerateConfig:
-    adapter_name_: str = None
-    prompts_: List[Union[str, Tuple[str, str]]] = None
-    prompt_template_: str = None
+    adapter_name: str = None
+    prompts: List[Union[str, Tuple[str, str]]] = None
+    prompt_template: str = None
+    # Generate Arguments
+    temperature: float = 1
+    top_p: float = 0.9
+    top_k: float = 50
+    do_sample: bool = True
+    repetition_penalty: float = 1.1
+    renormalize_logits: bool = True
     # Do not set these manually
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
@@ -21,19 +28,19 @@ class GenerateConfig:
 
     # Set prompt_template_ to enable the prompter
     def generate_prompt(self, instruction: str, input: str = None) -> str:
-        if self.prompt_template_ is None:
+        if self.prompt_template is None:
             if input is not None:
                 logging.warn("Drop input when prompt template is not set.")
             return instruction
 
         if self.prompter_ is None:
-            self.prompter_ = Prompter(self.prompt_template_)
+            self.prompter_ = Prompter(self.prompt_template)
 
         return self.prompter_.generate_prompt(instruction=instruction, input=input)
 
     def get_prompts(self) -> List[str]:
         prompts = []
-        for prompt in self.prompts_:
+        for prompt in self.prompts:
             args = prompt if isinstance(prompt, Tuple) else (prompt, None)
             prompts.append(self.generate_prompt(*args))
 
@@ -76,7 +83,7 @@ def logits_process(probs: torch.Tensor,
                    top_k=50,
                    do_sample=True,
                    repetition_penalty=1.1,
-                   renormalize_logits=True,):
+                   renormalize_logits=True):
     process_conditions = any([repetition_penalty > 0])
     sample_conditions = any(
         [temperature > 0, top_p > 0 and top_p <= 1.0, top_k > 0])
@@ -130,7 +137,7 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 
     packed_outputs = {}
     for config in configs:
-        packed_outputs[config.adapter_name_] = [config.get_response(
+        packed_outputs[config.adapter_name] = [config.get_response(
             output) for output in outputs[config.batch_start_idx_:config.batch_end_idx_]]
 
     return packed_outputs
@@ -140,25 +147,21 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 def generate(model: LLMModel,
              tokenizer: Tokenizer,
              configs: List[GenerateConfig],
-             temperature=1,
-             top_p=0.9,
-             top_k=50,
-             do_sample=True,
-             repetition_penalty=1.1,
-             renormalize_logits=True,
              max_gen_len=128,
              stream_callback=None):
 
     device = torch.device(model.device_)
     raw_prompts: List[Tokens] = []
     batch_data_config: List[LoraBatchDataConfig] = []
+    config_dict = {}
     for config in configs:
+        config_dict[config.adapter_name] = config
         tokens = [tokenizer.encode(prompt, True, False)
                   for prompt in config.get_prompts()]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
         batch_data_config.append(LoraBatchDataConfig(
-            config.adapter_name_, config.batch_start_idx_, config.batch_end_idx_))
+            config.adapter_name, config.batch_start_idx_, config.batch_end_idx_))
         raw_prompts.extend(tokens)
 
     batch_size = len(raw_prompts)
@@ -182,17 +185,18 @@ def generate(model: LLMModel,
             inference_seq_pos_=prev_pos)
         outputs = model.forward(input_data)
         for output in outputs:
+            config = config_dict[output.adapter_name]
             start_idx = output.batch_start_idx_
             end_idx = output.batch_end_idx_
 
             next_token = logits_process(output.logits[:, -1],
                                         tokens[start_idx:end_idx, :cur_pos],
-                                        temperature,
-                                        top_p,
-                                        top_k,
-                                        do_sample,
-                                        repetition_penalty,
-                                        renormalize_logits)
+                                        config.temperature,
+                                        config.top_p,
+                                        config.top_k,
+                                        config.do_sample,
+                                        config.repetition_penalty,
+                                        config.renormalize_logits)
 
             next_token = torch.where(
                 input_text_mask[start_idx:end_idx,
