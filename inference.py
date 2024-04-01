@@ -61,6 +61,9 @@ class Iteratorize:
         self.stop_now = True
 
 
+placeholder_text = "Could you provide an introduction to m-LoRA?"
+
+
 def main(base_model: str,
          template: str = None,
          lora_weights: str = "",
@@ -97,6 +100,10 @@ def main(base_model: str,
         max_new_tokens=128,
         stream_output=False,
     ):
+        instruction = instruction.strip()
+        if len(instruction) == 0:
+            instruction = placeholder_text
+
         input = input.strip()
         if len(input) == 0:
             input = None
@@ -140,7 +147,7 @@ def main(base_model: str,
             gr.components.Textbox(
                 lines=2,
                 label="Instruction",
-                placeholder="Could you provide an introduction to m-LoRA?",
+                placeholder=placeholder_text,
             ),
             gr.components.Textbox(lines=2, label="Input", placeholder="none"),
             gr.components.Slider(
@@ -169,7 +176,7 @@ def main(base_model: str,
             )
         ],
         title="m-LoRA LLM Evaluator",
-        description="Evaluate basic LLaMA model and LoRA weights",  # noqa: E501
+        description="Evaluate language models and LoRA weights",  # noqa: E501
     ).queue().launch(server_name=server_name, share=share_gradio)
 
 
