@@ -42,10 +42,6 @@ class LLMModel(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
-        pass
-
-    @abstractclassmethod
     def forward(self, input: MultiLoraBatchData,
                 labels: List[List[int]] = None) -> List[LLMModelOutput]:
         pass
