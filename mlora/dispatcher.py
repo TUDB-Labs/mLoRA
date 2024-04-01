@@ -1,13 +1,13 @@
 from mlora import Tokenizer
 from mlora import MultiLoraBatchData
 from mlora import LoraBatchDataConfig
+from mlora.modelargs import Tokens, Masks, DataClass
 
 import sys
 import math
 import random
 import logging
 import datasets
-from dataclasses import dataclass
 from typing import Dict, List, Union, Callable
 
 
@@ -27,15 +27,6 @@ class Event():
                 return True
 
         return False
-
-
-Tokens = List[int]
-
-
-@dataclass
-class TrainData:
-    tokens_: Tokens = None
-    labels_: List = None
 
 
 def load_dataset(data_path: str):
@@ -59,8 +50,8 @@ class TrainTask():
 
     # the token list for train and test
     val_set_size: Union[int, float] = -1
-    train_token_data_: List[TrainData] = None
-    test_token_data_: List[TrainData] = None
+    train_token_data_: List[DataClass] = None
+    test_token_data_: List[DataClass] = None
 
     # train parameter
     total_epoch_num_: int = -1
@@ -81,9 +72,6 @@ class TrainTask():
     def __init__(self,
                  tokenzer: Tokenizer,
                  adapter_name: str,
-                 data_path: str,
-                 val_set_size: Union[int, float],
-                 test_data_path: str,
                  dataload_function: Callable,
                  total_epoch_num: int,
                  max_train_batch_size: int,
@@ -95,9 +83,6 @@ class TrainTask():
                  expand_token_id: int = 0):
         self.tokenizer_ = tokenzer
         self.adapter_name_ = adapter_name
-        self.data_path_ = data_path
-        self.val_set_size = val_set_size
-        self.test_data_path_ = test_data_path
         self.dataload_function_ = dataload_function
         self.total_epoch_num_ = total_epoch_num
         self.max_train_batch_size_ = max_train_batch_size
@@ -108,57 +93,23 @@ class TrainTask():
         self.expand_side_ = expand_side
         self.expand_token_id_ = expand_token_id
 
-    def __encode_data(self,
-                      data: List,
-                      is_train_data: bool = True) -> List[TrainData]:
-        ret: List[TrainData] = []
-        max_train_tokens_len = 0
-        for idx, data_point in enumerate(data):
-            inputs, labels, flags = self.dataload_function_(data_point)
-            assert isinstance(labels, List) or labels is None
-            if is_train_data:
-                tokens = self.tokenizer_.encode(inputs, **flags)
-                max_train_tokens_len = max(max_train_tokens_len, len(tokens))
-                if len(tokens) > self.train_cutoff_len_:
-                    tokens = tokens[:self.train_cutoff_len_]
-            else:
-                tokens = self.tokenizer_.encode(inputs, **flags)
-
-            ret.append(TrainData(tokens_=tokens, labels_=labels))
-            if idx % 10000 == 0:
-                logging.info(
-                    f"Encode text data {self.adapter_name_}: {idx}/{len(data)}")
-
-        if is_train_data:
-            logging.info(
-                f"Max train tokens length: {max_train_tokens_len}/{self.train_cutoff_len_}")
-
-        if is_train_data and self.group_by_length_:
-            ret.sort(key=lambda x: len(x.tokens_), reverse=True)
-        else:
-            random.shuffle(ret)
-
-        return ret
-
     def load_data(self):
-        data = load_dataset(self.data_path_)
-        if self.test_data_path_ is None:
-            if self.val_set_size is None or self.val_set_size <= 0:
-                self.train_token_data_ = self.__encode_data(
-                    data["train"], True)
-                self.test_token_data_ = []
-            else:
-                train_val = data["train"].train_test_split(
-                    test_size=self.val_set_size)
-                self.train_token_data_ = self.__encode_data(
-                    train_val["train"], True)
-                self.test_token_data_ = self.__encode_data(
-                    train_val["test"], True)
+        self.train_token_data_ = self.dataload_function_(self.tokenizer_, True)
+        max_train_tokens_len = 0
+        for data in self.train_token_data_:
+            max_train_tokens_len = max(max_train_tokens_len, len(data.tokens_))
+            if len(data.tokens_) > self.train_cutoff_len_:
+                data.tokens_ = data.tokens_[:self.train_cutoff_len_]
+
+        logging.info(
+            f"Max train tokens length: {max_train_tokens_len}/{self.train_cutoff_len_}")
+        if self.group_by_length_:
+            self.train_token_data_.sort(
+                key=lambda x: len(x.tokens_), reverse=True)
         else:
-            train_data = load_dataset(self.test_data_path_)
-            self.train_token_data_ = self.__encode_data(data["train"], True)
-            self.test_token_data_ = self.__encode_data(
-                train_data["train"], True)
+            random.shuffle(self.train_token_data_)
+
+        # TODO: Load test data
 
     def is_train_done(self):
         if self.epoch_cnt_ <= self.total_epoch_num_:
@@ -181,7 +132,7 @@ class TrainTask():
         return len(self.train_token_data_[start_idx].tokens_)
 
     # non reentry function
-    def get_train_data(self) -> List[TrainData]:
+    def get_train_data(self) -> List[DataClass]:
         start_idx = self.next_train_data_start_idx_
         end_idx = start_idx + self.max_train_micro_batch_size_
 
@@ -243,18 +194,15 @@ class Dispatcher():
             self.ready_train_task_.append(
                 TrainTask(tokenzer=self.tokenizer_,
                           adapter_name=lora["name"],
-                          data_path=lora["data"],
-                          val_set_size=lora.get("val_set_size", -1),
-                          test_data_path=lora.get("test_data", None),
                           dataload_function=lora["dataloader"],
                           total_epoch_num=lora["num_epochs"],
                           max_train_batch_size=lora["batch_size"],
                           max_train_micro_batch_size=lora["micro_batch_size"],
-                          max_test_batch_size=lora["test_batch_size"],
+                          max_test_batch_size=lora.get("test_batch_size", -1),
                           train_cutoff_len=config["cutoff_len"],
                           group_by_length=lora.get("group_by_length", True)))
 
-    def optim_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
+    def optim_dispatch_strategy(self) -> Dict[str, List[DataClass]]:
         task_len = {}
         for idx, task in enumerate(self.running_train_task_):
             task_len[idx] = task.get_train_deta_max_seq_len()
@@ -283,7 +231,7 @@ class Dispatcher():
 
         return ret_train_data
 
-    def none_dispatch_strategy(self) -> Dict[str, List[TrainData]]:
+    def none_dispatch_strategy(self) -> Dict[str, List[DataClass]]:
         ret_train_data = {}
         cnt = 0
         for task in self.running_train_task_:
@@ -341,7 +289,7 @@ class Dispatcher():
         self.__dispatch_task_in()
 
         # get task train data
-        all_train_data: Dict[str, List[TrainData]] = {}
+        all_train_data: Dict[str, List[DataClass]] = {}
         if self.strategy_ == "none":
             all_train_data = self.none_dispatch_strategy()
         elif self.strategy_ == "optim":
@@ -358,7 +306,7 @@ class Dispatcher():
         # all prompts and tokens / config
         batch_seq_len = math.ceil(batch_seq_len / 8) * 8
         batch_tokens: List[Tokens] = []
-        attention_masks: List[Tokens] = []
+        attention_masks: List[Masks] = []
         batch_labels: List[List] = []
         lora_batch_data_config: List[LoraBatchDataConfig] = []
 
@@ -383,7 +331,7 @@ class Dispatcher():
                     else:
                         tokens.insert(0, self.tokenizer_.pad_id_)
                 batch_tokens.append(tokens)
-                attention_masks.append(self.tokenizer_.attention_mask(tokens))
+                attention_masks.append(self.tokenizer_.mask_from(tokens))
                 labels: List = data.labels_
                 if labels is None:
                     labels = tokens.copy()

@@ -1,18 +1,31 @@
 import json
 import logging
 import os.path as osp
-from typing import Union
+from typing import Optional, Union, Dict
+
+default_prompt_template = {
+    "description": "Default Prompt Template Provided by m-LoRA",
+    "prompt_input": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n",
+    "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n",
+    "response_split": "### Output:"
+}
 
 
 # manage templates and prompt building.
 class Prompter:
-    def __init__(self, file_name: str):
-        if not osp.exists(file_name):
-            raise ValueError(f"Can't read {file_name}")
-        with open(file_name) as fp:
-            self.template = json.load(fp)
+    def __init__(self, template: Optional[Union[Dict, str]] = None):
+        if template is None:
+            self.template = default_prompt_template
+        elif isinstance(template, str):
+            if not osp.exists(template):
+                raise ValueError(f"Can't read {template}")
+            with open(template) as fp:
+                self.template = json.load(fp)
+        else:
+            self.template = template
+
         logging.info(
-            f"Using prompt template {file_name}: {self.template['description']}")
+            f"Using prompt template: {self.template['description']}")
 
     def generate_prompt(
         self,

@@ -4,7 +4,6 @@ from mlora.mix_lora import moe_layer_factory
 
 from typing import List, Optional
 import torch
-import math
 
 
 class FeedForward(torch.nn.Module):
@@ -34,31 +33,31 @@ class FeedForward(torch.nn.Module):
     def _lora_forward(self, lora_name, act_fn, data):
         # Applying LoRA weights to FFN weights
         if lora_name in self.w1_.loras_:
-            w1 = self.w1_.weight_.forward(data) + \
-                self.w1_.loras_[lora_name].forward(data)
+            w1 = self.w1_.loras_[lora_name].forward(
+                self.w1_.base_layer_.forward(data), data)
         else:
-            w1 = self.w1_.weight_.forward(data)
+            w1 = self.w1_.base_layer_.forward(data)
 
         if lora_name in self.w3_.loras_:
-            w3 = self.w3_.weight_.forward(data) + \
-                self.w3_.loras_[lora_name].forward(data)
+            w3 = self.w3_.loras_[lora_name].forward(
+                self.w3_.base_layer_.forward(data), data)
         else:
-            w3 = self.w3_.weight_.forward(data)
+            w3 = self.w3_.base_layer_.forward(data)
 
         act_result = act_fn(w1) * w3
         if lora_name in self.w2_.loras_:
-            return self.w2_.weight_.forward(act_result) + \
-                self.w2_.loras_[lora_name].forward(act_result)
+            return self.w2_.loras_[lora_name].forward(
+                self.w2_.base_layer_.forward(act_result), act_result)
         else:
-            return self.w2_.weight_.forward(act_result)
+            return self.w2_.base_layer_.forward(act_result)
 
     # MixLoRA
     def init_moe_weight(self, in_features: int, config: MixConfig, gate: Optional[torch.Tensor] = None):
         self.moes_[config.adapter_name_] = moe_layer_factory(
             in_features, config)
         if gate is None:
-            torch.nn.init.kaiming_normal_(
-                self.moes_[config.adapter_name_].gate_.weight, a=math.sqrt(5))
+            torch.nn.init.normal_(
+                self.moes_[config.adapter_name_].gate_.weight, mean=0.0, std=config.router_init_range_)
         else:
             with torch.no_grad():
                 self.moes_[config.adapter_name_].gate_.weight.copy_(gate)

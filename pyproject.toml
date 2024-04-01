@@ -26,15 +26,12 @@ dependencies = [
     "protobuf==3.20.2",
     "xformers==0.0.21",
     "huggingface_hub",
-    "nltk",
-    "jieba",
-    "rouge",
-    "rouge_chinese"
+    "scikit-learn",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/TUDB-Labs/multi-lora-fine-tune"
-"Bug Tracker" = "https://github.com/TUDB-Labs/multi-lora-fine-tune/issues"
+"Homepage" = "https://github.com/mikecovlee/mlora"
+"Bug Tracker" = "https://github.com/mikecovlee/mlora/issues"
 
 [tool.setuptools.packages.find]
 include = ["mlora"]

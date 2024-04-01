@@ -1,7 +1,6 @@
 from mlora.modelargs import LoraConfig
 from mlora.dispatcher import TrainTask, Dispatcher
-from mlora.tasks import CasualTask, classification_tasks
-from mlora.prompter import Prompter
+from mlora.tasks import CasualTask, MultiTask, task_dict
 from mlora.model import LLMModel
 
 from transformers import get_scheduler
@@ -37,21 +36,26 @@ class TrainConfig:
         self.all_training_steps_: int = -1
         self.lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
         self.accumulation_step_: int = None
+        self.accumulation_step_cnt_: int = 0
         self.optimizer_: torch.optim.Optimizer = None
-        task_type = train_config.get("task_type", "casual")
-        if task_type == "casual":
-            self.task_ = CasualTask(prompter=Prompter(train_config["prompt"]))
+        task_name = train_config.get("task_name", "casual")
+        if task_name == "casual":
+            self.task_ = CasualTask(
+                data_path=train_config["data"],
+                prompt_template=train_config.get("prompt", None),
+                validation_size=train_config.get("val_set_size", None))
+        elif ';' in task_name:
+            self.task_ = MultiTask(task_name)
         else:
-            self.task_ = classification_tasks[task_type]
-        train_config["dataloader"] = self.task_.dataload_function
-        if "task_type" in train_config and "data" not in train_config:
-            train_config["data"] = train_config["task_type"]
+            self.task_ = task_dict[task_name]
+        train_config["dataloader"] = self.task_.loading_data
 
     def prepare(self, train_paramas: tuple):
         if self.batch_size_ < self.micro_batch_size_ or self.batch_size_ % self.micro_batch_size_ != 0:
             raise ValueError(
                 f"error batch_size {self.batch_size_} and micro batch size {self.micro_batch_size_}")
         self.accumulation_step_ = self.batch_size_ / self.micro_batch_size_
+        self.accumulation_step_cnt_ = 0
         paramas_count = 0
         for paramas in train_paramas:
             paramas_count = paramas_count + sum(t.numel()
@@ -73,7 +77,7 @@ class TrainConfig:
         else:
             raise ValueError(f"unkown optimizer {self.optimizer_name_}")
 
-    def step_lr_scheduler(self, total_epoch, len_dataset):
+    def prepare_lr_scheduler(self, total_epoch, len_dataset):
         if self.lr_scheduler_ is None:
             total_steps = (len_dataset // self.batch_size_) * total_epoch if len_dataset % self.batch_size_ == 0 else (
                 len_dataset // self.batch_size_ + 1) * total_epoch
@@ -82,6 +86,17 @@ class TrainConfig:
                     self.warmup_steps_, float) else self.warmup_steps_
             self.lr_scheduler_ = get_scheduler(
                 self.scheduler_type_, self.optimizer_, warmup_steps, total_steps)
+
+    def step(self):
+        self.accumulation_step_cnt_ += 1
+        if self.accumulation_step_cnt_ % self.accumulation_step_ == 0:
+            self.optimizer_.step()
+            self.lr_scheduler_.step()
+            self.optimizer_.zero_grad()
+
+    def finish(self):
+        self.optimizer_.step()
+        self.optimizer_.zero_grad()
 
 
 def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suffix=""):
@@ -95,6 +110,7 @@ def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suf
 
     lora_weight_dict = model.get_lora_weight_dict(config.adapter_name_)
     lora_config_dict = model.adapter_configs_[config.adapter_name_].export()
+    lora_config_dict["base_model_name_or_path"] = model.name_or_path_
 
     torch.save(lora_weight_dict, lora_output_dir +
                os.sep + "adapter_model.bin")
@@ -154,17 +170,12 @@ def train(dispatcher: Dispatcher,
         total_loss.backward()
 
         for output in outputs:
-            adapter_name = output.adapter_name
-            config = config_dict[adapter_name]
-            if step_cnt % config.accumulation_step_ == 0:
-                config.optimizer_.step()
-                config.lr_scheduler_.step()
-                logging.info(f"    adapter: {adapter_name}" +
-                             f"   lr: {config.lr_scheduler_.get_last_lr()[-1]}")
-                config.optimizer_.zero_grad()
+            config = config_dict[output.adapter_name]
+            config.step()
 
-            if step_cnt % save_step == 0:
+            if config.accumulation_step_cnt_ % save_step == 0:
                 save_adapter_weight(model, config, save_dir, f"{step_cnt}")
 
     for config in configs:
+        config.finish()
         save_adapter_weight(model, config, save_dir)

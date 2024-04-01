@@ -8,31 +8,23 @@ from transformers.activations import ACT2FN
 
 
 def _mixtral_load_balancing_loss_func(gate_logits: List[torch.Tensor], num_experts: int, top_k: int) -> float:
-    gate_logits = torch.cat(gate_logits, dim=0)
+    concatenated_gate_logits = torch.cat(gate_logits, dim=0)
 
-    routing_weights, selected_experts = torch.topk(
-        gate_logits, top_k, dim=-1)
-    routing_weights = routing_weights.softmax(dim=-1)
+    routing_weights = torch.nn.functional.softmax(
+        concatenated_gate_logits, dim=-1)
 
-    # cast the expert indices to int64, otherwise one-hot encoding will fail
-    if selected_experts.dtype != torch.int64:
-        selected_experts = selected_experts.to(torch.int64)
-
-    if len(selected_experts.shape) == 2:
-        selected_experts = selected_experts.unsqueeze(2)
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
 
     expert_mask = torch.nn.functional.one_hot(
         selected_experts, num_experts)
 
-    # For a given token, determine if it was routed to a given expert.
-    expert_mask = torch.max(expert_mask, axis=-2).values
+    tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
 
-    # cast to float32 otherwise mean will fail
-    expert_mask = expert_mask.to(torch.float32)
-    tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
+    router_prob_per_expert = torch.mean(routing_weights, dim=0)
 
-    router_prob_per_group_and_expert = torch.mean(routing_weights, axis=-1)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert.unsqueeze(-1)) * (num_experts**2)
+    overall_loss = torch.sum(
+        tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
 
 class MixtralRouterLoss(torch.nn.Module):
@@ -55,9 +47,32 @@ class MixtralSparseMoe(torch.nn.Module):
             in_features, config.num_experts_, bias=False, device=config.device_, dtype=torch.float32)
         self.act_ = ACT2FN[config.act_fn_]
         self.experts_ = config.num_experts_
-        self.dropout_ = torch.nn.Dropout(
-            config.dropout_rate_) if config.dropout_rate_ > 0 else None
         self.topk_ = config.top_k_
+        self.router_profile_: bool = False
+        self.profiler_: List[int] = None
+
+    def _profiling(self,
+                   batch_size: int,
+                   sequence_length: int,
+                   selected_experts: torch.Tensor) -> None:
+        if not self.router_profile_:
+            return
+
+        router_statistic_ = list(0 for _ in range(self.experts_))
+        for selected in selected_experts.tolist():
+            for idx in selected:
+                router_statistic_[idx] += 1
+
+        if self.profiler_ is None:
+            self.profiler_ = list(0 for _ in range(self.experts_))
+            for idx in range(self.experts_):
+                self.profiler_[idx] = (
+                    router_statistic_[idx] / batch_size) / sequence_length
+        else:
+            for idx in range(self.experts_):
+                pressure = (
+                    router_statistic_[idx] / batch_size) / sequence_length
+                self.profiler_[idx] = (self.profiler_[idx] + pressure) / 2
 
     def forward(self, expert_fn, hidden_states: torch.Tensor) -> Tuple:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -68,6 +83,9 @@ class MixtralSparseMoe(torch.nn.Module):
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(
             routing_weights, self.topk_, dim=-1)
+
+        self._profiling(batch_size, sequence_length, selected_experts)
+
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
@@ -97,21 +115,16 @@ class MixtralSparseMoe(torch.nn.Module):
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None,
                                           top_x_list].reshape(-1, hidden_dim)
-            current_routing_weights = routing_weights[top_x_list,
-                                                      idx_list, None]
             current_hidden_states = expert_fn(
-                self.adapter_name_, self.act_, expert_idx, current_state)
-            current_hidden_states = current_routing_weights * current_hidden_states
+                self.adapter_name_, self.act_, expert_idx, current_state) * routing_weights[top_x_list, idx_list, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
             final_hidden_states.index_add_(
                 0, top_x, current_hidden_states.to(hidden_states.dtype))
+
         final_hidden_states = final_hidden_states.reshape(
             batch_size, sequence_length, hidden_dim)
-
-        if self.dropout_:
-            final_hidden_states = self.dropout_(final_hidden_states)
 
         return final_hidden_states, router_logits
 
@@ -184,7 +197,7 @@ class SwitchSparseMoe(torch.nn.Module):
         self.act_ = ACT2FN[config.act_fn_]
         self.experts_: int = config.num_experts_
         self.dropout_ = torch.nn.Dropout(
-            config.dropout_rate_) if config.dropout_rate_ > 0 else None
+            config.ffn_dropout_) if config.ffn_dropout_ > 0 else torch.nn.Identity()
         self.expert_capacity_: int = config.expert_capacity_
         self.jitter_noise_: float = config.jitter_noise_
 
@@ -225,10 +238,7 @@ class SwitchSparseMoe(torch.nn.Module):
             next_states[token_indices] = expert_fn(
                 self.adapter_name_, self.act_, idx, data[token_indices]).to(next_states.dtype)
 
-        hidden_states = router_probs * next_states
-
-        if self.dropout_:
-            hidden_states = self.dropout_(hidden_states)
+        hidden_states = self.dropout_(router_probs * next_states)
 
         return hidden_states, (router_logits, expert_index)
 
