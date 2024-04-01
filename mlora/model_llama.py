@@ -242,7 +242,6 @@ class Transformer(torch.nn.Module):
         self.dtype_ = args.dtype_
 
     def init_lora_layer_weight(self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]):
-        adapter_name = config.adapter_name_
         target = config.target_modules_
         linear_layer_list = [self.wk_, self.wq_, self.wv_,
                              self.wo_, self.ffn_.w1_, self.ffn_.w2_, self.ffn_.w3_]
@@ -279,12 +278,7 @@ class Transformer(torch.nn.Module):
                             lora_b = weight[lora_b_name]
 
                         linear_layer_list[idx].init_lora_weight(
-                            LoraConfig(adapter_name_=f"moe.{adapter_name}.experts.{expert_idx}",
-                                       device_=config.device_,
-                                       use_dora_=config.expert_use_dora_,
-                                       lora_r_=config.expert_r_,
-                                       lora_alpha_=config.expert_alpha_,
-                                       lora_dropout_=config.expert_dropout_), (lora_a, lora_b))
+                            config.expert_config(expert_idx), (lora_a, lora_b))
                 else:
                     lora_a = None
                     lora_b = None

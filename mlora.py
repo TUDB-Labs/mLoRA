@@ -64,6 +64,8 @@ parser.add_argument('--disable_log', action="store_true",
                     help='Disable logging.')
 parser.add_argument('--log_file', type=str,
                     help='Save log to specific file')
+parser.add_argument('--verbose', action="store_true",
+                    help='Show extra informations such as parameters')
 parser.add_argument('--overwrite', action="store_true",
                     help='Overwrite adapter model when older one existed')
 parser.add_argument('--debug', action="store_true",
@@ -153,6 +155,9 @@ def init_adapter_config(config: Dict[str, any],
             elif not query_yes_no(f"Existed adapter model file detected: {adapter_file_path}\n" + "Overwrite?"):
                 logging.info("User canceled training due to file conflict.")
                 exit(0)
+
+        if args.verbose:
+            logging.info(config_class.__dict__)
 
         llm_model.init_lora_layer_weight(config_class, lora_weight)
         if args.inference:

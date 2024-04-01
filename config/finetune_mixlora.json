@@ -82,8 +82,10 @@
                 "w2_proj": false,
                 "w3_proj": true
             },
+            "expert_lora": {
+                "use_rslora": true
+            },
             "routing_strategy": "switch",
-            "expert_use_dora": true,
             "expert_capacity": 192,
             "num_experts": 8,
             "act_fn": "gelu_new",
