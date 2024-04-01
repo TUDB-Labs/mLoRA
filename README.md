@@ -156,7 +156,7 @@ Currently, only weights in the safetensors format are supported. If you have wei
 python trans_to_safetensors.py --model_path /home/local_model
 ```
 
-Suppose the model has 35 layers(32 transformer layer and 3 other layer). Here are basic commands for finetuning this model on 4 GPUs platform:
+Suppose the model has 35 layers(32 transformer layers and 3 other layers). Here are basic commands for finetuning this model on 4 GPUs platform:
 
 ```bash
 python mlora.py \
