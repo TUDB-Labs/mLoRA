@@ -1,5 +1,5 @@
 from mlora.utils import setup_seed
-from mlora.profiler.profiler import setup_trace_mode, grad_fn_nvtx_wrapper_by_tracepoint
+from mlora.profiler.profiler import setup_trace_mode, grad_fn_nvtx_wrapper_by_tracepoint, set_backward_tracepoint
 
 import torch
 import random
@@ -30,7 +30,7 @@ parser.add_argument('--repete', type=int, default=100,
                     help="Total test iteration")
 parser.add_argument('--seq_len', type=int, default=128,
                     help="The length of the sequence")
-parser.add_argument('--batch_size', type=int, default=4,
+parser.add_argument('--batch_size', type=int, default=8,
                     help="The batch size of each lora input")
 parser.add_argument('--peft_mode', type=str, default="seq",
                     help="How to use peft to train multi lora, include: seq, switch")
@@ -39,8 +39,7 @@ g_default_rank = 16
 g_default_alpha = 16
 g_default_dropout = 0.05
 g_default_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
-g_micro_batch_size = 8
-g_loss_fn = torch.nn.CrossEntropyLoss()
+g_default_loss_fn = torch.nn.CrossEntropyLoss()
 
 args = parser.parse_args()
 assert not (args.load_4bit and args.load_8bit)
@@ -94,8 +93,6 @@ def setup_llm_model() -> LlamaForCausalLM:
         torch_dtype = torch.float32
         torch_dtype = torch.bfloat16 if qlora_4bit_bf16 else torch_dtype
         additional_load_args["torch_dtype"] = torch_dtype
-        additional_load_args["load_in_4bit"] = True if load_bits == 4 else False
-        additional_load_args["load_in_8bit"] = True if load_bits == 8 else False
         additional_load_args["quantization_config"] = BitsAndBytesConfig(
             load_in_4bit=True if load_bits == 4 else False,
             load_in_8bit=True if load_bits == 8 else False,
@@ -145,6 +142,7 @@ if __name__ == "__main__":
             model.set_adapter(now_lora)
             for _ in range(0, args.repete):
                 loss = model.forward(input_ids=lables, labels=lables)[0]
+                set_backward_tracepoint(loss.grad_fn, "b_loss")
                 grad_fn_nvtx_wrapper_by_tracepoint(loss.grad_fn)
                 loss.backward()
 
@@ -154,6 +152,7 @@ if __name__ == "__main__":
                 now_lora = f"lora_{lora_idx}"
                 model.set_adapter(now_lora)
                 loss = model.forward(input_ids=lables, labels=lables)[0]
+                set_backward_tracepoint(loss.grad_fn, "b_loss")
                 grad_fn_nvtx_wrapper_by_tracepoint(loss.grad_fn)
                 loss.backward()
 

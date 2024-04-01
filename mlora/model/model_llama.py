@@ -135,19 +135,14 @@ class Transformer(torch.nn.Module):
                 input_args: MultiLoraBatchData):
         batch_size, max_seq_len, _ = data.shape
 
-        with nvtx_range(f"f_attention_norm_{self.layer_id_}"):
+        with nvtx_range("f_attention_norm"):
             attention_norm_data = self.attention_norm_.forward(data)
         set_backward_tracepoint(
-            attention_norm_data.grad_fn, f"b_attention_norm_{self.layer_id_}")
+            attention_norm_data.grad_fn, "b_attention_norm")
 
-        with nvtx_range(f"f_q_{self.layer_id_}"):
-            xq = self.wq_.forward(attention_norm_data, input_args)
-
-        with nvtx_range(f"f_k_{self.layer_id_}"):
-            xk = self.wk_.forward(attention_norm_data, input_args)
-
-        with nvtx_range(f"f_v_{self.layer_id_}"):
-            xv = self.wv_.forward(attention_norm_data, input_args)
+        xq = self.wq_.forward(attention_norm_data, input_args)
+        xk = self.wk_.forward(attention_norm_data, input_args)
+        xv = self.wv_.forward(attention_norm_data, input_args)
 
         # conver shape to multi head
         # the shape is batch_size * number_of_head * seq_len * dim_of_head
@@ -163,7 +158,7 @@ class Transformer(torch.nn.Module):
         cos = self.cos_[:max_seq_len].to(xq.dtype)
         sin = self.sin_[:max_seq_len].to(xq.dtype)
 
-        with nvtx_range(f"f_rotray_emb_{self.layer_id_}"):
+        with nvtx_range("f_rotray_emb"):
             xq, xk = apply_rotary_emb(xq, xk, cos, sin)
 
         set_backward_tracepoint(xq.grad_fn, "b_q_rope")
@@ -180,57 +175,37 @@ class Transformer(torch.nn.Module):
 
         # must align with xformers memory efficient attention
         xq = xq.transpose(1, 2)
-        set_backward_tracepoint(xq.grad_fn, "b_q_T")
-
         xk = xk.transpose(1, 2)
-        set_backward_tracepoint(xk.grad_fn, "b_k_T")
-
         xv = xv.transpose(1, 2)
-        set_backward_tracepoint(xv.grad_fn, "b_v_T")
 
-        with nvtx_range(f"f_attention_{self.layer_id_}"):
+        with nvtx_range("f_attention"):
             attention_score = xformers.ops.memory_efficient_attention(
                 xq, xk, xv, mask)
         attention_score = attention_score.view(batch_size, max_seq_len, -1)
         set_backward_tracepoint(attention_score.grad_fn, "b_attention")
 
         # get output attention score
-        with nvtx_range(f"f_o_{self.layer_id_}"):
-            wo = self.wo_.forward(attention_score, input_args)
+        wo = self.wo_.forward(attention_score, input_args)
 
-        with nvtx_range(f"f_o_add_{self.layer_id_}"):
+        with nvtx_range("f_o_add"):
             data = data + wo
         set_backward_tracepoint(data.grad_fn, "b_o_add")
 
         # feed forward fully connected
-        with nvtx_range(f"f_ffn_norm_{self.layer_id_}"):
+        with nvtx_range("f_ffn_norm"):
             score_norm_data = self.ffn_norm_.forward(data)
-        set_backward_tracepoint(score_norm_data.grad_fn,
-                                f"b_ffn_norm_{self.layer_id_}")
+        set_backward_tracepoint(score_norm_data.grad_fn, "b_ffn_norm")
 
-        with nvtx_range(f"f_w1_{self.layer_id_}"):
+        with nvtx_range("f_mlp"):
             w1 = self.w1_.forward(score_norm_data, input_args)
-
-        with nvtx_range(f"f_w3_{self.layer_id_}"):
             w3 = self.w3_.forward(score_norm_data, input_args)
-
-        # same as: data = data + w2_forward(F.silu(w1) * w3, input_args)
-        with nvtx_range(f"f_silu_w2_{self.layer_id_}"):
+            # same as: data = data + w2_forward(F.silu(w1) * w3, input_args)
             w1_silu = F.silu(w1)
-        set_backward_tracepoint(
-            w1_silu.grad_fn, f"b_silu_w2_{self.layer_id_}")
-
-        with nvtx_range(f"f_w1_m_w3_{self.layer_id_}"):
             mlp_output = w1_silu * w3
-        set_backward_tracepoint(
-            mlp_output.grad_fn, f"b_w1_m_w3_{self.layer_id_}")
-
-        with nvtx_range(f"f_w2_{self.layer_id_}"):
             mlp_output = self.w2_.forward(mlp_output, input_args)
-        set_backward_tracepoint(
-            mlp_output.grad_fn, f"b_w2_{self.layer_id_}")
+        set_backward_tracepoint(mlp_output.grad_fn, "b_mlp")
 
-        with nvtx_range(f"f_w2_add_{self.layer_id_}"):
+        with nvtx_range("f_mlp_add"):
             mlp_output = data + mlp_output
         set_backward_tracepoint(mlp_output.grad_fn, "b_w2_add")
 
@@ -289,7 +264,6 @@ class LlamaSequentialWrapper(torch.nn.Module):
                 output = output.requires_grad_(True)
             return (output, ) + input[1:]
 
-        @nvtx_wrapper("f_transformer")
         def transformer_forward():
             if input[-1]:
                 output = CheckpointRecomputeFunction.apply(
@@ -297,7 +271,6 @@ class LlamaSequentialWrapper(torch.nn.Module):
                 set_backward_tracepoint(output.grad_fn, "b_checkpoint")
             else:
                 output = self.wrapper_module_.forward(*input[:-1])
-                set_backward_tracepoint(output.grad_fn, "b_transformer")
             return (output, ) + input[1:]
 
         @nvtx_wrapper("f_rmsnorm")

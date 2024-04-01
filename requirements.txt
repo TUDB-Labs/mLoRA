@@ -8,5 +8,5 @@ sentencepiece==0.1.99
 scipy==1.10.1
 xformers==0.0.21
 flask
-peft
+peft==0.10.0
 protobuf==3.20.2

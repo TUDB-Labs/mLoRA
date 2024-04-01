@@ -1,0 +1,31 @@
+28a29,30
+> from mlora.profiler.profiler import nvtx_range,set_backward_tracepoint
+> 
+217c219,222
+<                 result = self.base_layer(x, *args, **kwargs)
+---
+>                 with nvtx_range("f_linear"):
+>                     result = self.base_layer(x, *args, **kwargs)
+>                 set_backward_tracepoint(result.grad_fn, "b_linear")
+> 
+233,238c238,245
+<                     if not self.use_dora[active_adapter]:
+<                         output = lora_B(lora_A(dropout(x))) * scaling
+<                     else:
+<                         output = self._apply_dora(x, lora_A, lora_B, scaling, active_adapter)
+<                     if requires_conversion:
+<                         output = output.to(expected_dtype)
+---
+>                     with nvtx_range(f"f_lora_{active_adapter}"):
+>                         if not self.use_dora[active_adapter]:
+>                             output = lora_B(lora_A(dropout(x))) * scaling
+>                             set_backward_tracepoint(output.grad_fn, f"b_lora_{active_adapter}")
+>                         else:
+>                             output = self._apply_dora(x, lora_A, lora_B, scaling, active_adapter)
+>                         if requires_conversion:
+>                             output = output.to(expected_dtype)
+240c247,248
+<                     result = result + output
+---
+>                         result = result + output
+>                         set_backward_tracepoint(result.grad_fn, f"b_lora_{active_adapter}")

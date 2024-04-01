@@ -1,0 +1,140 @@
+50a51,52
+> from mlora.profiler.profiler import nvtx_range, set_backward_tracepoint, grad_fn_nvtx_wrapper_by_tracepoint
+> 
+361,362c363,369
+<         cos, sin = self.rotary_emb(value_states, position_ids)
+<         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+---
+>         with nvtx_range("f_get_cos_sin"):
+>             cos, sin = self.rotary_emb(value_states, position_ids)
+>         with nvtx_range("f_rotray_emb"):
+>             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+>         set_backward_tracepoint(query_states.grad_fn, "b_q_rope")
+>         set_backward_tracepoint(key_states.grad_fn, "b_k_rope")
+> 
+369a377
+>         set_backward_tracepoint(key_states.grad_fn, "b_k_rep")
+370a379
+>         set_backward_tracepoint(value_states.grad_fn, "b_v_rep")
+372,383c381,382
+<         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+< 
+<         if attention_mask is not None:  # no matter the length, we just slice it
+<             causal_mask = attention_mask
+<             if cache_position is not None:
+<                 causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+<             attn_weights = attn_weights + causal_mask
+< 
+<         # upcast attention to fp32
+<         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+<         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+<         attn_output = torch.matmul(attn_weights, value_states)
+---
+>         with nvtx_range("f_attention"):
+>             attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+385,389c384,399
+<         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+<             raise ValueError(
+<                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+<                 f" {attn_output.size()}"
+<             )
+---
+>             if attention_mask is not None:  # no matter the length, we just slice it
+>                 causal_mask = attention_mask
+>                 if cache_position is not None:
+>                     causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+>                 attn_weights = attn_weights + causal_mask
+> 
+>             # upcast attention to fp32
+>             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+>             attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+>             attn_output = torch.matmul(attn_weights, value_states)
+> 
+>             if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+>                 raise ValueError(
+>                     f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+>                     f" {attn_output.size()}"
+>                 )
+391c401
+<         attn_output = attn_output.transpose(1, 2).contiguous()
+---
+>             attn_output = attn_output.transpose(1, 2).contiguous()
+393c403,404
+<         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+---
+>             attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+>         set_backward_tracepoint(attn_output.grad_fn, "b_attention")
+737c748,750
+<         hidden_states = self.input_layernorm(hidden_states)
+---
+>         with nvtx_range("f_attention_norm"):
+>             hidden_states = self.input_layernorm(hidden_states)
+>         set_backward_tracepoint(hidden_states.grad_fn, "b_attention_norm")
+750c763,765
+<         hidden_states = residual + hidden_states
+---
+>         with nvtx_range("f_o_add"):
+>             hidden_states = residual + hidden_states
+>         set_backward_tracepoint(hidden_states.grad_fn, "b_o_add")
+754,756c769,781
+<         hidden_states = self.post_attention_layernorm(hidden_states)
+<         hidden_states = self.mlp(hidden_states)
+<         hidden_states = residual + hidden_states
+---
+>         with nvtx_range("f_ffn_norm"):
+>             hidden_states = self.post_attention_layernorm(hidden_states)
+>         set_backward_tracepoint(hidden_states.grad_fn, "b_ffn_norm")
+> 
+>         with nvtx_range("f_mlp"):
+>             hidden_states = self.mlp(hidden_states)
+>         set_backward_tracepoint(hidden_states.grad_fn, "b_mlp")
+> 
+>         with nvtx_range("f_mlp_add"):
+>             hidden_states = residual + hidden_states
+>         set_backward_tracepoint(hidden_states.grad_fn, "b_mlp_add")
+> 
+>         grad_fn_nvtx_wrapper_by_tracepoint(hidden_states.grad_fn)
+977c1002,1003
+<             inputs_embeds = self.embed_tokens(input_ids)
+---
+>             with nvtx_range("f_embedding"):
+>                 inputs_embeds = self.embed_tokens(input_ids)
+1017a1044
+>                 set_backward_tracepoint(layer_outputs[0].grad_fn, "b_checkpoint")
+1037c1064,1066
+<         hidden_states = self.norm(hidden_states)
+---
+>         with nvtx_range("f_rmsnorm"):
+>             hidden_states = self.norm(hidden_states)
+>         set_backward_tracepoint(hidden_states.grad_fn, "b_rmsnorm")
+1195c1224,1226
+<             logits = self.lm_head(hidden_states)
+---
+>             with nvtx_range("f_output"):
+>                 logits = self.lm_head(hidden_states)
+>             set_backward_tracepoint(logits.grad_fn, "b_output")
+1199,1209c1230,1241
+<         if labels is not None:
+<             # Shift so that tokens < n predict n
+<             shift_logits = logits[..., :-1, :].contiguous()
+<             shift_labels = labels[..., 1:].contiguous()
+<             # Flatten the tokens
+<             loss_fct = CrossEntropyLoss()
+<             shift_logits = shift_logits.view(-1, self.config.vocab_size)
+<             shift_labels = shift_labels.view(-1)
+<             # Enable model parallelism
+<             shift_labels = shift_labels.to(shift_logits.device)
+<             loss = loss_fct(shift_logits, shift_labels)
+---
+>         with nvtx_range("f_calc_loss"):
+>             if labels is not None:
+>                 # Shift so that tokens < n predict n
+>                 shift_logits = logits[..., :-1, :].contiguous()
+>                 shift_labels = labels[..., 1:].contiguous()
+>                 # Flatten the tokens
+>                 loss_fct = CrossEntropyLoss()
+>                 shift_logits = shift_logits.view(-1, self.config.vocab_size)
+>                 shift_labels = shift_labels.view(-1)
+>                 # Enable model parallelism
+>                 shift_labels = shift_labels.to(shift_logits.device)
+>                 loss = loss_fct(shift_logits, shift_labels)
