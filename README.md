@@ -153,7 +153,7 @@ m-LoRA employs a distinctive approach to pipeline parallelism for executing para
 Currently, only weights in the safetensors format are supported. If you have weights in the Hugging Face PyTorch format, you can use the following code to convert them:
 
 ```bash
-python trans_to_safetensors.py --model_path /home/local_model_path
+python trans_to_safetensors.py --model_path /home/local_model
 ```
 
 Suppose the model has 35 layers(32 transformer layer and 3 other layer). Here are basic commands for finetuning this model on 4 GPUs platform:
