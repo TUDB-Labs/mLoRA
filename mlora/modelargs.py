@@ -148,7 +148,6 @@ class LoraConfig:
             config["use_rslora"] = True
         config["bias"] = "none"
         config["peft_type"] = "LORA"
-        config["task_type"] = "CAUSAL_LM"
         config["r"] = self.lora_r_
         config["lora_alpha"] = self.lora_alpha_
         config["lora_dropout"] = self.lora_dropout_

@@ -40,6 +40,10 @@ class BasicTask():
     def __init__(self) -> None:
         pass
 
+    @property
+    def peft_task_type(self) -> str:
+        pass
+
     def loading_data(self,
                      tokenizer: Tokenizer,
                      is_train: bool = True) -> List[DataClass]:
@@ -75,6 +79,10 @@ class CasualTask(BasicTask):
         if validation_size is not None:
             self.dataset_ = self.dataset_.train_test_split(
                 test_size=validation_size)
+
+    @property
+    def peft_task_type(self) -> str:
+        return "CAUSAL_LM"
 
     def loading_data(self,
                      tokenizer: Tokenizer,
@@ -120,6 +128,10 @@ class SequenceClassificationTask(BasicTask):
             self.metric_name_ = metric_name
         self.subset_map_ = subset_map
 
+    @property
+    def peft_task_type(self) -> str:
+        return "SEQ_CLS"
+
     def loading_data(self,
                      tokenizer: Tokenizer,
                      is_train: bool = True) -> List[DataClass]:
@@ -160,6 +172,10 @@ class CommonSenseTask(BasicTask):
         super().__init__()
         self.task_type_ = "common_sense"
         self.label_dtype_ = None
+
+    @property
+    def peft_task_type(self) -> str:
+        return "QUESTION_ANS"
 
     def label_list(self) -> List[str]:
         pass
