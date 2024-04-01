@@ -15,6 +15,7 @@
             "micro_batch_size": 4,
             "test_batch_size": 64,
             "num_epochs": 3,
+            "loraplus_lr_ratio": 20,
             "r": 8,
             "lora_alpha": 16,
             "lora_dropout": 0.05,
@@ -53,6 +54,7 @@
                 "w2_proj": false,
                 "w3_proj": false
             },
+            "use_dora": true,
             "data": "data/data_demo.json",
             "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",

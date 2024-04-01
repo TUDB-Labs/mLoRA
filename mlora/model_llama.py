@@ -624,45 +624,6 @@ class LlamaModel(LLMModel):
 
         return model
 
-    def get_train_paramas(self) -> Dict[str, List[torch.Tensor]]:
-        train_paramas_lora_a = {}
-        train_paramas_lora_b = {}
-        train_paramas_aux = {}
-
-        for name, layer in self.output_.layers_.items():
-            train_paramas_lora_a[name] = []
-            train_paramas_lora_b[name] = []
-            train_paramas_aux[name] = list(layer.state_dict().values())
-
-        for transformer_layer in self.layers_:
-            for adapter_name, lora_config in self.adapter_configs_.items():
-                if adapter_name in transformer_layer.ffn_.moes_:
-                    train_paramas_aux[adapter_name].append(transformer_layer.ffn_.moes_[
-                        adapter_name].gate_.weight)
-
-                lora_layer_list = [transformer_layer.wq_.loras_, transformer_layer.wk_.loras_,
-                                   transformer_layer.wv_.loras_, transformer_layer.wo_.loras_,
-                                   transformer_layer.ffn_.w1_.loras_, transformer_layer.ffn_.w2_.loras_,
-                                   transformer_layer.ffn_.w3_.loras_]
-
-                for lora_layer in lora_layer_list:
-                    if adapter_name in lora_layer:
-                        train_paramas_lora_a[adapter_name].append(
-                            lora_layer[adapter_name].lora_a_.weight)
-                        train_paramas_lora_a[adapter_name].append(
-                            lora_layer[adapter_name].lora_b_.weight)
-
-                    elif adapter_name in transformer_layer.ffn_.moes_:
-                        for expert_idx in range(lora_config.num_experts_):
-                            lora_name = f"moe.{adapter_name}.experts.{expert_idx}"
-                            if lora_name in lora_layer:
-                                train_paramas_lora_a[adapter_name].append(
-                                    lora_layer[lora_name].lora_a_.weight)
-                                train_paramas_lora_b[adapter_name].append(
-                                    lora_layer[lora_name].lora_b_.weight)
-
-        return train_paramas_lora_a, train_paramas_lora_b, train_paramas_aux
-
     def get_generate_paramas(self) -> Dict[str, GenerateConfig]:
         generate_paramas = {}
         for adapter_name in self.adapter_configs_.keys():
