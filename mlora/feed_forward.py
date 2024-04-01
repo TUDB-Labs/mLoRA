@@ -1,4 +1,4 @@
-from mlora.modelargs import MixConfig, MultiLoraBatchData
+from mlora.modelargs import LLMModelArgs, MixConfig, MultiLoraBatchData
 from mlora.lora_liner import Linear
 from mlora.mix_lora import moe_layer_factory
 
@@ -7,7 +7,7 @@ import torch
 
 
 class FeedForward(torch.nn.Module):
-    def __init__(self, w1: Linear, w2: Linear, w3: Linear, device: str) -> None:
+    def __init__(self, w1: Linear, w2: Linear, w3: Linear, args: LLMModelArgs) -> None:
         super().__init__()
 
         # feed forward
@@ -16,7 +16,7 @@ class FeedForward(torch.nn.Module):
         self.w3_: Linear = w3       # also up   FNN * dim
         self.act_ = torch.nn.SiLU()
         # device
-        self.device_ = device
+        self.device_ = args.device_
         # mix of experts
         self.moes_: torch.ModuleDict = {}
 
