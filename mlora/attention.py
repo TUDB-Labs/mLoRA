@@ -306,10 +306,10 @@ class LlamaFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+            if torch.cuda.is_bf16_supported():
+                target_dtype = torch.bfloat16
             else:
-                target_dtype = self.wq_.weight.dtype
+                target_dtype = torch.float16
             xq = xq.to(target_dtype)
             xk = xk.to(target_dtype)
             xv = xv.to(target_dtype)
@@ -324,7 +324,8 @@ class LlamaFlashAttention(LlamaAttention):
             xv,
             attention_mask,
             max_seq_len,
-        )
+        ).to(input_dtype)
+
         attn_output = attn_output.reshape(
             batch_size, max_seq_len, self.dim_).contiguous()
         attn_output = self.wo_.forward(attn_output, input_args)
@@ -506,10 +507,10 @@ class MistralFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+            if torch.cuda.is_bf16_supported():
+                target_dtype = torch.bfloat16
             else:
-                target_dtype = self.wq_.weight.dtype
+                target_dtype = torch.float16
             xq = xq.to(target_dtype)
             xk = xk.to(target_dtype)
             xv = xv.to(target_dtype)
@@ -525,7 +526,8 @@ class MistralFlashAttention(LlamaAttention):
             attention_mask,
             max_seq_len,
             use_sliding_windows=use_sliding_windows,
-        )
+        ).to(input_dtype)
+
         attn_output = attn_output.reshape(
             batch_size, max_seq_len, self.dim_).contiguous()
         attn_output = self.wo_.forward(attn_output, input_args)

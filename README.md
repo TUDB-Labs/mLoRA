@@ -75,6 +75,10 @@ It's crucial to note that regardless of the settings, **LoRA weights are always 
 
 For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can be utilized to enable full-precision calculation acceleration.
 
+## Known issues
+
+ + DoRA with Quantization on Qwen2
+
 ## Quickstart
 
 Firstly, you should clone this repository and install dependencies:
