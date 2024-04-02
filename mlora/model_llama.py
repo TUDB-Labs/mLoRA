@@ -47,7 +47,7 @@ def precompute_mask(input_tokens: torch.Tensor,
     mask = torch.triu(mask, diagonal=diagonal)
 
     if additional_mask is not None:
-        masks_metric = torch.tensor(
+        masks_metric = ~torch.tensor(
             additional_mask, dtype=torch.bool, device=device)
         masks_metric = masks_metric.view(batch_size, 1, 1, seq_len)
         masks_metric = masks_metric.expand(-1, n_heads, seq_len, -1)
