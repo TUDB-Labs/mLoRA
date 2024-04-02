@@ -52,9 +52,23 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor,
     return q_embed, k_embed
 
 
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(
+        seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
+
+
+# Multi-headed attention from 'Attention Is All You Need' paper.
 class LlamaAttention(torch.nn.Module):
     def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
-                 args: LLMModelArgs, layer_idx: int, attn_implementation: str = "auto"):
+                 args: LLMModelArgs, layer_idx: int):
         super().__init__()
         # attention
         self.wq_: Linear = wq  # dim * dim
@@ -65,7 +79,6 @@ class LlamaAttention(torch.nn.Module):
         self.cos_, self.sin_ = precompute_rope_angle(
             args.dim_ // args.n_heads_, args.max_seq_len_, args.rope_theta_, args.device_)
         # other arg
-        self.attn_implementation_ = attn_implementation
         self.layer_id_ = layer_idx
         self.dim_ = args.dim_
         self.n_heads_ = args.n_heads_
@@ -85,6 +98,50 @@ class LlamaAttention(torch.nn.Module):
         attention_score = torch.matmul(attention_score, xv)
         attention_score = attention_score.transpose(1, 2).contiguous()
         return attention_score
+
+    def forward(self,
+                hidden_states: torch.Tensor,
+                input_args: MultiLoraBatchData,
+                attention_mask: Optional[torch.Tensor] = None):
+        batch_size, max_seq_len, _ = hidden_states.shape
+
+        xq = self.wq_.forward(hidden_states, input_args)
+        xk = self.wk_.forward(hidden_states, input_args)
+        xv = self.wv_.forward(hidden_states, input_args)
+
+        # conver shape to multi head
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
+                     self.head_dim_).transpose(1, 2)
+        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
+                     self.head_dim_).transpose(1, 2)
+        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
+                     self.head_dim_).transpose(1, 2)
+
+        # apply rotary embedding
+        assert xq.dtype == xk.dtype
+        cos = self.cos_[:max_seq_len].to(xq.dtype)
+        sin = self.sin_[:max_seq_len].to(xq.dtype)
+        xq, xk = apply_rotary_emb(xq, xk, cos, sin)
+
+        # for llama2 need to repeat the heads
+        # before dim: batch_size, n_kv_head, seq_len, head_dim
+        # after dim: batch_size, n_head, seq_len, head_dim
+        xk = repeat_kv(xk, self.n_rep_)
+        xv = repeat_kv(xv, self.n_rep_)
+
+        attention_score = self._scaled_dot_product_attention(
+            xq, xk, xv, attention_mask)
+
+        attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
+
+        # get output attention score
+        return self.wo_.forward(attention_score, input_args)
+
+
+class LlamaXformersAttention(LlamaAttention):
+    def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
+                 args: LLMModelArgs, layer_idx: int):
+        super().__init__(wq, wk, wv, wo, args, layer_idx)
 
     def _xformers_attention(self, xq, xk, xv, attention_mask):
         xq = xq.transpose(1, 2)
@@ -124,40 +181,13 @@ class LlamaAttention(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        if self.attn_implementation_ == "auto":
-            if input_args.inference_mode_:
-                attention_score = self._scaled_dot_product_attention(
-                    xq, xk, xv, attention_mask)
-            else:
-                attention_score = self._xformers_attention(
-                    xq, xk, xv, attention_mask)
-        elif self.attn_implementation_ == "eager":
-            attention_score = self._scaled_dot_product_attention(
-                xq, xk, xv, attention_mask)
-        elif self.attn_implementation_ == "xformers":
-            attention_score = self._xformers_attention(
-                xq, xk, xv, attention_mask)
-        else:
-            raise ValueError(
-                f"Unknown attention implementation {self.attn_implementation_}")
+        attention_score = self._xformers_attention(
+            xq, xk, xv, attention_mask)
 
         attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
 
         # get output attention score
         return self.wo_.forward(attention_score, input_args)
-
-
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(
-        seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 class LlamaFlashAttention(LlamaAttention):
@@ -503,8 +533,21 @@ class MistralFlashAttention(LlamaAttention):
         return attn_output
 
 
+LlamaAttentionClass = {
+    "eager": LlamaAttention,
+    "xformers": LlamaXformersAttention,
+}
+
 FlashAttentionClass = {
     "llama": LlamaFlashAttention,
     "mistral": MistralFlashAttention,
     "qwen2": MistralFlashAttention,
 }
+
+
+def llama_attention_factory(model_type: str, args: LLMModelArgs, **kwargs):
+    if args.attn_implementation_ == "flash_attention_2":
+        assert _is_package_available("flash_attn")
+        return FlashAttentionClass[model_type](args=args, **kwargs)
+    else:
+        return LlamaAttentionClass[args.attn_implementation_](args=args, **kwargs)

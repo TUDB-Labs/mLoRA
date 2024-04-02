@@ -36,6 +36,25 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 *: Arguments of configuration file
 
+## Supported Attention Methods
+
+|         | Attention Methods                                        | Name                  | Arguments*     |
+|---------|----------------------------------------------------------|-----------------------|----------------|
+| &check; | [Scaled Dot Product](https://arxiv.org/abs/1706.03762)   | `"eager"`             | `--eager_attn` |
+| &check; | [xFormers](https://github.com/facebookresearch/xformers) | `"xformers"`          | None           |
+| &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)    | `"flash_attention_2"` | `--flash_attn` |
+
+*: Arguments of `mlora.py`
+
+If the Attention method is not specified, we automatically use xFormers during training and Scaled Dot Product during inference and evaluation. It should be noted that xFormers attention needs to align the sequence length to a multiple of 8, otherwise an error will occur.
+
+To use flash attention 2, you need to install additional dependencies manually.
+
+```bash
+pip install ninja==1.10.2.4
+pip install flash-attn==2.3.6 --no-build-isolation
+```
+
 ## Supported Quantize Methods
 
 |         | Quantize Methods      | Arguments*    |
@@ -102,15 +121,6 @@ For further detailed usage information, please use `--help` option:
 ```bash
 python mlora.py --help
 ```
-
-## Flash Attention 2 Support
-
-m-LoRA supports training and inference with flash attention 2, but you need to install the flash attention 2 dependency by hand.
-```bash
-pip install ninja==1.10.2.4
-pip install flash-attn==2.3.6 --no-build-isolation
-```
-After installation, you can use m-LoRA with `--flash_attn` argument.
 
 ## Contributing
 We welcome contributions to improve this repository! Please review the contribution guidelines before submitting pull requests or issues.

@@ -44,8 +44,8 @@ class LLMModelArgs:
     use_sliding_window_: bool = None
     max_window_layers_: int = None
     sliding_window_: int = None
-    # auto, eager, xformers, flash_attention_2
-    attn_implementation_: str = "auto"
+    # eager, xformers, flash_attention_2
+    attn_implementation_: str = "eager"
     # data type
     dtype_: torch.dtype = None
 

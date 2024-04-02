@@ -1,6 +1,6 @@
 from mlora.modelargs import LLMModelArgs, LLMModelOutput, MultiLoraBatchData
 from mlora.modelargs import Masks, LoraConfig, MixConfig, lora_config_factory
-from mlora.attention import LlamaAttention, FlashAttentionClass
+from mlora.attention import LlamaAttention, llama_attention_factory
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import LLMOutput, LLMModel
 from mlora.feed_forward import FeedForward
@@ -8,7 +8,6 @@ from mlora.lora_liner import Linear
 from mlora.generate import GenerateConfig
 from mlora.mix_lora import router_loss_factory
 from mlora.tasks import SequenceClassificationTask, task_dict
-from mlora.utils import _is_package_available
 
 import torch
 import torch.nn.functional as F
@@ -176,18 +175,6 @@ class LlamaOutputLayer(torch.nn.Module):
                                           loss_fn_=layer.loss))
 
         return outputs
-
-
-def llama_attention_factory(model_type: str, wq: Linear, wk: Linear,
-                            wv: Linear, wo: Linear, args: LLMModelArgs, layer_idx: int):
-    if args.attn_implementation_ in ["auto", "eager", "xformers"]:
-        return LlamaAttention(wq, wk, wv, wo, args, layer_idx, args.attn_implementation_)
-    elif args.attn_implementation_ == "flash_attention_2":
-        assert _is_package_available("flash_attn")
-        return FlashAttentionClass[model_type](wq, wk, wv, wo, args, layer_idx)
-    else:
-        raise ValueError(
-            f"Unknown attention implementation {args.attn_implementation_}")
 
 
 class LlamaDecoderLayer(torch.nn.Module):
@@ -431,7 +418,7 @@ class LlamaModel(LLMModel):
     def from_pretrained(path: str,
                         device: str,
                         bits: int = None,
-                        attn_impl: str = "auto",
+                        attn_impl: str = "eager",
                         load_dtype: torch.dtype = torch.bfloat16,
                         compute_dtype: torch.dtype = torch.bfloat16,
                         double_quant: bool = True,
