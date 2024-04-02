@@ -15,7 +15,7 @@ def compose_command(base_model: str,
                     cuda_device: int = 0,
                     log_file: str = "mlora.log",
                     overwrite: bool = False,
-                    flash_attn: bool = False,
+                    attn_impl: str = None,
                     quantize: str = None,
                     dtype: str = "bf16",
                     tf32: bool = True):
@@ -30,8 +30,8 @@ def compose_command(base_model: str,
     command += f" --log_file {log_file}"
     if overwrite:
         command += " --overwrite"
-    if flash_attn:
-        command += " --flash_attn"
+    if attn_impl is not None:
+        command += f" --attn_impl {attn_impl}"
     if quantize is not None:
         command += f" --load_{quantize}"
     if dtype in ("fp16", "bf16"):
@@ -191,7 +191,7 @@ def show_help():
     print("    --cuda_device  [0]")
     print("    --log_file     [mlora.log]")
     print("    --overwrite    [false]")
-    print("    --flash_attn   [false]")
+    print("    --attn_impl    [eager]")
     print("    --quantize     [none], 4bit, 8bit")
     print("    --dtype        [bf16], fp16, fp32")
     print("    --tf32         [true]")
