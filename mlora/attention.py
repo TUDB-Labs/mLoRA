@@ -548,7 +548,7 @@ FlashAttentionClass = {
 
 
 def llama_attention_factory(model_type: str, args: LLMModelArgs, **kwargs):
-    if args.attn_implementation_ == "flash_attention_2":
+    if args.attn_implementation_ == "flash_attn":
         assert _is_package_available("flash_attn")
         return FlashAttentionClass[model_type](args=args, **kwargs)
     else:

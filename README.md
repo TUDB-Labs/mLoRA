@@ -38,11 +38,11 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 ## Supported Attention Methods
 
-|         | Attention Methods                                        | Name                  | Arguments*     |
-|---------|----------------------------------------------------------|-----------------------|----------------|
-| &check; | [Scaled Dot Product](https://arxiv.org/abs/1706.03762)   | `"eager"`             | `--eager_attn` |
-| &check; | [xFormers](https://github.com/facebookresearch/xformers) | `"xformers"`          | None           |
-| &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)    | `"flash_attention_2"` | `--flash_attn` |
+|         | Attention Methods                                        | Name           | Arguments*               |
+|---------|----------------------------------------------------------|----------------|--------------------------|
+| &check; | [Scaled Dot Product](https://arxiv.org/abs/1706.03762)   | `"eager"`      | `--attn_impl eager`      |
+| &check; | [xFormers](https://github.com/facebookresearch/xformers) | `"xformers"`   | `--attn_impl xformers`   |
+| &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)    | `"flash_attn"` | `--attn_impl flash_attn` |
 
 *: Arguments of `mlora.py`
 

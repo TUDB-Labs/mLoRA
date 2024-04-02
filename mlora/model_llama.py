@@ -340,7 +340,7 @@ class LlamaModel(LLMModel):
                               dtype=torch.int64, device=self.device_)
 
         # prepare mask
-        if self.attn_implementation_ == "flash_attention_2":
+        if self.attn_implementation_ == "flash_attn":
             if input.attention_masks_ is not None and 0 in input.attention_masks_:
                 # 2d mask is passed through the layers
                 mask = torch.tensor(input.attention_masks_,

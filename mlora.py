@@ -40,12 +40,8 @@ parser.add_argument('--load_adapter', action="store_true",
                     help='Load adapter from file instead of init randomly')
 parser.add_argument('--disable_adapter', action="store_true",
                     help="Disable the adapter modules")
-parser.add_argument('--tokenizer', type=str,
-                    help='Path to or name of tokenizer')
-parser.add_argument('--flash_attn', action='store_true',
-                    help='Use flash attention 2 if available')
-parser.add_argument('--eager_attn', action='store_true',
-                    help='Use fallback scaled dot product attention')
+parser.add_argument('--attn_impl', type=str,
+                    help='Specify the implementation of attention')
 parser.add_argument('--fp16', action='store_true',
                     help='Load base model in float16 precision')
 parser.add_argument('--bf16', action='store_true',
@@ -112,16 +108,10 @@ def query_yes_no(question, default="no"):
 
 def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     logging.info("Initializing pre-trained model.")
-    if args.eager_attn or args.inference or args.evaluate:
-        attn_impl = "eager"
-    elif args.flash_attn:
-        attn_impl = "flash_attention_2"
-    else:
-        attn_impl = "xformers"
     model = mlora.LlamaModel.from_pretrained(
         path=args.base_model,
         device=args.device,
-        attn_impl=attn_impl,
+        attn_impl=args.attn_impl,
         bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
         load_dtype=(torch.bfloat16 if args.bf16 else (
             torch.float16 if args.fp16 else torch.float32))
@@ -228,6 +218,12 @@ if __name__ == "__main__":
 
     if args.inference or args.evaluate:
         args.load_adapter = True
+
+    if args.attn_impl is None:
+        if args.inference or args.evaluate:
+            args.attn_impl = "eager"
+        else:
+            args.attn_impl = "xformers"
 
     log_handlers = [logging.StreamHandler()]
     if args.log_file is not None:
