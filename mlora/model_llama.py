@@ -504,10 +504,6 @@ class LlamaModel(LLMModel):
             llama_args.pad_token_id_ = -1
         llama_args.dtype_ = llama_model.dtype
 
-        if (llama_args.use_sliding_window_ and llama_args.attn_implementation_ != "flash_attn"):
-            raise ValueError(
-                "Sliding window attention requires flash attention.")
-
         llama_args.device_ = device
 
         model = LlamaModel(llama_args)

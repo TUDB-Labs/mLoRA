@@ -552,4 +552,5 @@ def llama_attention_factory(model_type: str, args: LLMModelArgs, **kwargs):
         assert _is_package_available("flash_attn")
         return FlashAttentionClass[model_type](args=args, **kwargs)
     else:
+        assert not args.use_sliding_window_, "Sliding window attention requires flash attention."
         return LlamaAttentionClass[args.attn_implementation_](args=args, **kwargs)
