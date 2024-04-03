@@ -121,6 +121,10 @@ class MPSBackend(BasicBackend):
         assert device == 0
         return torch.mps.get_rng_state()
 
+    def autocast(self, **kwargs):
+        # running with compatible mode
+        return torch.cuda.amp.autocast(**kwargs)
+
 
 _backend: BasicBackend = None
 
