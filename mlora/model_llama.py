@@ -495,7 +495,7 @@ class LlamaModel(LLMModel):
         llama_args.n_layers_ = llama_model.config.num_hidden_layers
         llama_args.norm_eps_ = llama_model.config.rms_norm_eps
         llama_args.vocab_size_ = llama_model.config.vocab_size
-        llama_args.max_seq_len_ = 4096 if not hasattr(
+        llama_args.max_seq_len_ = 4096 if not use_sliding_window and not hasattr(
             llama_model.config, "max_position_embeddings") else llama_model.config.max_position_embeddings
         if hasattr(llama_model.config, "use_sliding_window"):
             llama_args.use_sliding_window_ = use_sliding_window or llama_model.config.use_sliding_window
