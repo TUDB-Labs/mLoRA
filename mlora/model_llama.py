@@ -8,12 +8,12 @@ from mlora.lora_liner import Linear
 from mlora.generate import GenerateConfig
 from mlora.mix_lora import router_loss_factory
 from mlora.tasks import SequenceClassificationTask, task_dict
+from mlora.backends import get_backend
 from mlora.utils import _is_package_available
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import mlora.backends as backends
 from typing import List, Dict, Tuple, Optional
 from huggingface_hub import snapshot_download
 from transformers import AutoModelForCausalLM
@@ -444,7 +444,7 @@ class LlamaModel(LLMModel):
             logging.info("Loading model with half precision.")
 
         # BFloat16 is only supported after Ampere GPUs
-        if not backends.is_bf16_supported():
+        if not get_backend().is_bf16_supported():
             if load_dtype == torch.bfloat16:
                 logging.warning("bf16 is not available. deprecated to fp16.")
                 load_dtype = torch.float16

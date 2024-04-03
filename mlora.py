@@ -25,8 +25,6 @@ import logging
 import argparse
 from typing import Dict, Tuple, List, Union
 
-import mlora.backends
-
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
 parser.add_argument('--base_model', type=str, required=True,
@@ -56,7 +54,7 @@ parser.add_argument('--load_8bit', action="store_true",
 parser.add_argument('--load_4bit', action="store_true",
                     help='Load base model with 4bit quantization')
 parser.add_argument('--device', type=str,
-                    help='Specify which GPU to be used, default is cuda:0')
+                    help='Specify which GPU to be used')
 parser.add_argument('--config', type=str, required=True,
                     help='Path to finetune configuration')
 parser.add_argument('--seed', type=int, default=42,
@@ -238,17 +236,19 @@ if __name__ == "__main__":
                         handlers=log_handlers,
                         force=True)
 
-    if not mlora.backends.check_available():
+    mlora_backend = mlora.get_backend()
+
+    if mlora_backend.is_available():
+        logging.info(f'{mlora_backend.name()} initialized successfully.')
+    else:
         exit(-1)
 
     if args.device is None:
-        args.device = mlora.backends.default_device()
+        args.device = mlora_backend.default_device()
 
-    mlora.backends.use_deterministic_algorithms(args.deterministic)
-
-    mlora.backends.cuda_allow_tf32(args.tf32)
-
-    mlora.backends.manual_seed(args.seed)
+    mlora_backend.use_deterministic_algorithms(args.deterministic)
+    mlora_backend.allow_tf32(args.tf32)
+    mlora_backend.manual_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
@@ -256,7 +256,7 @@ if __name__ == "__main__":
     tokenizer, model = load_base_model()
     adapters = init_adapter_config(config, model)
 
-    mlora.backends.empty_cache()
+    mlora_backend.empty_cache()
 
     if args.inference:
         inference(model, tokenizer, adapters)

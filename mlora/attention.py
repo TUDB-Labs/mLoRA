@@ -1,12 +1,12 @@
 from mlora.lora_liner import Linear
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.backends import _backend
 from mlora.utils import _is_package_available
 
 from typing import Tuple, Optional
 
 import torch
 import torch.nn.functional as F
-import mlora.backends as backends
 import math
 
 if _is_package_available("xformers"):
@@ -317,7 +317,7 @@ class LlamaFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if backends.is_bf16_supported():
+            if _backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -519,7 +519,7 @@ class MistralFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if backends.is_bf16_supported():
+            if _backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16

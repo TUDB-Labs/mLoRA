@@ -1,5 +1,6 @@
 from transformers.activations import ACT2FN
 from typing import Any, List, Dict, Callable
+from mlora.backends import get_backend
 from dataclasses import dataclass
 
 import torch
@@ -88,7 +89,7 @@ class MultiLoraBatchData:
 class LoraConfig:
     adapter_name: str = ""
     task_name: str = "casual"
-    device: str = "cuda:0"
+    device: str = get_backend().default_device_str()
     # Weight-Decomposed Low-Rank Adaptation
     use_dora_: bool = False
     # Rank-Stabilized LoRA

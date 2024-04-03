@@ -46,14 +46,22 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 *: Arguments of `mlora.py`
 
-If the Attention method is not specified, we automatically use xFormers during training and Scaled Dot Product during inference and evaluation. It should be noted that xFormers attention needs to align the sequence length to a multiple of 8, otherwise an error will occur.
+m-LoRA only supports scaled-dot product attention (eager) by default. Additional requirements are necessary for xFormers and flash attention.
 
-To use flash attention 2, you need to install additional dependencies manually.
+To utilize xFormers attention, you must manually install additional dependencies:
+
+```bash
+pip install xformers==0.0.24
+```
+
+For flash attention, manual installation of the following dependencies is required:
 
 ```bash
 pip install ninja==1.10.2.4
 pip install flash-attn==2.3.6 --no-build-isolation
 ```
+
+If the attention method is not specified, xFormers is automatically employed during training if available, while scaled-dot product attention is used during inference and evaluation. It's important to note that xFormers attention necessitates aligning the sequence length to a multiple of 8, otherwise, an error will occur.
 
 ## Supported Quantize Methods
 

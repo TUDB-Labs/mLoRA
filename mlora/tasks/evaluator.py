@@ -29,7 +29,7 @@ class EvaluateConfig:
     batch_start_idx_: int = 0
     batch_end_idx_: int = 0
 
-    def prepare(self, tokenizer: Tokenizer, device: str = "cuda:0"):
+    def prepare(self, tokenizer: Tokenizer, device: str):
         self.task_ = task_dict[self.task_name]
         self.data_ = self.task_.loading_data(tokenizer, False)
         self.metric_ = self.task_.loading_metric()

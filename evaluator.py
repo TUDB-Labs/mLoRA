@@ -15,7 +15,7 @@ def main(base_model: str,
          save_file: str = None,
          batch_size: int = 32,
          router_profile: bool = False,
-         device: str = "cuda:0"):
+         device: str = mlora.get_backend().default_device_str()):
 
     logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
                         level=logging.INFO,

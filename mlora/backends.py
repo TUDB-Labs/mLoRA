@@ -1,100 +1,143 @@
-import logging
+from mlora.utils import NoneContexts
 import random
 import torch
 
 
-def check_available():
-    if torch.cuda.is_available():
-        logging.info('NVIDIA CUDA initialized successfully.')
-        logging.info('Total %i GPU(s) detected.' % torch.cuda.device_count())
-        return True
-    elif torch.backends.mps.is_available():
-        logging.info('Apple MPS initialized successfully.')
-        return True
-    else:
-        logging.error(
-            'm-LoRA requires CUDA or MPS computing capacity. Please check your PyTorch installation.')
-        return False
+class BasicBackend:
+    def name(self) -> str:
+        pass
+
+    def is_available(self) -> bool:
+        pass
+
+    def is_initialized(self) -> bool:
+        pass
+
+    def is_bf16_supported(self) -> bool:
+        pass
+
+    def default_device(self) -> torch.device:
+        return torch.device(self.default_device_str())
+
+    def default_device_str(self) -> str:
+        pass
+
+    def manual_seed(self, seed: int):
+        random.seed(seed)
+        torch.manual_seed(seed)
+
+    def empty_cache(self):
+        pass
+
+    def use_deterministic_algorithms(self, mode: bool):
+        torch.use_deterministic_algorithms(mode)
+
+    def allow_tf32(self, mode: bool):
+        pass
+
+    def set_rng_state(self, device, state):
+        pass
+
+    def get_rng_state(self, device):
+        pass
+
+    def autocast(self, **kwargs):
+        return NoneContexts()
 
 
-def default_device():
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        return torch.device("mps")
-    else:
-        raise RuntimeError("No supported torch backends")
+class CUDABackend(BasicBackend):
+    def name(self) -> str:
+        return "NVIDIA CUDA"
 
+    def is_available(self) -> bool:
+        return torch.cuda.is_available()
 
-def manual_seed(seed: int):
-    random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    elif torch.backends.mps.is_available():
-        torch.mps.manual_seed(seed)
-    else:
-        raise RuntimeError("No supported torch backends")
+    def is_initialized(self) -> bool:
+        return torch.cuda.is_initialized()
 
-
-def is_bf16_supported():
-    if torch.cuda.is_available():
+    def is_bf16_supported(self) -> bool:
         return torch.cuda.is_bf16_supported()
-    else:
-        return False
 
+    def default_device_str(self) -> str:
+        return "cuda:0"
 
-def empty_cache():
-    if torch.cuda.is_available():
+    def manual_seed(self, seed: int):
+        super().manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+    def empty_cache(self):
         torch.cuda.empty_cache()
-    elif torch.backends.mps.is_available():
-        torch.mps.empty_cache()
-    else:
-        raise RuntimeError("No supported torch backends")
 
-
-def use_deterministic_algorithms(mode: bool):
-    if torch.cuda.is_available():
+    def use_deterministic_algorithms(self, mode: bool):
         torch.backends.cudnn.benchmark = not mode
         torch.backends.cudnn.deterministic = mode
-    elif torch.backends.mps.is_available():
-        torch.use_deterministic_algorithms(mode)
-    else:
-        raise RuntimeError("No supported torch backends")
 
-
-def cuda_allow_tf32(mode: bool):
-    if torch.cuda.is_available():
+    def allow_tf32(self, mode: bool):
         torch.backends.cudnn.allow_tf32 = mode
         torch.backends.cuda.matmul.allow_tf32 = mode
-    elif mode:
-        logging.warn("Enabling tf32 for non-NVIDIA devices.")
 
-
-def set_rng_state(device, state):
-    if torch.cuda.is_available():
+    def set_rng_state(self, device, state):
         with torch.cuda.device(device):
             return torch.cuda.set_rng_state(state)
-    elif torch.backends.mps.is_available():
-        return torch.mps.set_rng_state(state)
-    else:
-        raise RuntimeError("No supported torch backends")
 
-
-def get_rng_state(device):
-    if torch.cuda.is_available():
+    def get_rng_state(self, device):
         with torch.cuda.device(device):
             return torch.cuda.get_rng_state()
-    elif torch.backends.mps.is_available():
-        return torch.mps.get_rng_state()
-    else:
-        raise RuntimeError("No supported torch backends")
+
+    def autocast(self, **kwargs):
+        return torch.cuda.amp.autocast(**kwargs)
 
 
-def is_initialized():
-    if torch.cuda.is_available():
-        return torch.cuda.is_initialized()
-    elif torch.backends.mps.is_available():
+class MPSBackend(BasicBackend):
+    def name(self) -> str:
+        return "APPLE MPS"
+
+    def is_available(self) -> bool:
+        return torch.backends.mps.is_available()
+
+    def is_initialized(self) -> bool:
+        # TODO: change to official implementation
         return not torch.mps._is_in_bad_fork
+
+    def is_bf16_supported(self) -> bool:
+        # TODO: change to official implementation
+        return False
+
+    def default_device_str(self) -> str:
+        return "mps"
+
+    def manual_seed(self, seed: int):
+        super().manual_seed(seed)
+        torch.mps.manual_seed(seed)
+
+    def empty_cache(self):
+        torch.mps.empty_cache()
+
+    def allow_tf32(self, mode: bool):
+        assert not mode, "Enabling tf32 for MPS devices."
+
+    def set_rng_state(self, device, state):
+        return torch.mps.set_rng_state(state)
+
+    def get_rng_state(self, device):
+        return torch.mps.get_rng_state()
+
+
+_backend: BasicBackend = None
+
+
+def _init_backend():
+    global _backend
+    if torch.cuda.is_available():
+        _backend = CUDABackend()
+    elif torch.backends.mps.is_available():
+        _backend = MPSBackend()
     else:
         raise RuntimeError("No supported torch backends")
+
+
+def get_backend() -> BasicBackend:
+    if _backend is None:
+        _init_backend()
+
+    return _backend

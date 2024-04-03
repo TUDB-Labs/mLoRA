@@ -41,3 +41,11 @@ class Linear4bit(Unsubscribable):
 class BitsAndBytesConfig:
     def __init__(self, **kwargs) -> None:
         pass
+
+
+class NoneContexts(object):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
