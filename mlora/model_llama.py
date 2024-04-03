@@ -23,7 +23,7 @@ import json
 import math
 import os
 
-if _is_package_available(""):
+if _is_package_available("bitsandbytes"):
     from transformers import BitsAndBytesConfig
 else:
     from mlora.utils import BitsAndBytesConfig

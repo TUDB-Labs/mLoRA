@@ -40,7 +40,7 @@ class Linear4bit(Unsubscribable):
 
 class BitsAndBytesConfig:
     def __init__(self, **kwargs) -> None:
-        pass
+        raise RuntimeError("Quantization not supported.")
 
 
 class NoneContexts(object):
