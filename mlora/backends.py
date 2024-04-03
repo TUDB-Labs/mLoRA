@@ -59,7 +59,7 @@ class CUDABackend(BasicBackend):
         return torch.cuda.is_bf16_supported()
 
     def default_device_str(self) -> str:
-        return "cuda:0"
+        return 'cuda'
 
     def manual_seed(self, seed: int):
         super().manual_seed(seed)
@@ -104,7 +104,7 @@ class MPSBackend(BasicBackend):
         return False
 
     def default_device_str(self) -> str:
-        return "mps"
+        return 'mps'
 
     def manual_seed(self, seed: int):
         super().manual_seed(seed)
@@ -116,10 +116,12 @@ class MPSBackend(BasicBackend):
     def allow_tf32(self, mode: bool):
         assert not mode, "Enabling tf32 for MPS devices."
 
-    def set_rng_state(self, device, state):
+    def set_rng_state(self, device: int, state: torch.Tensor):
+        assert device == 0
         return torch.mps.set_rng_state(state)
 
-    def get_rng_state(self, device):
+    def get_rng_state(self, device: int):
+        assert device == 0
         return torch.mps.get_rng_state()
 
 
