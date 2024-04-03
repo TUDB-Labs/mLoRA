@@ -17,6 +17,13 @@ This is an actively developing fork of the official m-LoRA repository, focusing 
 
 Please note that the functions, interfaces, and performance of this fork are slightly different from the original m-LoRA. We cannot guarantee compatibility. For production use, please prefer the [original m-LoRA](https://github.com/TUDB-Labs/multi-lora-fine-tune).
 
+## Supported Platform
+
+| OS      | Backend | Model Precision        | Quantization  | xFormers | Flash Attention |
+|---------|---------|------------------------|---------------|----------|-----------------|
+| Linux   | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | &check;  | &check;         |
+| macOS   | MPS     | FP32, FP16             | &cross;       | &cross;  | &cross;         |
+
 ## Supported Pre-trained Models
 
 |         | Model                                                    | # Parameters    |
@@ -57,8 +64,8 @@ pip install xformers==0.0.24
 For flash attention, manual installation of the following dependencies is required:
 
 ```bash
-pip install ninja==1.10.2.4
-pip install flash-attn==2.3.6 --no-build-isolation
+pip install ninja
+pip install flash-attn==2.5.6 --no-build-isolation
 ```
 
 If the attention method is not specified, xFormers is automatically employed during training if available, while scaled-dot product attention is used during inference and evaluation. It's important to note that xFormers attention necessitates aligning the sequence length to a multiple of 8, otherwise, an error will occur.
@@ -79,6 +86,12 @@ m-LoRA offers support for various model accuracy and quantization methods. By de
 
 Quantization can be activated using `--load_4bit` for 4-bit quantization or `--load_8bit` for 8-bit quantization. However, when only quantization is enabled, m-LoRA utilizes Float32 for calculations. To achieve memory savings during training, users can combine quantization and half-precision modes.
 
+To enable quantization support, please manually install `bitsandbytes`:
+
+```bash
+pip install bitsandbytes==0.41.3
+```
+
 It's crucial to note that regardless of the settings, **LoRA weights are always calculated and stored at full precision**. For maintaining calculation accuracy, m-LoRA framework mandates the use of full precision for calculations when accuracy is imperative.
 
 For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can be utilized to enable full-precision calculation acceleration.
@@ -90,6 +103,7 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 ## Quickstart
 
 Firstly, you should clone this repository and install dependencies:
+
 ```bash
 # Clone Repository
 git clone https://github.com/mikecovlee/mlora
@@ -101,7 +115,15 @@ conda activate mlora
 pip install -r requirements.txt
 ```
 
-Secondly, you can use m-LoRA via `launch.py` conveniently:
+For Linux users with NVIDIA GPUs, please install these extra requirements for a better experience:
+
+```bash
+# Install extra requirements on Linux
+bash install_linux.sh
+```
+
+Then you can use m-LoRA via `launch.py` conveniently:
+
 ```bash
 # Grant execution permission to the file
 chmod +x launch.py
@@ -111,7 +133,8 @@ launch.py gen --template lora --tasks yahma/alpaca-cleaned
 launch.py run --base_model yahma/llama-7b-hf
 ```
 
-For further detailed usage information, please use `help` command:
+For further detailed usage information, please use the `help` command:
+
 ```bash
 launch.py help
 ```
@@ -121,7 +144,7 @@ launch.py help
 The `mlora.py` code is a starting point for finetuning on various datasets.
 Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
-CUDA_VISIBLE_DEVICES=0 python mlora.py \
+python mlora.py \
   --base_model yahma/llama-7b-hf \
   --config ./config/alpaca.json \
   --load_16bit
