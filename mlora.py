@@ -21,10 +21,11 @@ import sys
 import json
 import torch
 import mlora
-import random
 import logging
 import argparse
 from typing import Dict, Tuple, List, Union
+
+import mlora.backends
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='m-LoRA main program')
@@ -54,7 +55,7 @@ parser.add_argument('--load_8bit', action="store_true",
                     help='Load base model with 8bit quantization')
 parser.add_argument('--load_4bit', action="store_true",
                     help='Load base model with 4bit quantization')
-parser.add_argument('--device', type=str, default='cuda:0',
+parser.add_argument('--device', type=str,
                     help='Specify which GPU to be used, default is cuda:0')
 parser.add_argument('--config', type=str, required=True,
                     help='Path to finetune configuration')
@@ -76,13 +77,6 @@ parser.add_argument('--deterministic', action="store_true",
                     help='Use deterministic algorithms to improve the reproducibility')
 
 args = parser.parse_args()
-
-
-# Functions
-def setup_seed(seed):
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
 
 
 def query_yes_no(question, default="no"):
@@ -227,11 +221,13 @@ if __name__ == "__main__":
     if args.inference or args.evaluate:
         args.load_adapter = True
 
+    is_train = not args.inference and not args.evaluate
+
     if args.attn_impl is None:
-        if args.inference or args.evaluate:
-            args.attn_impl = "eager"
-        else:
+        if mlora.attention._xformers_available and is_train:
             args.attn_impl = "xformers"
+        else:
+            args.attn_impl = "eager"
 
     log_handlers = [logging.StreamHandler()]
     if args.log_file is not None:
@@ -242,29 +238,17 @@ if __name__ == "__main__":
                         handlers=log_handlers,
                         force=True)
 
-    if torch.cuda.is_available():
-        logging.info('NVIDIA CUDA initialized successfully.')
-        logging.info('Total %i GPU(s) detected.' % torch.cuda.device_count())
-    else:
-        logging.error(
-            'm-LoRA requires NVIDIA CUDA computing capacity. Please check your PyTorch installation.')
+    if not mlora.backends.check_available():
         exit(-1)
 
-    if args.deterministic:
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-    else:
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.deterministic = False
+    if args.device is None:
+        args.device = mlora.backends.default_device()
 
-    if args.tf32:
-        torch.backends.cudnn.allow_tf32 = True
-        torch.backends.cuda.matmul.allow_tf32 = True
-    else:
-        torch.backends.cudnn.allow_tf32 = False
-        torch.backends.cuda.matmul.allow_tf32 = False
+    mlora.backends.use_deterministic_algorithms(args.deterministic)
 
-    setup_seed(args.seed)
+    mlora.backends.cuda_allow_tf32(args.tf32)
+
+    mlora.backends.manual_seed(args.seed)
 
     with open(args.config, 'r', encoding='utf8') as fp:
         config = json.load(fp)
@@ -272,7 +256,7 @@ if __name__ == "__main__":
     tokenizer, model = load_base_model()
     adapters = init_adapter_config(config, model)
 
-    torch.cuda.empty_cache()
+    mlora.backends.empty_cache()
 
     if args.inference:
         inference(model, tokenizer, adapters)

@@ -1,4 +1,5 @@
 import torch
+import mlora.backends as backends
 from typing import Any, Iterable, List, Tuple
 
 
@@ -29,16 +30,14 @@ def get_device_states(*args) -> Tuple[List[int], List[torch.Tensor]]:
 
     fwd_gpu_states = []
     for device in fwd_gpu_devices:
-        with torch.cuda.device(device):
-            fwd_gpu_states.append(torch.cuda.get_rng_state())
+        fwd_gpu_states.append(backends.get_rng_state(device))
 
     return fwd_gpu_devices, fwd_gpu_states
 
 
 def set_device_states(devices, states) -> None:
     for device, state in zip(devices, states):
-        with torch.cuda.device(device):
-            torch.cuda.set_rng_state(state)
+        backends.set_rng_state(device, state)
 
 
 def _get_autocast_kwargs():
@@ -77,7 +76,7 @@ class CheckpointRecomputeFunction(torch.autograd.Function):
         ctx.fwd_cpu_state = torch.get_rng_state()
 
         ctx.had_cuda_in_fwd = False
-        if torch.cuda._initialized:
+        if backends.is_initialized():
             ctx.had_cuda_in_fwd = True
             ctx.fwd_gpu_devices, ctx.fwd_gpu_states = get_device_states(
                 *args)
@@ -118,10 +117,16 @@ class CheckpointRecomputeFunction(torch.autograd.Function):
             if ctx.had_cuda_in_fwd:
                 set_device_states(ctx.fwd_gpu_devices, ctx.fwd_gpu_states)
             detached_inputs = detach_variable(tuple(inputs))
-            with torch.enable_grad(), \
-                    torch.cuda.amp.autocast(**ctx.gpu_autocast_kwargs), \
-                    torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):
-                outputs = ctx.run_function(*detached_inputs)
+            if torch.cuda.is_available():
+                with torch.enable_grad(), \
+                        torch.cuda.amp.autocast(**ctx.gpu_autocast_kwargs), \
+                        torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):
+                    outputs = ctx.run_function(*detached_inputs)
+            elif torch.backends.mps.is_available():
+                with torch.enable_grad():
+                    outputs = ctx.run_function(*detached_inputs)
+            else:
+                raise RuntimeError("No supported torch backends")
 
         if isinstance(outputs, torch.Tensor):
             outputs = (outputs,)

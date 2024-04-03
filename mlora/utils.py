@@ -20,3 +20,24 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
         return package_exists, package_version
     else:
         return package_exists
+
+
+class Unsubscribable:
+    def __init__(self) -> None:
+        raise RuntimeError(f"Instant unsubscribable class {__class__}")
+
+
+# Class Placeholder for Bitsandbytes
+class Linear8bitLt(Unsubscribable):
+    def __init__(self) -> None:
+        super().__init__()
+
+
+class Linear4bit(Unsubscribable):
+    def __init__(self) -> None:
+        super().__init__()
+
+
+class BitsAndBytesConfig:
+    def __init__(self, **kwargs) -> None:
+        pass
