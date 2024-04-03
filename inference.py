@@ -71,7 +71,7 @@ def main(base_model: str,
          load_8bit: bool = False,
          load_4bit: bool = False,
          flash_attn: bool = False,
-         device: str = mlora.get_backend().default_device_str(),
+         device: str = f"{mlora.get_backend().device_name()}:0",
          server_name: str = "0.0.0.0",
          share_gradio: bool = False):
 

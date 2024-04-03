@@ -244,7 +244,7 @@ if __name__ == "__main__":
         exit(-1)
 
     if args.device is None:
-        args.device = mlora_backend.default_device()
+        args.device = f"{mlora_backend.device_name()}:0"
 
     mlora_backend.use_deterministic_algorithms(args.deterministic)
     mlora_backend.allow_tf32(args.tf32)

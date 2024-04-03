@@ -7,6 +7,9 @@ class BasicBackend:
     def name(self) -> str:
         pass
 
+    def device_name(self) -> str:
+        pass
+
     def is_available(self) -> bool:
         pass
 
@@ -14,12 +17,6 @@ class BasicBackend:
         pass
 
     def is_bf16_supported(self) -> bool:
-        pass
-
-    def default_device(self) -> torch.device:
-        return torch.device(self.default_device_str())
-
-    def default_device_str(self) -> str:
         pass
 
     def manual_seed(self, seed: int):
@@ -49,6 +46,9 @@ class CUDABackend(BasicBackend):
     def name(self) -> str:
         return "NVIDIA CUDA"
 
+    def device_name(self) -> str:
+        return 'cuda'
+
     def is_available(self) -> bool:
         return torch.cuda.is_available()
 
@@ -57,9 +57,6 @@ class CUDABackend(BasicBackend):
 
     def is_bf16_supported(self) -> bool:
         return torch.cuda.is_bf16_supported()
-
-    def default_device_str(self) -> str:
-        return 'cuda'
 
     def manual_seed(self, seed: int):
         super().manual_seed(seed)
@@ -92,6 +89,9 @@ class MPSBackend(BasicBackend):
     def name(self) -> str:
         return "APPLE MPS"
 
+    def device_name(self) -> str:
+        return 'mps'
+
     def is_available(self) -> bool:
         return torch.backends.mps.is_available()
 
@@ -102,9 +102,6 @@ class MPSBackend(BasicBackend):
     def is_bf16_supported(self) -> bool:
         # TODO: change to official implementation
         return False
-
-    def default_device_str(self) -> str:
-        return 'mps'
 
     def manual_seed(self, seed: int):
         super().manual_seed(seed)

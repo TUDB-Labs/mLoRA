@@ -12,7 +12,7 @@ def main(base_model: str,
          load_8bit: bool = False,
          load_4bit: bool = False,
          flash_attn: bool = False,
-         device: str = mlora.get_backend().default_device_str()):
+         device: str = f"{mlora.get_backend().device_name()}:0"):
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
                                              attn_impl="flash_attn" if flash_attn else "eager",
