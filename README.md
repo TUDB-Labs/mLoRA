@@ -36,6 +36,25 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 *: Arguments of configuration file
 
+## Supported Attention Methods
+
+|         | Attention Methods                                        | Name           | Arguments*               |
+|---------|----------------------------------------------------------|----------------|--------------------------|
+| &check; | [Scaled Dot Product](https://arxiv.org/abs/1706.03762)   | `"eager"`      | `--attn_impl eager`      |
+| &check; | [xFormers](https://github.com/facebookresearch/xformers) | `"xformers"`   | `--attn_impl xformers`   |
+| &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)    | `"flash_attn"` | `--attn_impl flash_attn` |
+
+*: Arguments of `mlora.py`
+
+If the Attention method is not specified, we automatically use xFormers during training and Scaled Dot Product during inference and evaluation. It should be noted that xFormers attention needs to align the sequence length to a multiple of 8, otherwise an error will occur.
+
+To use flash attention 2, you need to install additional dependencies manually.
+
+```bash
+pip install ninja==1.10.2.4
+pip install flash-attn==2.3.6 --no-build-isolation
+```
+
 ## Supported Quantize Methods
 
 |         | Quantize Methods      | Arguments*    |
@@ -55,6 +74,10 @@ Quantization can be activated using `--load_4bit` for 4-bit quantization or `--l
 It's crucial to note that regardless of the settings, **LoRA weights are always calculated and stored at full precision**. For maintaining calculation accuracy, m-LoRA framework mandates the use of full precision for calculations when accuracy is imperative.
 
 For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can be utilized to enable full-precision calculation acceleration.
+
+## Known issues
+
+ + DoRA with Quantization on Qwen2
 
 ## Quickstart
 

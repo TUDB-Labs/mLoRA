@@ -40,8 +40,10 @@ parser.add_argument('--load_adapter', action="store_true",
                     help='Load adapter from file instead of init randomly')
 parser.add_argument('--disable_adapter', action="store_true",
                     help="Disable the adapter modules")
-parser.add_argument('--tokenizer', type=str,
-                    help='Path to or name of tokenizer')
+parser.add_argument('--attn_impl', type=str,
+                    help='Specify the implementation of attention')
+parser.add_argument('--use_swa', action='store_true',
+                    help='Use sliding window attention (requires flash attention)')
 parser.add_argument('--fp16', action='store_true',
                     help='Load base model in float16 precision')
 parser.add_argument('--bf16', action='store_true',
@@ -111,6 +113,8 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     model = mlora.LlamaModel.from_pretrained(
         path=args.base_model,
         device=args.device,
+        attn_impl=args.attn_impl,
+        use_sliding_window=args.use_swa,
         bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
         load_dtype=(torch.bfloat16 if args.bf16 else (
             torch.float16 if args.fp16 else torch.float32))
@@ -125,6 +129,11 @@ def init_adapter_config(config: Dict[str, any],
                         llm_model: mlora.LLMModel,
                         ) -> List[Union[mlora.GenerateConfig, mlora.TrainConfig]]:
     config_list = []
+
+    if config["cutoff_len"] == -1:
+        config["cutoff_len"] = llm_model.max_seq_len_
+        logging.info(
+            f"Setting cutoff_len to {llm_model.max_seq_len_} automatically.")
 
     for lora_config in config["lora"]:
         lora_weight = None
@@ -217,6 +226,12 @@ if __name__ == "__main__":
 
     if args.inference or args.evaluate:
         args.load_adapter = True
+
+    if args.attn_impl is None:
+        if args.inference or args.evaluate:
+            args.attn_impl = "eager"
+        else:
+            args.attn_impl = "xformers"
 
     log_handlers = [logging.StreamHandler()]
     if args.log_file is not None:

@@ -70,11 +70,13 @@ def main(base_model: str,
          load_16bit: bool = True,
          load_8bit: bool = False,
          load_4bit: bool = False,
+         flash_attn: bool = False,
          device: str = "cuda:0",
          server_name: str = "0.0.0.0",
          share_gradio: bool = False):
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
+                                             attn_impl="flash_attn" if flash_attn else "eager",
                                              bits=(8 if load_8bit else (
                                                  4 if load_4bit else None)),
                                              load_dtype=torch.bfloat16 if load_16bit else torch.float32)
