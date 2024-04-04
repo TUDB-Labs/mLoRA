@@ -114,13 +114,14 @@ class MixtralSparseMoe(torch.nn.Module):
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None,
-                                          top_x_list].reshape(-1, hidden_dim)
+                                          top_x_list].reshape(-1, hidden_dim).to(input_dtype)
             current_hidden_states = expert_fn(
                 self.adapter_name_, self.act_, expert_idx, current_state) * routing_weights[top_x_list, idx_list, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states)
+            final_hidden_states.index_add_(
+                0, top_x, current_hidden_states.to(self.dtype_))
 
         final_hidden_states = final_hidden_states.reshape(
             batch_size, sequence_length, hidden_dim).to(input_dtype)
@@ -235,7 +236,7 @@ class SwitchSparseMoe(torch.nn.Module):
         for idx in range(self.experts_):
             token_indices = router_mask[:, :, idx].bool()
             next_states[token_indices] = expert_fn(
-                self.adapter_name_, self.act_, idx, hidden_states[token_indices]).to(next_states.dtype)
+                self.adapter_name_, self.act_, idx, hidden_states[token_indices].to(input_dtype)).to(next_states.dtype)
 
         hidden_states = self.dropout_(
             router_probs * next_states).to(input_dtype)
