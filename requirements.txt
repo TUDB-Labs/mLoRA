@@ -1,11 +1,9 @@
-torch==2.0.1
+torch==2.1.2
 datasets
 evaluate
 accelerate
 transformers==4.38.2
-bitsandbytes==0.41.3
 sentencepiece
-xformers==0.0.22
 huggingface_hub
 scikit-learn
 gradio==4.11.0

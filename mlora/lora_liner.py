@@ -1,10 +1,16 @@
 from mlora.modelargs import MultiLoraBatchData
 from mlora.modelargs import LoraConfig
+from mlora.utils import _is_package_available
 
 import math
 import torch
 import torch.nn as nn
-import bitsandbytes as bnb
+
+if _is_package_available("bitsandbytes"):
+    from bitsandbytes.nn import Linear8bitLt, Linear4bit
+    import bitsandbytes as bnb
+else:
+    from mlora.utils import Linear8bitLt, Linear4bit
 
 from typing import Dict, Tuple
 
@@ -134,8 +140,8 @@ class Linear(nn.Module):
         super().__init__()
 
         if not isinstance(base_layer, nn.Linear):
-            assert isinstance(base_layer, bnb.nn.Linear8bitLt) or isinstance(
-                base_layer, bnb.nn.Linear4bit), f"error type - {type(base_layer)}."
+            assert isinstance(base_layer, Linear8bitLt) or isinstance(
+                base_layer, Linear4bit), f"error type - {type(base_layer)}."
         else:
             base_layer.requires_grad_(False)
 
@@ -150,7 +156,7 @@ class Linear(nn.Module):
         if adapter_name is None:
             adapter_name = lora_config.adapter_name
 
-        if isinstance(self.base_layer_, bnb.nn.Linear4bit):
+        if isinstance(self.base_layer_, Linear4bit):
             out_dim, in_dim = self.base_layer_.out_features, self.base_layer_.in_features
         else:
             out_dim, in_dim = self.base_layer_.weight.shape

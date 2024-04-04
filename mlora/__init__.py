@@ -1,3 +1,4 @@
+from mlora.backends import _init_backend, get_backend
 from mlora.prompter import Prompter
 from mlora.tokenizer import Tokenizer
 from mlora.model import LLMModel
@@ -11,7 +12,10 @@ from mlora.tasks import EvaluateConfig, evaluate
 from mlora.tasks import BasicMetric, AutoMetric
 from mlora.tasks import BasicTask, CasualTask, CommonSenseTask, SequenceClassificationTask, task_dict
 
+_init_backend()
+
 __all__ = [
+    "get_backend",
     "Prompter",
     "Tokenizer",
     "LLMModel",

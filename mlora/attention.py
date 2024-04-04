@@ -1,18 +1,27 @@
 from mlora.lora_liner import Linear
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
+from mlora.backends import _backend
 from mlora.utils import _is_package_available
 
 from typing import Tuple, Optional
 
-import xformers.ops
-import xformers.ops.fmha.attn_bias
 import torch
 import torch.nn.functional as F
 import math
 
+if _is_package_available("xformers"):
+    import xformers.ops
+    import xformers.ops.fmha.attn_bias
+    _xformers_available = True
+else:
+    _xformers_available = False
+
 if _is_package_available("flash_attn"):
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+    _flash_attn_available = True
+else:
+    _flash_attn_available = False
 
 
 def precompute_rope_angle(dim: int, seq_len: int,
@@ -65,6 +74,20 @@ def _get_unpad_data(attention_mask):
     )
 
 
+@torch.jit.script
+def _scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor,
+                                  attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    attention_score = torch.matmul(
+        query, key.transpose(2, 3)) / math.sqrt(query.size(-1))
+    if attention_mask is not None:
+        attention_score = attention_score + attention_mask
+    attention_score = F.softmax(
+        attention_score, dim=-1, dtype=torch.float32).to(query.dtype)
+    attention_score = torch.matmul(attention_score, value)
+    attention_score = attention_score.transpose(1, 2).contiguous()
+    return attention_score
+
+
 # Multi-headed attention from 'Attention Is All You Need' paper.
 class LlamaAttention(torch.nn.Module):
     def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
@@ -87,17 +110,6 @@ class LlamaAttention(torch.nn.Module):
         self.head_dim_ = args.dim_ // args.n_heads_
         self.dtype_ = args.dtype_
         self.is_causal_ = True
-
-    def _scaled_dot_product_attention(self, xq, xk, xv, attention_mask):
-        attention_score = torch.matmul(
-            xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim_)
-        if attention_mask is not None:
-            attention_score = attention_score + attention_mask
-        attention_score = F.softmax(
-            attention_score, dim=-1, dtype=torch.float32).to(xq.dtype)
-        attention_score = torch.matmul(attention_score, xv)
-        attention_score = attention_score.transpose(1, 2).contiguous()
-        return attention_score
 
     def forward(self,
                 hidden_states: torch.Tensor,
@@ -129,7 +141,7 @@ class LlamaAttention(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        attention_score = self._scaled_dot_product_attention(
+        attention_score = _scaled_dot_product_attention(
             xq, xk, xv, attention_mask)
 
         attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
@@ -141,6 +153,7 @@ class LlamaAttention(torch.nn.Module):
 class LlamaXformersAttention(LlamaAttention):
     def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
                  args: LLMModelArgs, layer_idx: int):
+        assert _xformers_available, "xFormers Attention is not available"
         super().__init__(wq, wk, wv, wo, args, layer_idx)
 
     def _xformers_attention(self, xq, xk, xv, attention_mask):
@@ -193,6 +206,7 @@ class LlamaXformersAttention(LlamaAttention):
 class LlamaFlashAttention(LlamaAttention):
     def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
                  args: LLMModelArgs, layer_idx: int):
+        assert _flash_attn_available, "Flash Attention is not available"
         super().__init__(wq, wk, wv, wo, args, layer_idx)
 
     def _flash_attention_forward(
@@ -306,7 +320,7 @@ class LlamaFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if torch.cuda.is_bf16_supported():
+            if _backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -336,6 +350,7 @@ class LlamaFlashAttention(LlamaAttention):
 class MistralFlashAttention(LlamaAttention):
     def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
                  args: LLMModelArgs, layer_idx: int):
+        assert _flash_attn_available, "Flash Attention is not available"
         super().__init__(wq, wk, wv, wo, args, layer_idx)
         # Qwen2
         self.use_sliding_window_ = args.use_sliding_window_
@@ -507,7 +522,7 @@ class MistralFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if torch.cuda.is_bf16_supported():
+            if _backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16

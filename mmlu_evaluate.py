@@ -1,6 +1,5 @@
 import datasets
 import logging
-import random
 import mlora
 import torch
 import json
@@ -140,7 +139,8 @@ def evaluate(subject: str,
         input_args = mlora.MultiLoraBatchData(
             lora_batch_data_config_=batch_data_config,
             batch_tokens_=batch_tokens[start_pos:end_pos] * len(adapter_names),
-            attention_masks_=atten_masks[start_pos:end_pos] * len(adapter_names),
+            attention_masks_=atten_masks[start_pos:end_pos] *
+            len(adapter_names),
             gradient_checkpoint_=False,
             inference_seq_pos_=-1 if batch_size > 1 else 0,
         )
@@ -248,7 +248,7 @@ def do_evaluate(model_name: str,
                 model_dtype: str,
                 adapter_names: List[str],
                 batch_size: int = 2,
-                device: str = "cuda:0",
+                device: str = f"{mlora.get_backend().device_name()}:0",
                 output: str = "mmlu_scores.csv"):
     tokenizer = mlora.Tokenizer(model_name)
     model = mlora.LlamaModel.from_pretrained(
@@ -275,14 +275,8 @@ def do_evaluate(model_name: str,
             writer.writerows(csv_data)
 
 
-def setup_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    random.seed(seed)
-
-
 def main(config: str):
-    setup_seed(66)
+    mlora.get_backend().manual_seed(66)
     log_handlers = [logging.StreamHandler()]
     logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
                         level=logging.INFO,

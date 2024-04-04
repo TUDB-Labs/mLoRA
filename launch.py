@@ -12,7 +12,7 @@ def compose_command(base_model: str,
                     config: str = "mlora.json",
                     load_adapter: bool = False,
                     random_seed: int = 42,
-                    cuda_device: int = 0,
+                    cuda_device: int = None,
                     log_file: str = "mlora.log",
                     overwrite: bool = False,
                     attn_impl: str = None,
@@ -21,7 +21,9 @@ def compose_command(base_model: str,
                     tf32: bool = True):
     assert quantize in (None, "4bit", "8bit")
     assert dtype in ("fp32", "fp16", "bf16")
-    command = f"CUDA_VISIBLE_DEVICES={cuda_device} python mlora.py"
+    command = "python mlora.py"
+    if cuda_device is not None:
+        command = f"CUDA_VISIBLE_DEVICES={cuda_device} " + command
     command += f" --base_model {base_model}"
     command += f" --config {config}"
     if load_adapter:
