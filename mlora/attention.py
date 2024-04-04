@@ -74,6 +74,20 @@ def _get_unpad_data(attention_mask):
     )
 
 
+@torch.jit.script
+def _scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor,
+                                  attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    attention_score = torch.matmul(
+        query, key.transpose(2, 3)) / math.sqrt(query.size(-1))
+    if attention_mask is not None:
+        attention_score = attention_score + attention_mask
+    attention_score = F.softmax(
+        attention_score, dim=-1, dtype=torch.float32).to(query.dtype)
+    attention_score = torch.matmul(attention_score, value)
+    attention_score = attention_score.transpose(1, 2).contiguous()
+    return attention_score
+
+
 # Multi-headed attention from 'Attention Is All You Need' paper.
 class LlamaAttention(torch.nn.Module):
     def __init__(self, wq: Linear, wk: Linear, wv: Linear, wo: Linear,
@@ -96,17 +110,6 @@ class LlamaAttention(torch.nn.Module):
         self.head_dim_ = args.dim_ // args.n_heads_
         self.dtype_ = args.dtype_
         self.is_causal_ = True
-
-    def _scaled_dot_product_attention(self, xq, xk, xv, attention_mask):
-        attention_score = torch.matmul(
-            xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim_)
-        if attention_mask is not None:
-            attention_score = attention_score + attention_mask
-        attention_score = F.softmax(
-            attention_score, dim=-1, dtype=torch.float32).to(xq.dtype)
-        attention_score = torch.matmul(attention_score, xv)
-        attention_score = attention_score.transpose(1, 2).contiguous()
-        return attention_score
 
     def forward(self,
                 hidden_states: torch.Tensor,
@@ -138,7 +141,7 @@ class LlamaAttention(torch.nn.Module):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        attention_score = self._scaled_dot_product_attention(
+        attention_score = _scaled_dot_product_attention(
             xq, xk, xv, attention_mask)
 
         attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
