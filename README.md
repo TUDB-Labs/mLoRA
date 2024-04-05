@@ -37,11 +37,13 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 ## Supported LoRA Variants
 
-|         | LoRA Variants                                            | Arguments*                |
-|---------|----------------------------------------------------------|---------------------------|
-| &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0` |
-| &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `use_dora: true`          |
-| &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `use_rslora: true`        |
+|         | LoRA Variants                                            | Arguments*                       |
+|---------|----------------------------------------------------------|----------------------------------|
+| &check; | [QLoRA](https://arxiv.org/abs/2402.12354)                | See *Quantize Methods*           |
+| &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0`        |
+| &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `use_dora: true`                 |
+| &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `use_rslora: true`               |
+| &check; | MixLoRA                                                  | See [MixLoRA](./docs/MixLoRA.md) |
 
 *: Arguments of configuration file
 
