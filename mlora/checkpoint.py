@@ -113,7 +113,7 @@ class CheckpointRecomputeFunction(torch.autograd.Function):
         rng_devices = []
         if ctx.had_gpu_in_fwd:
             rng_devices = ctx.fwd_gpu_devices
-        with torch.random.fork_rng(devices=rng_devices, device_type=_backend.device_name()):
+        with _backend.fork_rng(rng_devices):
             torch.set_rng_state(ctx.fwd_cpu_state)
             if ctx.had_gpu_in_fwd:
                 set_device_states(ctx.fwd_gpu_devices, ctx.fwd_gpu_states)
@@ -121,9 +121,8 @@ class CheckpointRecomputeFunction(torch.autograd.Function):
             with torch.enable_grad(), _backend.autocast(**ctx.gpu_autocast_kwargs), \
                     torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):
                 outputs = ctx.run_function(*detached_inputs)
-
-        if isinstance(outputs, torch.Tensor):
-            outputs = (outputs,)
+                if isinstance(outputs, torch.Tensor):
+                    outputs = (outputs,)
 
         outputs_with_grad = []
         args_with_grad = []

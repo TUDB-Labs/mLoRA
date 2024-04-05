@@ -1,4 +1,6 @@
 from mlora.utils import NoneContexts
+import contextlib
+import logging
 import random
 import torch
 
@@ -38,8 +40,22 @@ class BasicBackend:
     def get_rng_state(self, device):
         pass
 
+    def fork_rng(self, rng_devices: list):
+        return torch.random.fork_rng(
+            devices=rng_devices, device_type=self.device_name())
+
     def autocast(self, **kwargs):
         return NoneContexts()
+
+    def check_available(self):
+        if not self.is_available():
+            logging.error(f"{self.name()} not available.")
+            return False
+        if not self.is_initialized():
+            logging.error(f"{self.name()} not initialized.")
+            return False
+        logging.info(f'{self.name()} initialized successfully.')
+        return True
 
 
 class CUDABackend(BasicBackend):
@@ -97,7 +113,7 @@ class MPSBackend(BasicBackend):
 
     def is_initialized(self) -> bool:
         # TODO: change to official implementation
-        return not torch.mps._is_in_bad_fork
+        return not torch.mps._is_in_bad_fork()
 
     def is_bf16_supported(self) -> bool:
         # TODO: change to official implementation
@@ -120,6 +136,17 @@ class MPSBackend(BasicBackend):
     def get_rng_state(self, device: int):
         assert device == 0
         return torch.mps.get_rng_state()
+
+    @contextlib.contextmanager
+    def fork_rng(self, rng_devices: list):
+        assert len(rng_devices) == 1 and rng_devices[0] == 0
+        cpu_rng_state = torch.get_rng_state()
+        device_rng_states = torch.mps.get_rng_state()
+        try:
+            yield
+        finally:
+            torch.set_rng_state(cpu_rng_state)
+            torch.mps.set_rng_state(device_rng_states)
 
     def autocast(self, **kwargs):
         # running with compatible mode
