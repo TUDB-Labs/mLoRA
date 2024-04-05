@@ -325,6 +325,10 @@ class LlamaModel(LLMModel):
         self.output_: LlamaOutputLayer = LlamaOutputLayer()
         self.seq_module_: torch.nn.Sequential = None
 
+        if args.vocab_size_ >= torch.finfo(args.dtype_).max:
+            logging.warn(
+                f"vocab_size >= max({args.dtype_}), consider load model with higher precision.")
+
         # configs
         self.attn_implementation_ = args.attn_implementation_
         self.norm_eps_ = args.norm_eps_

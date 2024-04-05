@@ -101,6 +101,9 @@ class CUDABackend(BasicBackend):
         return torch.cuda.amp.autocast(**kwargs)
 
 
+_mps_bf16_supported = None
+
+
 class MPSBackend(BasicBackend):
     def name(self) -> str:
         return "APPLE MPS"
@@ -117,7 +120,15 @@ class MPSBackend(BasicBackend):
 
     def is_bf16_supported(self) -> bool:
         # TODO: change to official implementation
-        return False
+        global _mps_bf16_supported
+        if _mps_bf16_supported is None:
+            try:
+                torch.zeros((8, 8), dtype=torch.bfloat16, device='mps')
+                _mps_bf16_supported = True
+            except TypeError:
+                _mps_bf16_supported = False
+
+        return _mps_bf16_supported
 
     def manual_seed(self, seed: int):
         super().manual_seed(seed)
@@ -139,6 +150,7 @@ class MPSBackend(BasicBackend):
 
     @contextlib.contextmanager
     def fork_rng(self, rng_devices: list):
+        # TODO: change to official implementation
         assert len(rng_devices) == 1 and rng_devices[0] == 0
         cpu_rng_state = torch.get_rng_state()
         device_rng_states = torch.mps.get_rng_state()
@@ -149,6 +161,7 @@ class MPSBackend(BasicBackend):
             torch.mps.set_rng_state(device_rng_states)
 
     def autocast(self, **kwargs):
+        # TODO: change to official implementation
         # running with compatible mode
         return torch.cuda.amp.autocast(**kwargs)
 
