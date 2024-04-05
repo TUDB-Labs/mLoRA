@@ -1,4 +1,6 @@
 from mlora.utils import NoneContexts
+import contextlib
+import logging
 import random
 import torch
 
@@ -38,8 +40,22 @@ class BasicBackend:
     def get_rng_state(self, device):
         pass
 
+    def fork_rng(self, rng_devices: list):
+        return torch.random.fork_rng(
+            devices=rng_devices, device_type=self.device_name())
+
     def autocast(self, **kwargs):
         return NoneContexts()
+
+    def check_available(self):
+        if not self.is_available():
+            logging.error(f"{self.name()} not available.")
+            return False
+        if not self.is_initialized():
+            logging.error(f"{self.name()} not initialized.")
+            return False
+        logging.info(f'{self.name()} initialized successfully.')
+        return True
 
 
 class CUDABackend(BasicBackend):
@@ -85,6 +101,9 @@ class CUDABackend(BasicBackend):
         return torch.cuda.amp.autocast(**kwargs)
 
 
+_mps_bf16_supported = None
+
+
 class MPSBackend(BasicBackend):
     def name(self) -> str:
         return "APPLE MPS"
@@ -97,11 +116,19 @@ class MPSBackend(BasicBackend):
 
     def is_initialized(self) -> bool:
         # TODO: change to official implementation
-        return not torch.mps._is_in_bad_fork
+        return not torch.mps._is_in_bad_fork()
 
     def is_bf16_supported(self) -> bool:
         # TODO: change to official implementation
-        return False
+        global _mps_bf16_supported
+        if _mps_bf16_supported is None:
+            try:
+                torch.zeros((8, 8), dtype=torch.bfloat16, device='mps')
+                _mps_bf16_supported = True
+            except TypeError:
+                _mps_bf16_supported = False
+
+        return _mps_bf16_supported
 
     def manual_seed(self, seed: int):
         super().manual_seed(seed)
@@ -121,7 +148,20 @@ class MPSBackend(BasicBackend):
         assert device == 0
         return torch.mps.get_rng_state()
 
+    @contextlib.contextmanager
+    def fork_rng(self, rng_devices: list):
+        # TODO: change to official implementation
+        assert len(rng_devices) == 1 and rng_devices[0] == 0
+        cpu_rng_state = torch.get_rng_state()
+        device_rng_states = torch.mps.get_rng_state()
+        try:
+            yield
+        finally:
+            torch.set_rng_state(cpu_rng_state)
+            torch.mps.set_rng_state(device_rng_states)
+
     def autocast(self, **kwargs):
+        # TODO: change to official implementation
         # running with compatible mode
         return torch.cuda.amp.autocast(**kwargs)
 

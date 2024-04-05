@@ -238,9 +238,7 @@ if __name__ == "__main__":
 
     mlora_backend = mlora.get_backend()
 
-    if mlora_backend.is_available():
-        logging.info(f'{mlora_backend.name()} initialized successfully.')
-    else:
+    if not mlora_backend.check_available():
         exit(-1)
 
     if args.device is None:

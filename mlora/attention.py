@@ -27,10 +27,10 @@ else:
 def precompute_rope_angle(dim: int, seq_len: int,
                           theta: float = 10000.0,
                           device: str = None) -> Tuple[torch.Tensor, torch.Tensor]:
-    inv_freq = 1.0 / \
-        (theta ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
-    t = torch.arange(seq_len, device=device,
-                     dtype=torch.int64).to(inv_freq.dtype)
+    inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2,
+                      dtype=torch.int64).to(device=device, dtype=torch.float32) / dim))
+    t = torch.arange(seq_len, dtype=torch.int64).to(
+        device=device, dtype=torch.float32)
     freqs = torch.outer(t, inv_freq)
     emb = torch.cat((freqs, freqs), dim=-1)
     emb.requires_grad_(False)
