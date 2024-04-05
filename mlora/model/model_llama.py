@@ -3,7 +3,7 @@ from mlora.profiler.profiler import set_backward_tracepoint, nvtx_wrapper, nvtx_
 from mlora.config import LoraConfig
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.model.model import LLMModel, repeat_kv, apply_rotary_emb, precompute_rope_angle, precompute_mask
-from mlora.model.LoraLiner import Linear, Lora
+from mlora.model.LoraLinear import Linear, Lora
 from mlora.model.RMSNorm import RMSNorm
 from mlora.model.Embedding import Embedding
 from mlora.checkpoint.recompute import CheckpointRecomputeFunction

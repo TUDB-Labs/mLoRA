@@ -1,7 +1,7 @@
 from mlora.model.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.config import LoraConfig
 from mlora.model.model import LLMModel, apply_rotary_emb_to_one, repeat_kv, precompute_mask, precompute_rope_angle
-from mlora.model.LoraLiner import Linear
+from mlora.model.LoraLinear import Linear
 from mlora.model.RMSNorm import RMSNorm
 from mlora.checkpoint.recompute import CheckpointRecomputeFunction
 
