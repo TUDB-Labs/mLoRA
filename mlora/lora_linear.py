@@ -208,7 +208,6 @@ class Lora(nn.Module):
 
     def apply_dora(
             self, residual: torch.Tensor, result_lora: torch.Tensor, hidden_states: torch.Tensor):
-        residual = residual.to(torch.float32)
         weight = self.base_layer_.weight
         if is_quantized(weight):
             # for 8bit and 4bit quantization
@@ -222,7 +221,7 @@ class Lora(nn.Module):
             weight = weight.to(torch.float32)
         weight_norm = self._get_weight_norm(weight).detach()
         mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
-        return (mag_norm_scale * residual + mag_norm_scale * result_lora).to(hidden_states.dtype)
+        return (mag_norm_scale - 1) * residual + mag_norm_scale * result_lora
 
     def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         result_lora = self.lora_b_(self.lora_a_(self.dropout_(
@@ -267,9 +266,10 @@ class Linear(nn.Module):
 
     def _appy_dora(self,
                    residual: torch.Tensor,
-                   lora_result: torch.Tensor,
+                   lora_delta: torch.Tensor,
                    hidden_states: torch.Tensor,
                    input_args: MultiLoraBatchData):
+        next_states = residual.clone()
         for lora_config in input_args.lora_batch_data_config_:
             adapter_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
@@ -278,19 +278,24 @@ class Linear(nn.Module):
             if adapter_name == "" or adapter_name not in self.loras_:
                 continue
 
+            lora_range = torch.arange(
+                start_idx, end_idx, step=1, device=residual.device)
             if self.loras_[adapter_name].use_dora_:
-                residual[start_idx:end_idx] = self.loras_[adapter_name].apply_dora(
-                    residual[start_idx:end_idx], lora_result[start_idx:end_idx], hidden_states[start_idx:end_idx])
+                next_states.index_add_(0, lora_range, self.loras_[adapter_name].apply_dora(
+                    residual[start_idx:end_idx], lora_delta[start_idx:end_idx], hidden_states[start_idx:end_idx]))
             else:
-                residual[start_idx:end_idx] += lora_result[start_idx:end_idx]
+                next_states.index_add_(
+                    0, lora_range, lora_delta[start_idx:end_idx])
+
+        return next_states
 
     def forward(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
         # hidden_states shape is: batch_size * max_seq_len * dim
         # result = hidden_states @ self.weight_.transpose(0, 1)
-        result = self.base_layer_.forward(hidden_states)
+        residual = self.base_layer_.forward(hidden_states)
 
         if len(self.loras_) == 0:
-            return result
+            return residual
 
         # split the data and result
         dropouts: List[float] = []
@@ -313,12 +318,13 @@ class Linear(nn.Module):
         have_dora = any(lora.use_dora_ for lora in self.loras_.values())
 
         if have_dora:
-            lora_result = torch.zeros_like(result, dtype=torch.float32)
-            lora_result = LoraFunction.apply(
-                lora_result, hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
-            self._appy_dora(result, lora_result, hidden_states, input_args)
-            return result.to(hidden_states.dtype)
+            lora_delta = torch.zeros_like(residual, dtype=torch.float32)
+            lora_delta = LoraFunction.apply(
+                lora_delta, hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
+            next_states = self._appy_dora(residual.to(
+                torch.float32), lora_delta, hidden_states, input_args)
         else:
-            result = LoraFunction.apply(
-                result.to(torch.float32), hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
-            return result.to(hidden_states.dtype)
+            next_states = LoraFunction.apply(
+                residual.to(torch.float32), hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
+
+        return next_states.to(hidden_states.dtype)
