@@ -5,7 +5,7 @@ from mlora.utils import _is_package_available
 import math
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 
 if _is_package_available("bitsandbytes"):
     from bitsandbytes.nn import Linear8bitLt, Linear4bit
@@ -55,7 +55,8 @@ class LoraFunction(torch.autograd.Function):
 
         lora_range = torch.arange(
             0, result.shape[0], step=1, device=result.device)
-        for lora_a, lora_b, lora_config, dropout, scaling in zip(args[::2], args[1::2], input_args.lora_batch_data_config_, dropouts, scalings):
+        for lora_a, lora_b, lora_config, dropout, scaling in zip(
+                args[::2], args[1::2], input_args.lora_batch_data_config_, dropouts, scalings):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 save_inputs += (lora_a, lora_b, None)
@@ -102,7 +103,8 @@ class LoraFunction(torch.autograd.Function):
 
         lora_range = torch.arange(
             0, grad_output.shape[0], step=1, device=grad_output.device)
-        for lora_a, lora_b, drop_data, dropout, scaling, lora_config in zip(loras[::3], loras[1::3], loras[2::3], ctx.dropouts, ctx.scalings, ctx.input_args.lora_batch_data_config_):
+        for lora_a, lora_b, drop_data, dropout, scaling, lora_config in zip(
+                loras[::3], loras[1::3], loras[2::3], ctx.dropouts, ctx.scalings, ctx.input_args.lora_batch_data_config_):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 grad_loras += (None, None)
@@ -160,10 +162,7 @@ class Lora(nn.Module):
 
         self.in_features_, self.out_features_ = shape
 
-        if config.lora_dropout_ > 0.0:
-            self.dropout_ = nn.Dropout(p=config.lora_dropout_)
-        else:
-            self.dropout_ = nn.Identity()
+        self.dropout_ = nn.Dropout(p=config.lora_dropout_)
 
         self.lora_a_ = nn.Linear(
             self.in_features_, self.r_, bias=False, dtype=torch.float32, device=self.device_)
@@ -210,7 +209,6 @@ class Lora(nn.Module):
     def apply_dora(
             self, residual: torch.Tensor, result_lora: torch.Tensor, hidden_states: torch.Tensor):
         residual = residual.to(torch.float32)
-        result_lora = result_lora.to(torch.float32)
         weight = self.base_layer_.weight
         if is_quantized(weight):
             # for 8bit and 4bit quantization
@@ -307,20 +305,20 @@ class Linear(nn.Module):
                 scalings.append(None)
                 continue
 
-            loras += (self.loras_[adapter_name].lora_a_,
-                      self.loras_[adapter_name].lora_b_)
-            dropouts.append(self.loras_[adapter_name].dropout_)
+            loras += (self.loras_[adapter_name].lora_a_.weight,
+                      self.loras_[adapter_name].lora_b_.weight)
+            dropouts.append(self.loras_[adapter_name].dropout_.p)
             scalings.append(self.loras_[adapter_name].scaling_)
 
         have_dora = any(lora.use_dora_ for lora in self.loras_.values())
 
         if have_dora:
-            lora_result = torch.zeros_like(result)
+            lora_result = torch.zeros_like(result, dtype=torch.float32)
             lora_result = LoraFunction.apply(
-                lora_result, hidden_states, input_args, dropouts, scalings, *loras)
+                lora_result, hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
             self._appy_dora(result, lora_result, hidden_states, input_args)
-            return result
+            return result.to(hidden_states.dtype)
         else:
             result = LoraFunction.apply(
-                result, hidden_states, input_args, dropouts, scalings, *loras)
-            return result
+                result.to(torch.float32), hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
+            return result.to(hidden_states.dtype)
