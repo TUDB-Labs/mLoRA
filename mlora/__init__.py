@@ -1,4 +1,4 @@
-from mlora.backends import _init_backend, get_backend
+from mlora.backends import get_backend
 from mlora.prompter import Prompter
 from mlora.tokenizer import Tokenizer
 from mlora.model import LLMModel
@@ -11,8 +11,9 @@ from mlora.train import TrainConfig, train
 from mlora.tasks import EvaluateConfig, evaluate
 from mlora.tasks import BasicMetric, AutoMetric
 from mlora.tasks import BasicTask, CasualTask, CommonSenseTask, SequenceClassificationTask, task_dict
+from mlora.utils import setup_logging
 
-_init_backend()
+setup_logging()
 
 __all__ = [
     "get_backend",
