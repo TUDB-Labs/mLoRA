@@ -1,0 +1,24 @@
+name: Test LLM Models
+
+on: [push, pull_request]
+
+jobs:
+  test-lora:
+    runs-on: self-hosted
+    container:
+      image: mikecovlee/mlora:0.2.1.dev1
+      volumes:
+        - /home/lab/models:/host_models/
+      options: --gpus 1
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: |
+          pip3 install -r requirements.txt
+          bash install_linux.sh
+      - name: finetune lora
+        run: |
+          python mlora.py --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --config ./config/dummy.json --fp16 --attn_impl eager
+      - name: inference with lora
+        run: |
+          python generate.py --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --lora_weights "./lora_0" --instruction "What is m-LoRA?"
