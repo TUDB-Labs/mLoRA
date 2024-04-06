@@ -19,7 +19,7 @@ jobs:
           current_branch="${{ steps.branch_name.outputs.branch }}"
           cd /workspace
           rm -rf ./multi-lora-fine-tune
-          git clone -b $current_branch --single-branch git@github.com:mikecovlee/mlora.git
+          git clone -b $current_branch --single-branch git@github.com:scukdde-llm/mlora.git
       
       - name: install dependencies
         run: pip install -r requirements.txt
@@ -46,7 +46,7 @@ jobs:
           current_branch="${{ steps.branch_name.outputs.branch }}"
           cd /workspace
           rm -rf ./multi-lora-fine-tune
-          git clone -b $current_branch --single-branch git@github.com:mikecovlee/mlora.git
+          git clone -b $current_branch --single-branch git@github.com:scukdde-llm/mlora.git
       
       - name: install dependencies
         run: pip install -r requirements.txt

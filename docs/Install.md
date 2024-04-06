@@ -15,7 +15,7 @@
 
 ```bash
 # Clone Repository
-git clone https://github.com/mikecovlee/mlora
+git clone https://github.com/scukdde-llm/mlora
 cd mlora
 # Optional but recommended
 conda create -n mlora python=3.10
@@ -56,7 +56,7 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 
 ```bash
 # Clone Repository
-git clone https://github.com/mikecovlee/mlora
+git clone https://github.com/scukdde-llm/mlora
 cd mlora
 # Optional but recommended
 conda create -n mlora python=3.10

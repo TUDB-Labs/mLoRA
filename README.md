@@ -1,7 +1,7 @@
 # m-LoRA: Efficient LLM Model Fine-Tune via Multi-LoRA Optimization
-[![](https://img.shields.io/github/stars/mikecovlee/mlora?logo=GitHub)](https://github.com/mikecovlee/mlora/stargazers)
-[![](https://img.shields.io/github/license/mikecovlee/mlora)](http://www.apache.org/licenses/LICENSE-2.0)
-[![](https://img.shields.io/github/languages/top/mikecovlee/mlora)](https://www.python.org/)  
+[![](https://img.shields.io/github/stars/scukdde-llm/mlora?logo=GitHub)](https://github.com/scukdde-llm/mlora/stargazers)
+[![](https://img.shields.io/github/license/scukdde-llm/mlora)](http://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/github/languages/top/scukdde-llm/mlora)](https://www.python.org/)  
 
 m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient multiple LoRA/QLoRA methods. Key features of m-LoRA include:
 
@@ -110,7 +110,7 @@ Firstly, you should clone this repository and install dependencies:
 
 ```bash
 # Clone Repository
-git clone https://github.com/mikecovlee/mlora
+git clone https://github.com/scukdde-llm/mlora
 cd mlora
 # Optional but recommended
 conda create -n mlora python=3.10
@@ -181,7 +181,7 @@ Please cite the repo if you use the code in this repo.
   title = {m-LoRA: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization},
   year = {2023},
   publisher = {GitHub},
-  howpublished = {\url{https://github.com/mikecovlee/mlora}},
+  howpublished = {\url{https://github.com/scukdde-llm/mlora}},
   note={\textsuperscript{*}: these authors contributed equally to this work.}
 }
 ```

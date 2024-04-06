@@ -17,7 +17,7 @@ In experiments, MixLoRA achieves commendable performance across all evaluation m
 
 The table above presents the performance of MixLoRA and compares these results with outcomes obtained by employing LoRA and DoRA for fine-tuning. The results demonstrate that the language model with MixLoRA achieves commendable performance across all evaluation methods. All methods are fine-tuned and evaluated with [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf) on m-LoRA, with all metrics reported as accuracy.
 
-You can download the weights of MixLoRA fine-tuned with [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf) and [AlpacaCleaned](https://github.com/gururise/AlpacaDataCleaned) dataset on Hugging Face: [scu-kdde/alpaca-mixlora-7b](https://huggingface.co/scu-kdde/alpaca-mixlora-7b). Currently, only m-LoRA supports the inference of MixLoRA.
+You can download the weights of MixLoRA fine-tuned with [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf) and [AlpacaCleaned](https://github.com/gururise/AlpacaDataCleaned) dataset on Hugging Face: [scukdde-llm/alpaca-mixlora-7b](https://huggingface.co/scukdde-llm/alpaca-mixlora-7b). Currently, only m-LoRA supports the inference of MixLoRA.
 
 ## Configuration of MixLoRA
 
@@ -112,14 +112,14 @@ Please note that once the MixLoRA model is created, the number of experts in the
 # Run WebUI of Inference
 python inference.py \
   --base_model meta-llama/Llama-2-7b-hf \
-  --lora_weights scu-kdde/alpaca-mixlora-7b \
+  --lora_weights scukdde-llm/alpaca-mixlora-7b \
   --template template/alpaca.json \
   --load_16bit
 
 # Simply Generate
 python generate.py \
   --base_model meta-llama/Llama-2-7b-hf \
-  --lora_weights scu-kdde/alpaca-mixlora-7b \
+  --lora_weights scukdde-llm/alpaca-mixlora-7b \
   --template template/alpaca.json \
   --load_16bit \
   --instruction "What is m-LoRA?"
@@ -133,7 +133,7 @@ If MixLoRA has been useful for your work, please consider citing it using the ap
   title = {MixLoRA: Enhancing Large Language Models Fine-Tuning with LoRA based Mixture of Experts},
   year = {2024},
   publisher = {GitHub},
-  howpublished = {\url{https://github.com/mikecovlee/mlora}},
+  howpublished = {\url{https://github.com/scukdde-llm/mlora}},
 }
 
 @misc{alpaca-mixlora-7b,
@@ -141,7 +141,7 @@ If MixLoRA has been useful for your work, please consider citing it using the ap
   title = {MixLoRA LoRA MoE adapter based on AlpacaCleaned dataset and LLaMA-2-7B base model},
   year = {2024},
   publisher = {HuggingFace Hub},
-  howpublished = {\url{https://huggingface.co/scu-kdde/alpaca-mixlora-7b}},
+  howpublished = {\url{https://huggingface.co/scukdde-llm/alpaca-mixlora-7b}},
 }
 ```
 
