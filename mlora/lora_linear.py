@@ -42,6 +42,21 @@ def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
     return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
 
 
+g_cached_range_tensor: Dict[torch.device, torch.Tensor] = {}
+# also max batch size
+g_max_range = 128
+
+
+def get_range_tensor(device: torch.device, batch_size: int = 1024):
+    global g_cached_range_tensor
+    global g_max_range
+    if device not in g_cached_range_tensor or batch_size > g_max_range:
+        g_max_range = g_max_range if g_max_range > batch_size else batch_size
+        g_cached_range_tensor[device] = torch.arange(
+            0, g_max_range, step=1, device=device)
+    return g_cached_range_tensor[device]
+
+
 class LoraFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx,
@@ -53,10 +68,12 @@ class LoraFunction(torch.autograd.Function):
                 *args):
         save_inputs = (data,)
 
-        lora_range = torch.arange(
-            0, result.shape[0], step=1, device=result.device)
-        for lora_a, lora_b, lora_config, dropout, scaling in zip(
-                args[::2], args[1::2], input_args.lora_batch_data_config_, dropouts, scalings):
+        lora_range = get_range_tensor(data.device, data.shape[0])
+        for lora_a, lora_b, lora_config, dropout, scaling in zip(args[::2],
+                                                                 args[1::2],
+                                                                 input_args.lora_batch_data_config_,
+                                                                 dropouts,
+                                                                 scalings):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 save_inputs += (lora_a, lora_b, None)
@@ -65,8 +82,12 @@ class LoraFunction(torch.autograd.Function):
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
 
-            drop_data = data[start_idx:end_idx]
-            drop_data = F.dropout(drop_data, dropout)
+            # must ensure the dropout is not zero
+            # is dropout == 0, dropdata is a data's referece, so the data will be changed
+            assert dropout > 0.0
+
+            drop_data = F.dropout(
+                data[start_idx:end_idx], p=dropout)
             drop_data.mul_(scaling)
             drop_data = drop_data @ lora_a.transpose(0, 1)
 
@@ -99,19 +120,24 @@ class LoraFunction(torch.autograd.Function):
         if ctx.needs_input_grad[0]:
             grad_result = grad_output
         if ctx.needs_input_grad[1]:
-            grad_data = torch.zeros_like(data)
+            grad_data = torch.empty_like(data)
 
-        lora_range = torch.arange(
-            0, grad_output.shape[0], step=1, device=grad_output.device)
-        for lora_a, lora_b, drop_data, dropout, scaling, lora_config in zip(
-                loras[::3], loras[1::3], loras[2::3], ctx.dropouts, ctx.scalings, ctx.input_args.lora_batch_data_config_):
+        lora_range = get_range_tensor(
+            grad_output.device, batch_size=grad_output.shape[0])
+        for lora_a, lora_b, drop_data, dropout, scaling, lora_config in zip(loras[::3],
+                                                                            loras[1::3],
+                                                                            loras[2::3],
+                                                                            ctx.dropouts,
+                                                                            ctx.scalings,
+                                                                            ctx.input_args.lora_batch_data_config_):
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 grad_loras += (None, None)
+                grad_data.index_fill_(
+                    dim=0, index=lora_range[start_idx:end_idx], value=0)
                 continue
-
-            start_idx = lora_config.batch_start_idx_
-            end_idx = lora_config.batch_end_idx_
 
             # lora_data shape is batch_size * seq_len * in_dim
             lora_data = data[start_idx:end_idx]
@@ -130,11 +156,7 @@ class LoraFunction(torch.autograd.Function):
 
             # grad_data shape is batch_size * seq_len * in_dim
             if grad_data is not None:
-                grad_data.index_add_(
-                    dim=0, index=lora_range[start_idx:end_idx], source=bstage @ lora_a)
-
-            if ctx.needs_input_grad[1]:
-                pass
+                grad_data[start_idx:end_idx] = bstage @ lora_a
 
         return grad_result, grad_data, grad_input_args, grad_dropouts, grad_scalings, *grad_loras
 
@@ -162,6 +184,7 @@ class Lora(nn.Module):
 
         self.in_features_, self.out_features_ = shape
 
+        assert config.lora_dropout_ > 0.0
         self.dropout_ = nn.Dropout(p=config.lora_dropout_)
 
         self.lora_a_ = nn.Linear(
@@ -278,8 +301,8 @@ class Linear(nn.Module):
             if adapter_name == "" or adapter_name not in self.loras_:
                 continue
 
-            lora_range = torch.arange(
-                start_idx, end_idx, step=1, device=residual.device)
+            lora_range = get_range_tensor(
+                next_states.device, batch_size=next_states.shape[0])[start_idx:end_idx]
             if self.loras_[adapter_name].use_dora_:
                 next_states.index_add_(0, lora_range, self.loras_[adapter_name].apply_dora(
                     residual[start_idx:end_idx], lora_delta[start_idx:end_idx], hidden_states[start_idx:end_idx]))
