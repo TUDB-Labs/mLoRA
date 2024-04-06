@@ -21,6 +21,7 @@ cd mlora
 conda create -n mlora python=3.10
 conda activate mlora
 # Install requirements
+pip3 install torch==2.1.2
 pip3 install -r requirements.txt
 # Install extra requirements on Linux
 bash install_linux.sh
