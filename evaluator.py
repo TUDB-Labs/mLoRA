@@ -1,4 +1,3 @@
-import logging
 import mlora
 import torch
 import json
@@ -17,10 +16,10 @@ def main(base_model: str,
          router_profile: bool = False,
          device: str = f"{mlora.get_backend().device_name()}:0"):
 
-    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
-                        level=logging.INFO,
-                        handlers=[logging.StreamHandler()],
-                        force=True)
+    mlora.setup_logging("INFO")
+
+    if not mlora.get_backend().check_available():
+        exit(-1)
 
     model = mlora.LlamaModel.from_pretrained(base_model, device=device,
                                              attn_impl="flash_attn" if flash_attn else "eager",

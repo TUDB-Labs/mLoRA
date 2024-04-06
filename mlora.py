@@ -227,14 +227,7 @@ if __name__ == "__main__":
         else:
             args.attn_impl = "eager"
 
-    log_handlers = [logging.StreamHandler()]
-    if args.log_file is not None:
-        log_handlers.append(logging.FileHandler(args.log_file))
-
-    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
-                        level=logging.WARNING if args.disable_log else logging.INFO,
-                        handlers=log_handlers,
-                        force=True)
+    mlora.setup_logging("INFO", args.log_file)
 
     mlora_backend = mlora.get_backend()
 

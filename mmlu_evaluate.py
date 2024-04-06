@@ -277,11 +277,9 @@ def do_evaluate(model_name: str,
 
 def main(config: str):
     mlora.get_backend().manual_seed(66)
-    log_handlers = [logging.StreamHandler()]
-    logging.basicConfig(format='[%(asctime)s] m-LoRA: %(message)s',
-                        level=logging.INFO,
-                        handlers=log_handlers,
-                        force=True)
+    mlora.setup_logging("INFO")
+    if not mlora.get_backend().check_available():
+        exit(-1)
     with open(config, 'r', encoding='utf8') as fp:
         mmlu_config = json.load(fp)
     do_evaluate(**mmlu_config)
