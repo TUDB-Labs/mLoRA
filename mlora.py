@@ -222,7 +222,9 @@ if __name__ == "__main__":
     is_train = not args.inference and not args.evaluate
 
     if args.attn_impl is None:
-        if mlora.attention._xformers_available and is_train:
+        if mlora.attention._flash_attn_available:
+            args.attn_impl = "flash_attn"
+        elif mlora.attention._xformers_available and is_train:
             args.attn_impl = "xformers"
         else:
             args.attn_impl = "eager"

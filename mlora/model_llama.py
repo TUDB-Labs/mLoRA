@@ -4,7 +4,7 @@ from mlora.attention import LlamaAttention, llama_attention_factory
 from mlora.checkpoint import CheckpointRecomputeFunction
 from mlora.model import LLMOutput, LLMModel
 from mlora.feed_forward import FeedForward
-from mlora.lora_liner import Linear
+from mlora.lora_linear import Linear
 from mlora.generate import GenerateConfig
 from mlora.mix_lora import router_loss_factory
 from mlora.tasks import SequenceClassificationTask, task_dict
