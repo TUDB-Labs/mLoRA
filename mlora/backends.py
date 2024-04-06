@@ -59,6 +59,10 @@ class BasicBackend:
 
 
 class CUDABackend(BasicBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        torch.cuda.init()
+
     def name(self) -> str:
         return "NVIDIA CUDA"
 
