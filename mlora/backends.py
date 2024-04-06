@@ -105,6 +105,10 @@ _mps_bf16_supported = None
 
 
 class MPSBackend(BasicBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        torch.mps.set_per_process_memory_fraction(1.0)
+
     def name(self) -> str:
         return "APPLE MPS"
 
@@ -123,7 +127,7 @@ class MPSBackend(BasicBackend):
         global _mps_bf16_supported
         if _mps_bf16_supported is None:
             try:
-                torch.zeros((8, 8), dtype=torch.bfloat16, device='mps')
+                torch.ones(5, dtype=torch.bfloat16, device="mps")
                 _mps_bf16_supported = True
             except TypeError:
                 _mps_bf16_supported = False
