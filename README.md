@@ -22,9 +22,10 @@ Please note that the functions, interfaces, and performance of this fork are sli
 | OS      | Backend | Model Precision        | Quantization  | xFormers | Flash Attention |
 |---------|---------|------------------------|---------------|----------|-----------------|
 | Linux   | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | &check;  | &check;         |
+| Windows | CUDA    | FP32, FP16, TF32, BF16 | &cross;       | &cross;  | &cross;         |
 | macOS   | MPS     | FP32, FP16             | &cross;       | &cross;  | &cross;         |
 
-**Note**: macOS with MPS support are experimental feature.
+**Note**: Windows and macOS support are experimental feature.
 
 ## Supported Pre-trained Models
 
@@ -62,14 +63,14 @@ m-LoRA only supports scaled-dot product attention (eager) by default. Additional
 To utilize xFormers attention, you must manually install additional dependencies:
 
 ```bash
-pip install xformers==0.0.24
+pip3 install xformers==0.0.23.post1
 ```
 
 For flash attention, manual installation of the following dependencies is required:
 
 ```bash
-pip install ninja
-pip install flash-attn==2.5.6 --no-build-isolation
+pip3 install ninja
+pip3 install flash-attn==2.5.6 --no-build-isolation
 ```
 
 If the attention method is not specified, xFormers is automatically employed during training if available, while scaled-dot product attention is used during inference and evaluation. It's important to note that xFormers attention necessitates aligning the sequence length to a multiple of 8, otherwise, an error will occur.
@@ -93,7 +94,7 @@ Quantization can be activated using `--load_4bit` for 4-bit quantization or `--l
 To enable quantization support, please manually install `bitsandbytes`:
 
 ```bash
-pip install bitsandbytes==0.41.3
+pip3 install bitsandbytes==0.41.3
 ```
 
 It's crucial to note that regardless of the settings, **LoRA weights are always calculated and stored at full precision**. For maintaining calculation accuracy, m-LoRA framework mandates the use of full precision for calculations when accuracy is imperative.
@@ -103,44 +104,27 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 ## Known issues
 
  + DoRA with Quantization on Qwen2
+ + Half Precision with Qwen2
+
+## Installation
+
+Please refer to [Install Guide](./docs/Install.md).
 
 ## Quickstart
 
-Firstly, you should clone this repository and install dependencies:
+You can use m-LoRA via `launch.py` conveniently:
 
 ```bash
-# Clone Repository
-git clone https://github.com/scukdde-llm/mlora
-cd mlora
-# Optional but recommended
-conda create -n mlora python=3.10
-conda activate mlora
-# Install requirements
-pip install -r requirements.txt
-```
-
-For Linux users with NVIDIA GPUs, please install these extra requirements for a better experience:
-
-```bash
-# Install extra requirements on Linux
-bash install_linux.sh
-```
-
-Then you can use m-LoRA via `launch.py` conveniently:
-
-```bash
-# Grant execution permission to the file
-chmod +x launch.py
 # Generating configuration
-launch.py gen --template lora --tasks yahma/alpaca-cleaned
+python launch.py gen --template lora --tasks yahma/alpaca-cleaned
 # Running the training task
-launch.py run --base_model yahma/llama-7b-hf
+python launch.py run --base_model yahma/llama-7b-hf
 ```
 
 For further detailed usage information, please use the `help` command:
 
 ```bash
-launch.py help
+python launch.py help
 ```
 
 ## m-LoRA

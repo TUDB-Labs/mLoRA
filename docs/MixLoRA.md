@@ -101,8 +101,8 @@ If you want to control the lora settings of experts separately, just add `"exper
 
 Basic command for creating a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
-./launch.py gen --template mixlora --tasks yahma/alpaca-cleaned
-./launch.py run --base_model meta-llama/Llama-2-7b-hf
+python launch.py gen --template mixlora --tasks yahma/alpaca-cleaned
+python launch.py run --base_model meta-llama/Llama-2-7b-hf
 ```
 Please note that once the MixLoRA model is created, the number of experts in the model cannot be changed.
 
