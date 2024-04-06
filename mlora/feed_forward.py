@@ -1,5 +1,5 @@
 from mlora.modelargs import LLMModelArgs, MixConfig, MultiLoraBatchData
-from mlora.lora_liner import Linear
+from mlora.lora_linear import Linear
 from mlora.mix_lora import moe_layer_factory
 
 from typing import List, Optional

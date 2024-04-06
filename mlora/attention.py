@@ -1,4 +1,4 @@
-from mlora.lora_liner import Linear
+from mlora.lora_linear import Linear
 from mlora.modelargs import LLMModelArgs, MultiLoraBatchData
 from mlora.backends import _backend
 from mlora.utils import _is_package_available
