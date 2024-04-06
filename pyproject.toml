@@ -27,8 +27,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/mikecovlee/mlora"
-"Bug Tracker" = "https://github.com/mikecovlee/mlora/issues"
+"Homepage" = "https://github.com/scukdde-llm/mlora"
+"Bug Tracker" = "https://github.com/scukdde-llm/mlora/issues"
 
 [tool.setuptools.packages.find]
 include = ["mlora"]

@@ -1,7 +1,7 @@
 # m-LoRA: Efficient LLM Model Fine-Tune via Multi-LoRA Optimization
-[![](https://img.shields.io/github/stars/mikecovlee/mlora?logo=GitHub)](https://github.com/mikecovlee/mlora/stargazers)
-[![](https://img.shields.io/github/license/mikecovlee/mlora)](http://www.apache.org/licenses/LICENSE-2.0)
-[![](https://img.shields.io/github/languages/top/mikecovlee/mlora)](https://www.python.org/)  
+[![](https://img.shields.io/github/stars/scukdde-llm/mlora?logo=GitHub)](https://github.com/scukdde-llm/mlora/stargazers)
+[![](https://img.shields.io/github/license/scukdde-llm/mlora)](http://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/github/languages/top/scukdde-llm/mlora)](https://www.python.org/)  
 
 m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient multiple LoRA/QLoRA methods. Key features of m-LoRA include:
 
@@ -9,7 +9,7 @@ m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning 
 
 - Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/QLoRA adapters.
 
-- LoRA-based Mix-of-Expert LLM Adapter: [MixLoRA](./MixLoRA.md), which implements a Mix-of-Expert architecture based on multiple LoRA adapters for the frozen FFN layer.
+- LoRA-based Mix-of-Expert LLM Adapter: [MixLoRA](./docs/MixLoRA.md), which implements a Mix-of-Expert architecture based on multiple LoRA adapters for the frozen FFN layer.
 
 ## Note from the maintainer of this repository
 
@@ -24,6 +24,8 @@ Please note that the functions, interfaces, and performance of this fork are sli
 | Linux   | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | &check;  | &check;         |
 | macOS   | MPS     | FP32, FP16             | &cross;       | &cross;  | &cross;         |
 
+**Note**: macOS with MPS support are experimental feature.
+
 ## Supported Pre-trained Models
 
 |         | Model                                                    | # Parameters    |
@@ -35,11 +37,13 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 ## Supported LoRA Variants
 
-|         | LoRA Variants                                            | Arguments*                |
-|---------|----------------------------------------------------------|---------------------------|
-| &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0` |
-| &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `use_dora: true`          |
-| &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `use_rslora: true`        |
+|         | LoRA Variants                                            | Arguments*                       |
+|---------|----------------------------------------------------------|----------------------------------|
+| &check; | [QLoRA](https://arxiv.org/abs/2402.12354)                | See *Quantize Methods*           |
+| &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0`        |
+| &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `use_dora: true`                 |
+| &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `use_rslora: true`               |
+| &check; | MixLoRA                                                  | See [MixLoRA](./docs/MixLoRA.md) |
 
 *: Arguments of configuration file
 
@@ -106,7 +110,7 @@ Firstly, you should clone this repository and install dependencies:
 
 ```bash
 # Clone Repository
-git clone https://github.com/mikecovlee/mlora
+git clone https://github.com/scukdde-llm/mlora
 cd mlora
 # Optional but recommended
 conda create -n mlora python=3.10
@@ -177,7 +181,7 @@ Please cite the repo if you use the code in this repo.
   title = {m-LoRA: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization},
   year = {2023},
   publisher = {GitHub},
-  howpublished = {\url{https://github.com/mikecovlee/mlora}},
+  howpublished = {\url{https://github.com/scukdde-llm/mlora}},
   note={\textsuperscript{*}: these authors contributed equally to this work.}
 }
 ```

@@ -1,4 +1,4 @@
-# m-LoRA: Efficient Multi-LoRA Fine Tuning with Shared-Based Model
+# m-LoRA: Efficient LLM Model Fine-Tune via Multi-LoRA Optimization
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Copyright (C) 2023 All Rights Reserved.
+# Copyright (C) 2023-2024 All Rights Reserved.
 #
-# Github:  https://github.com/mikecovlee/mlora
+# Github:  https://github.com/scukdde-llm/mlora
 
 import os
 import sys
