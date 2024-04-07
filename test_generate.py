@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, Mock
 import torch
-from mlora.generate import GenerateConfig, gen_outputs, logits_process, generate
+from mlora.generate import GenerateConfig, gen_outputs, logits_process
 
 class TestGenerate(unittest.TestCase):
     def setUp(self):
