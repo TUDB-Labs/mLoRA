@@ -1,5 +1,56 @@
 # Install m-LoRA
 
+## Table of Contents
+
+- [Docker](./Install.md#docker)
+- [Linux](./Install.md#linux-ubuntu-debian-fedora-etc)
+- [Windows](./Install.md#microsoft-windows)
+- [macOS](./Install.md#apple-macos)
+
+## Docker
+
+### Requirements
+
+- One or more NVIDIA GPUs
+  - At least 16GB VRAM per card
+  - Cards with Ampere or newer architecture will perform faster
+- Installation of the [Docker Engine](https://docs.docker.com/get-docker/)
+- Installation of the [latest graphics driver](https://www.nvidia.com/Download/index.aspx?lang=en-us) and [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit)
+
+### Steps
+
+```bash
+# Start a Container
+docker run --gpus all -it --rm mikecovlee/mlora
+# Clone Repository
+git clone https://github.com/scukdde-llm/mlora
+cd mlora
+```
+
+You can check all available tags from: [mikecovlee/mlora/tags](https://hub.docker.com/r/mikecovlee/mlora/tags). Currently, we only provide a Linux image for the x86_64 (amd64) architecture.
+
+## Verification
+
+From the command line, type:
+
+```bash
+python
+```
+
+then enter the following code:
+
+```python
+import mlora
+mlora.setup_logging("INFO")
+mlora.get_backend().check_available()
+```
+
+Expected output:
+
+```
+m-LoRA: NVIDIA CUDA initialized successfully.
+```
+
 ## Linux (Ubuntu, Debian, Fedora, etc.)
 
 ### Requirements

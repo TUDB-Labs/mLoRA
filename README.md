@@ -147,6 +147,20 @@ For further detailed usage information, please use `--help` option:
 python mlora.py --help
 ```
 
+## Use Docker
+
+Firstly, ensure that you have installed Docker Engine and NVIDIA Container Toolkit correctly.
+
+After that, you can launch the container using the following typical command:
+
+```
+docker run --gpus all -it --rm mikecovlee/mlora
+```
+
+You can check all available tags from: [mikecovlee/mlora/tags](https://hub.docker.com/r/mikecovlee/mlora/tags)
+
+Please note that this container only provides a proper environment to run m-LoRA. The codes of m-LoRA are not included.
+
 ## Contributing
 We welcome contributions to improve this repository! Please review the contribution guidelines before submitting pull requests or issues.
 
