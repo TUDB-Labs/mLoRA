@@ -42,7 +42,7 @@ class TestTokenizer(unittest.TestCase):
                 # Set the return value for the mock encode method
                 self.tokenizer.encode.return_value = expected_output
                 self.assertEqual(self.tokenizer.encode(input_str, bos=bos, eos=eos),
-                                    expected_output)
+                                 expected_output)
 
     def test_decode(self):
         """
