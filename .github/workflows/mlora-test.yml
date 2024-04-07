@@ -1,9 +1,15 @@
-name: Test LLM Models
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Test on Main
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
-  test-lora:
+  build:
     runs-on: self-hosted
     container:
       image: mikecovlee/mlora:0.2.1.dev1
@@ -11,20 +17,18 @@ jobs:
         - /home/lab/models:/host_models/
       options: --gpus 1
     steps:
-      - uses: actions/checkout@v3
-      - name: Install dependencies
-        run: |
-          pip3 install -r requirements.txt
-          bash install_linux.sh
-      - name: The unit test of generate.py
-        run: |
-          python test_generate.py
-      - name: The unit test of prompter
-        run: |
-          python test_prompter.py
-      - name: The unit test of tokenizer.py
-        run: |
-          python test_tokenizer.py
-      - name: The unit test of checkpoint.py
-        run: |
-          python test_checkpoint.py
+    - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        pip install -e .
+    - name: Lint with flake8
+      run: |
+        flake8 . --count --show-source --statistics --max-line-length=127 --max-complexity 15 --ignore=E722,W504,W503
+    - name: check torch gpu
+      run: |
+        python tests/check_cuda.py
+    - name: Test with pytest
+      run: |
+        pytest
