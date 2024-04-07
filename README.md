@@ -3,6 +3,7 @@
 [![](https://github.com/scukdde-llm/mlora/actions/workflows/mlora-test.yml/badge.svg)](https://github.com/scukdde-llm/mlora/actions/workflows/mlora-test.yml)
 [![](https://img.shields.io/github/stars/scukdde-llm/mlora?logo=GitHub)](https://github.com/scukdde-llm/mlora/stargazers)
 [![](https://img.shields.io/github/license/scukdde-llm/mlora)](http://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/github/v/release/scukdde-llm/mlora)](https://github.com/scukdde-llm/mlora/releases/latest)
 [![](https://img.shields.io/github/languages/top/scukdde-llm/mlora)](https://www.python.org/)  
 
 m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning Large Language Models (LLMs) using the efficient multiple LoRA/QLoRA methods. Key features of m-LoRA include:
