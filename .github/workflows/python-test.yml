@@ -12,6 +12,7 @@ jobs:
   build:
 
     runs-on: self-hosted
+    container:
      options: --gpus 1
 
     steps:
