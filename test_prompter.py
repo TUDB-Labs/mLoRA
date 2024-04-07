@@ -5,7 +5,7 @@ from mlora import Prompter
 class TestPrompter(unittest.TestCase):
     
     def setUp(self):
-        # Create a mock instance of Prompter
+        # Create  a mock instance of Prompter
         self.prompter = MagicMock(spec=Prompter)
 
     def test_generate_prompt_with_input(self):
