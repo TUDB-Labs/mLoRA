@@ -1,6 +1,7 @@
+from mlora.pipeline.queue import DeviceSwapQueue
 from mlora.pipeline.transport import RpcTransport
 from mlora.pipeline.stream import CudaStream
-from mlora.pipeline.messages import PipeMessageType
+from mlora.pipeline.messages import PipeMessage, PipeMessageType
 from mlora.pipeline.function import RecvOperator, SendOperator
 from mlora.model.model import LLMModel, precompute_mask
 from mlora.model.modelargs import LoraBatchDataConfig, MultiLoraBatchData
@@ -44,6 +45,7 @@ class Pipe():
     config_: MLoRAConfig = None
 
     multi_trainer_context_: MultiTrainerContext = None
+    input_queue_: DeviceSwapQueue = None
 
     def is_stop_signal(self, data: torch.tensor) -> bool:
         return data.dtype == torch.long and torch.numel(data) == 1
@@ -55,7 +57,7 @@ class Pipe():
                  device: torch.device,
                  rank: int,
                  balance: List[int]) -> None:
-        self.world_size_ = torch.cuda.device_count()
+        self.world_size_ = len(balance)
         assert self.world_size_ == len(balance)
 
         self.rank_ = rank
@@ -64,6 +66,8 @@ class Pipe():
 
         if rank == 0:
             self.role_ = WorkerRole.HEAD
+            self.input_queue_ = DeviceSwapQueue(torch.device('cpu'), device, 4, 'input_data_queue')
+            self.input_queue_.start()
         elif rank == self.world_size_ - 1:
             self.role_ = WorkerRole.TAIL
         else:
@@ -114,12 +118,11 @@ class Pipe():
         if isinstance(transport, RpcTransport):
             transport.stop()
         logging.info("Transport stop.")
+        if self.input_queue_:
+            self.input_queue_.stop()
 
     def process_input(self):
-        assert self.role_ == WorkerRole.HEAD
-        assert not self.input_stop_
-
-        if not self.dispatcher_.check_task_done():
+        def put_train_data():
             train_input = self.dispatcher_.get_train_data()
             if not train_input:
                 # avoid the busy loop
@@ -127,10 +130,22 @@ class Pipe():
                 return
             for lora_config in train_input.lora_batch_data_config_:
                 logging.info(f'load lora: {lora_config.adapter_name_}')
-            tokens = torch.tensor(train_input.batch_tokens_,
-                                  dtype=torch.int64,
-                                  device=self.device_)
-            data = self.forward(tokens, train_input)
+            data = torch.tensor(train_input.batch_tokens_, dtype=torch.int64, device="cpu")
+            msg = PipeMessage(self.device_, self.device_, PipeMessageType.ACTIVATIONS,
+                              0, data, train_input)
+            self.input_queue_.put(msg)
+
+        assert self.role_ == WorkerRole.HEAD
+        assert not self.input_stop_
+
+        if not self.dispatcher_.check_task_done():
+            put_train_data()
+            # fetch train data
+            msg = self.input_queue_.get_nowait()
+            if not msg:
+                return
+            train_input = msg.batch_data_
+            data = self.forward(msg.tensor_data_, msg.batch_data_)
             self.forward_cnt_ += 1
         else:
             # stop
@@ -204,6 +219,7 @@ class Pipe():
         if not self.forward_stop_ and not self.is_stop_signal(message.tensor_data_):
             lora_configs = message.batch_data_.lora_batch_data_config_
             total_loss = self.multi_trainer_context_.calc_loss(message.batch_data_, data)
+            message.batch_data_.batch_tokens_ = None  # backward doesn't need to save batch_tokens
             total_loss.backward()
 
             self.trainer_step(lora_configs)
