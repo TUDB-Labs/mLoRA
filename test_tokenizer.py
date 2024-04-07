@@ -6,7 +6,7 @@ from mlora.tokenizer import Tokenizer
 class TestTokenizer(unittest.TestCase):
     
     def setUp(self):
-        # Create a mock instance of Tokenizer using MagicMock
+        # Create a mock instance  of Tokenizer using MagicMock
         self.tokenizer = MagicMock(spec=Tokenizer)
 
     def test_encode(self):
