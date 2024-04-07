@@ -10,7 +10,7 @@ class TestGenerate(unittest.TestCase):
         # Mocking the Tokenizer class
         with patch("mlora.Tokenizer") as MockTokenizer:
             self.tokenizer_instance = MockTokenizer.return_value
-            self.tokenizer_instance.encode.return_value = [1, 2, 3]  # Example return value
+            self.tokenizer_instance.encode.return_value = [1, 2, 3]  # Example  return value
             self.tokenizer_instance.decode.return_value = "decoded_text"  # Example return value
 
         self.configs = [
