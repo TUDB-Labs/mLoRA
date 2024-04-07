@@ -52,7 +52,7 @@ class TestGenerate(unittest.TestCase):
         prompts = ["Test prompt."]
         tokens = torch.tensor([[1, 2]])
         result = gen_outputs(self.configs,
-                                self.tokenizer_instance, prompts, tokens, self.max_gen_len)
+                             self.tokenizer_instance, prompts, tokens, self.max_gen_len)
         expected_result = {'test_adapter': []}
         self.assertEqual(result, expected_result)
 
