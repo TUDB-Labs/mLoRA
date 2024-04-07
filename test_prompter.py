@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from mlora import Prompter
 
 class TestPrompter(unittest.TestCase):
+    
     def setUp(self):
         # Create a mock instance of Prompter
         self.prompter = MagicMock(spec=Prompter)
@@ -48,4 +49,5 @@ class TestPrompter(unittest.TestCase):
         self.assertEqual(response, expected_response)
 
 if __name__ == "__main__":
+    
     unittest.main()
