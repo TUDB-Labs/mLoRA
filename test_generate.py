@@ -4,6 +4,7 @@ import torch
 from mlora.generate import GenerateConfig, gen_outputs, logits_process
 
 class TestGenerate(unittest.TestCase):
+    
     def setUp(self):
         self.model = Mock()
         # Mocking the Tokenizer class
