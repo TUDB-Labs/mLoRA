@@ -16,9 +16,15 @@ jobs:
         run: |
           pip3 install -r requirements.txt
           bash install_linux.sh
-      - name: finetune lora
+      - name: The unit test of generate.py
         run: |
-          python mlora.py --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --config ./config/dummy.json --fp16 --attn_impl eager
-      - name: inference with lora
+          python test_generate.py
+      - name: The unit test of prompter
         run: |
-          python generate.py --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --lora_weights "./lora_0" --instruction "What is m-LoRA?"
+          python test_prompter.py
+      - name: The unit test of tokenizer.py
+        run: |
+          python test_tokenizer.py
+      - name: The unit test of checkpoint.py
+        run: |
+          python test_checkpoint.py
