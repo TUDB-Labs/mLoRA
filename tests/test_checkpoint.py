@@ -15,10 +15,6 @@ from mlora.checkpoint import (
     get_device_states,
 )
 
-CURRENT_DIR = os.path.split(os.path.abspath(__file__))[0]
-config_path = CURRENT_DIR.rsplit('/', 1)[0]
-sys.path.append(config_path)
-
 
 class TestCheckpointOffloadFunction(unittest.TestCase):
     """
