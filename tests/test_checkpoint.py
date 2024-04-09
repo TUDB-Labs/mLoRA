@@ -2,8 +2,6 @@
 Test cases for the Checkpoint module.
 """
 
-import os
-import sys
 import unittest
 from unittest.mock import patch, Mock
 import torch
