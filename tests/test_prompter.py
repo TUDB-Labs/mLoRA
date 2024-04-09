@@ -2,8 +2,6 @@
 This is a test file for the Prompter class.
 """
 
-import os
-import sys
 import unittest
 from unittest.mock import MagicMock
 from mlora import Prompter
