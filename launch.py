@@ -18,7 +18,7 @@ def compose_command(base_model: str,
                     attn_impl: str = None,
                     quantize: str = None,
                     dtype: str = "bf16",
-                    tf32: bool = True):
+                    tf32: bool = False):
     assert quantize in (None, "4bit", "8bit")
     assert dtype in ("fp32", "fp16", "bf16")
     command = "python mlora.py"
@@ -197,7 +197,7 @@ def show_help():
     print("    --attn_impl    [eager]")
     print("    --quantize     [none], 4bit, 8bit")
     print("    --dtype        [bf16], fp16, fp32")
-    print("    --tf32         [true]")
+    print("    --tf32         [false]")
     print("")
 
 
