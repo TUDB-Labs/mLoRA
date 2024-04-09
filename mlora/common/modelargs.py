@@ -36,6 +36,7 @@ class LLMModelArgs:
     n_heads_: int = 32
     n_kv_heads_: int = 32
     n_layers_: int = 32
+    hidden_act_: str = "silu"
     hidden_dropout_: float = 0.0
     vocab_size_: int = -1
     pad_token_id_: int = -1

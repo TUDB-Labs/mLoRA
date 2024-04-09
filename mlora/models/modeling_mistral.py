@@ -264,6 +264,7 @@ class MistralForCausalLM(LlamaForCausalLM):
             n_layers_=llm_config.num_hidden_layers,
             n_heads_=llm_config.num_attention_heads,
             n_kv_heads_=llm_config.num_key_value_heads,
+            hidden_act_=llm_config.hidden_act,
             rms_norm_eps_=llm_config.rms_norm_eps,
             max_seq_len_=llm_config.max_position_embeddings,
             rope_theta_=llm_config.rope_theta,

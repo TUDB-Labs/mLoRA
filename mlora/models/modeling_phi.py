@@ -351,7 +351,7 @@ class PhiMLP(LLMFeedForward):
         # feed forward
         self.fc1_: Linear = Linear(fc1, args.device_)
         self.fc2_: Linear = Linear(fc2, args.device_)
-        self.act_ = ACT2FN["gelu_new"]
+        self.act_ = ACT2FN[args.hidden_act_]
 
     def state_dict(self) -> Dict[str, nn.Module]:
         return {
@@ -534,6 +534,7 @@ class PhiForCausalLM(LLMForCausalLM):
             n_layers_=llm_config.num_hidden_layers,
             n_heads_=llm_config.num_attention_heads,
             n_kv_heads_=llm_config.num_key_value_heads,
+            hidden_act_=llm_config.hidden_act,
             resid_pdrop_=llm_config.resid_pdrop,
             embd_pdrop_=llm_config.embd_pdrop,
             max_seq_len_=llm_config.max_position_embeddings,

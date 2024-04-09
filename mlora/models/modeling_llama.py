@@ -303,7 +303,7 @@ class LlamaMLP(LLMFeedForward):
         self.w1_: Linear = Linear(w1, args.device_)
         self.w2_: Linear = Linear(w2, args.device_)
         self.w3_: Linear = Linear(w3, args.device_)
-        self.act_ = ACT2FN["silu"]
+        self.act_ = ACT2FN[args.hidden_act_]
 
     def state_dict(self) -> Dict[str, nn.Module]:
         return {
@@ -492,6 +492,7 @@ class LlamaForCausalLM(LLMForCausalLM):
             n_layers_=llm_config.num_hidden_layers,
             n_heads_=llm_config.num_attention_heads,
             n_kv_heads_=llm_config.num_key_value_heads,
+            hidden_act_=llm_config.hidden_act,
             rms_norm_eps_=llm_config.rms_norm_eps,
             max_seq_len_=llm_config.max_position_embeddings,
             rope_theta_=llm_config.rope_theta,
