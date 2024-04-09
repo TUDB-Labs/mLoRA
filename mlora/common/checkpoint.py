@@ -27,7 +27,9 @@ def check_backward_validity(inputs: Iterable[Any]) -> None:
 
 def get_device_states(*args) -> Tuple[List[int], List[torch.Tensor]]:
     fwd_gpu_devices = list({arg.device.index for arg in args
-                            if isinstance(arg, torch.Tensor) and arg.device.type == _backend.device_name()})
+                            if isinstance(arg, torch.Tensor)
+                            and arg.device.type != 'cpu'
+                            and arg.device.type == _backend.device_name()})
 
     fwd_gpu_states = []
     for device in fwd_gpu_devices:

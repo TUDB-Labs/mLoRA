@@ -1,20 +1,35 @@
 from .common import BasicBackend
 from .cuda import CUDABackend
 from .mps import MPSBackend
+from .cpu import CPUBackend
 
 import torch
+import os
 
 _backend: BasicBackend = None
 
 
+backend_dict = {
+    "CUDA": CUDABackend,
+    "MPS": MPSBackend,
+    "CPU": CPUBackend,
+}
+
+
 def _init_backend():
     global _backend
-    if torch.cuda.is_available():
+    env = os.getenv("MLORA_BACKEND_TYPE")
+    if env is not None:
+        env = env.upper()
+        if env not in backend_dict:
+            raise ValueError(f"Assigning unknown backend type {env}")
+        _backend = backend_dict[env]()
+    elif torch.cuda.is_available():
         _backend = CUDABackend()
     elif torch.backends.mps.is_available():
         _backend = MPSBackend()
     else:
-        raise RuntimeError("No supported torch backends")
+        _backend = CPUBackend()
 
 
 def get_backend() -> BasicBackend:
@@ -30,5 +45,6 @@ __all__ = [
     "BasicBackend",
     "CUDABackend",
     "MPSBackend",
+    "CPUBackend",
     "get_backend",
 ]

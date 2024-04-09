@@ -27,6 +27,9 @@ Please note that the functions, interfaces, and performance of this fork are sli
 | Linux   | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | &check;  | &check;         |
 | Windows | CUDA    | FP32, FP16, TF32, BF16 | &cross;       | &cross;  | &cross;         |
 | macOS   | MPS     | FP32, FP16             | &cross;       | &cross;  | &cross;         |
+| All     | CPU     | FP32, FP16, BF16       | &cross;       | &cross;  | &cross;         |
+
+You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use a specific backend. For example, if you want m-LoRA to run only on CPU, you can set `MLORA_BACKEND_TYPE=CPU` before importing `mlora`.
 
 **Note**: Windows and macOS support are experimental feature.
 
