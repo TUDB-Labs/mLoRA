@@ -1,3 +1,12 @@
+from .backends import get_backend
+from .utils import setup_logging
+from .tokenizer import Tokenizer
+from .prompter import Prompter
+from .model import LLMModel
+from .trainer import TrainConfig, train
+from .generator import GenerateConfig, generate
+from .evaluator import EvaluateConfig, evaluate
+from .dispatcher import TrainTask, Dispatcher
 from .common import (
     LLMModelArgs,
     LLMModelOutput,
@@ -8,15 +17,13 @@ from .common import (
     MixConfig,
     lora_config_factory,
 )
-from .dispatcher import TrainTask, Dispatcher
-from .evaluator import EvaluateConfig, evaluate
-from .generator import GenerateConfig, generate
-from .trainer import TrainConfig, train
-from .model import LLMModel
-from .prompter import Prompter
-from .tokenizer import Tokenizer
-from .utils import setup_logging
-from .backends import get_backend
+from .utils import is_package_available
+
+assert is_package_available(
+    "torch", "2.1.2"), "m-LoRA requires torch>=2.1.2"
+assert is_package_available(
+    "transformers", "4.38.2"), "m-LoRA requires transformers>=4.38.2"
+
 
 setup_logging()
 
