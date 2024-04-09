@@ -1,0 +1,38 @@
+{
+    "cutoff_len": 512,
+    "save_step": 1000,
+    "train_lora_candidate_num": 2,
+    "train_lora_simultaneously_num": 2,
+    "train_strategy": "optim",
+    "lora": [
+        {
+            "name": "mixlora",
+            "task_name": "",
+            "optim": "adamw",
+            "scheduler_type": "constant",
+            "warmup_steps": 0,
+            "lr": 2e-4,
+            "batch_size": 16,
+            "micro_batch_size": 8,
+            "test_batch_size": 32,
+            "num_epochs": 2,
+            "r": 16,
+            "lora_alpha": 32,
+            "lora_dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "dense": true,
+                "fc1": true,
+                "fc2": true
+            },
+            "routing_strategy": "mixtral",
+            "num_experts": 8,
+            "act_fn": "silu",
+            "top_k": 2,
+            "group_by_length": false,
+            "expand_side": "right"
+        }
+    ]
+}
