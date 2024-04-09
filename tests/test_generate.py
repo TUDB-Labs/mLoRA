@@ -38,7 +38,7 @@ class TestGenerate(unittest.TestCase):
         result = logits_process(probs, prev_tokens)
         expected_shape = (2,)
         self.assertIsInstance(result, torch.Tensor)
-        self.assertEqual(result.shape, expected_shape) 
+        self.assertEqual(result.shape, expected_shape)
         self.assertTrue(torch.all(result >= 0))
 
     def test_gen_outputs(self):
