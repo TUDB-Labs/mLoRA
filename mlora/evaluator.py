@@ -1,8 +1,17 @@
-from mlora.modelargs import DataClass, LoraBatchDataConfig, MultiLoraBatchData, MixConfig
-from mlora.tasks.common import BasicTask, BasicMetric
-from mlora.tasks.common import CommonSenseTask, task_dict
-from mlora.tokenizer import Tokenizer
-from mlora.model import LLMModel
+from .common import (
+    DataClass,
+    LoraBatchDataConfig,
+    MultiLoraBatchData,
+    MixConfig,
+)
+from .tasks import (
+    BasicTask,
+    BasicMetric,
+    CommonSenseTask,
+    task_dict,
+)
+from .tokenizer import Tokenizer
+from .model import LLMModel
 
 
 from dataclasses import dataclass
@@ -47,11 +56,11 @@ class EvaluateConfig:
 
 def _prepare_tasks(model, tokenizer, configs):
     for config in configs:
-        config.prepare(tokenizer)
+        config.prepare(tokenizer, model.device_)
         if not isinstance(model.adapter_configs_[config.adapter_name], MixConfig):
             continue
-        for layer in model.layers_:
-            layer.ffn_.moes_[
+        for layer in model.model_.layers_:
+            layer.mlp_.moes_[
                 config.adapter_name].router_profile_ = config.router_profile
 
 
@@ -125,8 +134,8 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
             if isinstance(adapter_config, MixConfig):
                 router_statistic_ = list(
                     0 for _ in range(adapter_config.num_experts_))
-                for layer in model.layers_:
-                    for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name].profiler_):
+                for layer in model.model_.layers_:
+                    for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
                         router_statistic_[idx] += val
                 for idx, val in enumerate(router_statistic_):
                     logging.info(
@@ -170,10 +179,10 @@ def _compute_result(model, configs, save_file):
             if isinstance(adapter_config, MixConfig):
                 router_statistic_ = list(
                     0 for _ in range(adapter_config.num_experts_))
-                for layer in model.layers_:
-                    for idx, val in enumerate(layer.ffn_.moes_[config.adapter_name].profiler_):
+                for layer in model.model_.layers_:
+                    for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
                         router_statistic_[idx] += val
-                    layer.ffn_.moes_[config.adapter_name].profiler_ = None
+                    layer.mlp_.moes_[config.adapter_name].profiler_ = None
                 result["router_profile"] = list(
                     val / 32 for val in router_statistic_)
 

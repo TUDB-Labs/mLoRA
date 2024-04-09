@@ -102,7 +102,7 @@ def query_yes_no(question, default="no"):
 
 def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
     logging.info("Initializing pre-trained model.")
-    model = mlora.LlamaModel.from_pretrained(
+    model = mlora.LLMModel.from_pretrained(
         path=args.base_model,
         device=args.device,
         attn_impl=args.attn_impl,
@@ -222,9 +222,9 @@ if __name__ == "__main__":
     is_train = not args.inference and not args.evaluate
 
     if args.attn_impl is None:
-        if mlora.attention._flash_attn_available:
+        if mlora.common._flash_attn_available:
             args.attn_impl = "flash_attn"
-        elif mlora.attention._xformers_available and is_train:
+        elif mlora.common._xformers_available and is_train:
             args.attn_impl = "xformers"
         else:
             args.attn_impl = "eager"

@@ -32,12 +32,15 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 ## Supported Pre-trained Models
 
-|         | Model                                                    | # Parameters    |
-|---------|----------------------------------------------------------|-----------------|
-| &check; | [LLaMA](https://github.com/facebookresearch/llama)       | 7B/13B/33B/65B  |
-| &check; | [LLaMA-2](https://huggingface.co/meta-llama)             | 7B/13B/70B      |
-| &check; | [Qwen-2](https://qwenlm.github.io)                       | 4B/7B/14B/72B   |
-| &check; | [Mistral](https://mistral.ai)                            | 7B              |
+|         | Model                                                    | # Parameters       |
+|---------|----------------------------------------------------------|--------------------|
+| &check; | [LLaMA](https://github.com/facebookresearch/llama)       | 7B/13B/33B/65B     |
+| &check; | [LLaMA-2](https://huggingface.co/meta-llama)             | 7B/13B/70B         |
+| &check; | [Qwen-2](https://qwenlm.github.io)                       | 1.8B/4B/7B/14B/72B |
+| &check; | [Mistral](https://mistral.ai)                            | 7B                 |
+| &check; | [Gemma](https://ai.google.dev/gemma/docs)                | 2B/7B              |
+| &check; | [Phi-2](https://huggingface.co/microsoft/phi-2)          | 2.7B               |
+
 
 ## Supported LoRA Variants
 

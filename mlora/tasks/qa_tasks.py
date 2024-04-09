@@ -1,7 +1,6 @@
-from mlora.tasks.common import BasicMetric, AutoMetric
-from mlora.tasks.common import CommonSenseTask
-from mlora.modelargs import DataClass
+from .common import BasicMetric, AutoMetric, CommonSenseTask
 from mlora.tokenizer import Tokenizer
+from mlora.common import DataClass
 from typing import List
 
 import datasets as hf_datasets

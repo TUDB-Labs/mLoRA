@@ -1,7 +1,11 @@
-from mlora import Tokenizer
-from mlora import MultiLoraBatchData
-from mlora import LoraBatchDataConfig
-from mlora.modelargs import Tokens, Masks, DataClass
+from .tokenizer import Tokenizer
+from .common import (
+    Tokens,
+    Masks,
+    DataClass,
+    MultiLoraBatchData,
+    LoraBatchDataConfig,
+)
 
 import sys
 import math

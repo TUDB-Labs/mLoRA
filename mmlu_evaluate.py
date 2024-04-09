@@ -92,7 +92,7 @@ def prepare_data(tokenizer: mlora.Tokenizer,
 @torch.inference_mode()
 def evaluate(subject: str,
              tokenizer: mlora.Tokenizer,
-             model: mlora.LlamaModel,
+             model: mlora.LLMModel,
              adapter_names: List[str],
              batch_size: int = 2,
              max_seq_len: int = 2048):
@@ -251,7 +251,7 @@ def do_evaluate(model_name: str,
                 device: str = f"{mlora.get_backend().device_name()}:0",
                 output: str = "mmlu_scores.csv"):
     tokenizer = mlora.Tokenizer(model_name)
-    model = mlora.LlamaModel.from_pretrained(
+    model = mlora.LLMModel.from_pretrained(
         model_name, device=device, **model_dtypes[model_dtype])
     for name in adapter_names:
         logging.info(f"Loading adapter {name}")

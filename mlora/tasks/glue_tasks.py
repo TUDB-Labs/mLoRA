@@ -1,4 +1,4 @@
-from mlora.tasks.common import SequenceClassificationTask
+from .common import SequenceClassificationTask
 import torch
 
 

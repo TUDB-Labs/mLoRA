@@ -75,11 +75,11 @@ def main(base_model: str,
          server_name: str = "0.0.0.0",
          share_gradio: bool = False):
 
-    model = mlora.LlamaModel.from_pretrained(base_model, device=device,
-                                             attn_impl="flash_attn" if flash_attn else "eager",
-                                             bits=(8 if load_8bit else (
+    model = mlora.LLMModel.from_pretrained(base_model, device=device,
+                                           attn_impl="flash_attn" if flash_attn else "eager",
+                                           bits=(8 if load_8bit else (
                                                  4 if load_4bit else None)),
-                                             load_dtype=torch.bfloat16 if load_16bit else torch.float32)
+                                           load_dtype=torch.bfloat16 if load_16bit else torch.float32)
     tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:
@@ -87,10 +87,10 @@ def main(base_model: str,
     else:
         model.load_adapter_weight("default")
 
-    generation_config: mlora.GenerateConfig = model.get_generate_paramas()[
-        "default"]
-
-    generation_config.prompt_template = template
+    generation_config = mlora.GenerateConfig(
+        adapter_name="default",
+        prompt_template=template,
+    )
 
     def evaluate(
         instruction,

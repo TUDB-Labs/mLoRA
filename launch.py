@@ -115,7 +115,8 @@ def gen_config(
     for lora_template in lora_templates:
         for task_name in tasks:
             lora_config = lora_template.copy()
-            casual_task = (not multi_task and task_name not in mlora.task_dict)
+            casual_task = (
+                not multi_task and task_name not in mlora.tasks.task_dict)
             if casual_task:
                 lora_config["name"] = f"casual_{index}"
                 lora_config["task_name"] = "casual"
@@ -151,7 +152,7 @@ def gen_config(
 def avail_tasks():
     import mlora
     print("Available task names:")
-    for name in mlora.task_dict.keys():
+    for name in mlora.tasks.task_dict.keys():
         print(f"    {name}")
     print("These tasks can be trained and evaluated automatically using m-LoRA.")
 

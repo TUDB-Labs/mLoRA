@@ -1,4 +1,4 @@
-from mlora.modelargs import MixConfig
+from .modelargs import MixConfig
 
 import torch
 import torch.nn.functional as F

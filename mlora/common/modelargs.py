@@ -1,6 +1,7 @@
-from transformers.activations import ACT2FN
 from typing import Any, List, Dict, Callable
+from transformers.activations import ACT2FN
 from mlora.backends import get_backend
+
 from dataclasses import dataclass
 
 import torch
@@ -35,16 +36,11 @@ class LLMModelArgs:
     n_heads_: int = 32
     n_kv_heads_: int = 32
     n_layers_: int = 32
-    norm_eps_: float = 1e-06
     hidden_dropout_: float = 0.0
     vocab_size_: int = -1
     pad_token_id_: int = -1
     rope_theta_: float = 10000.0
     max_seq_len_: int = 2048
-    # swa
-    use_sliding_window_: bool = False
-    max_window_layers_: int = None
-    sliding_window_: int = None
     # eager, xformers, flash_attn
     attn_implementation_: str = "eager"
     # data type
@@ -134,6 +130,10 @@ class LoraConfig:
             "w1_proj": False,
             "w2_proj": False,
             "w3_proj": False,
+            # Phi names
+            "dense": False,
+            "fc1": False,
+            "fc2": False,
         }
         if isinstance(config["target_modules"], List):
             for target in config["target_modules"]:

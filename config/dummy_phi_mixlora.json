@@ -1,0 +1,64 @@
+{
+    "cutoff_len": 256,
+    "save_step": 2000,
+    "early_stop_test_step": 2000,
+    "train_lora_candidate_num": 2,
+    "train_lora_simultaneously_num": 2,
+    "train_strategy": "optim",
+    "lora": [
+        {
+            "name": "lora_0",
+            "optim": "adamw",
+            "lr": 3e-4,
+            "batch_size": 16,
+            "micro_batch_size": 16,
+            "test_batch_size": 64,
+            "num_epochs": 20,
+            "r": 8,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "dense": true,
+                "fc1": true,
+                "fc2": true
+            },
+            "routing_strategy": "mixtral",
+            "num_experts": 8,
+            "data": "data/dummy_data.json",
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
+        },
+        {
+            "name": "lora_1",
+            "optim": "adamw",
+            "lr": 3e-4,
+            "batch_size": 16,
+            "micro_batch_size": 16,
+            "test_batch_size": 64,
+            "num_epochs": 20,
+            "r": 8,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
+            "target_modules": {
+                "q_proj": true,
+                "k_proj": true,
+                "v_proj": true,
+                "dense": true,
+                "fc1": true,
+                "fc2": true
+            },
+            "routing_strategy": "switch",
+            "expert_capacity": 200,
+            "ffn_dropout": 0.1,
+            "num_experts": 8,
+            "data": "data/dummy_data.json",
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
+        }
+    ]
+}
