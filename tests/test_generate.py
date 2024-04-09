@@ -37,8 +37,8 @@ class TestGenerate(unittest.TestCase):
         prev_tokens = torch.tensor([[1, 2, 0, 0], [3, 0, 0, 0]])
         result = logits_process(probs, prev_tokens)
         expected_shape = (2,)
-        self.assertIsInstance(result, torch.Tensor)  
-        self.assertEqual(result.shape, expected_shape)          
+        self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape, expected_shape) 
         self.assertTrue(torch.all(result >= 0))
 
     def test_gen_outputs(self):
