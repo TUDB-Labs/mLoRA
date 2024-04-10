@@ -232,7 +232,7 @@ class Pipe():
             if self.multi_trainer_context_.is_save_step(adapter_name):
                 self.save_model(adapter_name, f"{step_cnt}")
             if self.role_ == WorkerRole.HEAD:
-                self.dispatcher_.activate_adapter(adapter_name)
+                self.dispatcher_.update_backward_cnt(adapter_name)
 
     def save_all_model(self):
         for adapter_name in self.multi_trainer_context_.trainer_context_:

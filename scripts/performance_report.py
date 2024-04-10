@@ -1,7 +1,6 @@
 import argparse
 import sqlite3
 import logging
-import re
 import csv
 
 from typing import List, Dict, Tuple
@@ -26,10 +25,10 @@ SELECT R.start AS API_START, R.end AS API_END,
        R.start AS T_START,
        MAX(R.end, K.end) AS T_END,
        KNAME.value AS KERN_NAME
-    FROM 
-        CUPTI_ACTIVITY_KIND_KERNEL AS K 
+    FROM
+        CUPTI_ACTIVITY_KIND_KERNEL AS K
     JOIN
-        CUPTI_ACTIVITY_KIND_RUNTIME AS R 
+        CUPTI_ACTIVITY_KIND_RUNTIME AS R
         ON K.correlationId == R.correlationId
     LEFT JOIN
         StringIds AS KNAME
@@ -50,7 +49,7 @@ SELECT
     KERN_NAME AS KERN_NAME
 FROM
     (SELECT start AS E_START, end AS E_END, text AS E_NAME FROM NVTX_EVENTS)
-LEFT JOIN 
+LEFT JOIN
     TEMP_KERN_INFOS
 ON
     E_START <= T_START AND E_END >= T_START;
