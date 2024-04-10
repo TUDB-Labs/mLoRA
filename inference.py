@@ -165,7 +165,7 @@ def main(base_model: str,
                 minimum=0, maximum=2, value=1.1, label="Repetition Penalty"
             ),
             gr.components.Slider(
-                minimum=1, maximum=2000, step=1, value=128, label="Max Tokens"
+                minimum=1, maximum=model.config_.max_seq_len_, step=1, value=128, label="Max Tokens"
             ),
             gr.components.Checkbox(
                 label="Stream Output", value=True

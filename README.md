@@ -112,8 +112,8 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 
 ## Known issues
 
- + DoRA with Quantization on Qwen2
- + Half Precision with Qwen2
+ + Applying quantization to Qwen2 in DoRA will result in an error
+ + Employing half precision models on MPS may occasionally result in challenges, such as encountering 'nan' values or experiencing convergence difficulties.
 
 ## Installation
 
@@ -121,16 +121,21 @@ Please refer to [Install Guide](./docs/Install.md).
 
 ## Quickstart
 
-You can use m-LoRA via `launch.py` conveniently:
+You can conveniently utilize m-LoRA via `launch.py`. The following example demonstrates a streamlined approach to training a dummy model with m-LoRA.
 
 ```bash
 # Generating configuration
-python launch.py gen --template lora --tasks yahma/alpaca-cleaned
+python launch.py gen --template lora_phi --tasks ./data/dummy_data.json
 # Running the training task
-python launch.py run --base_model yahma/llama-7b-hf
+python launch.py run --base_model microsoft/phi-2
+# Try with gradio web ui
+python inference.py \
+  --base_model microsoft/phi-2 \
+  --template ./template/alpaca.json \
+  --lora_weights ./casual_0
 ```
 
-For further detailed usage information, please use the `help` command:
+For further detailed usage information, please refer to the `help` command:
 
 ```bash
 python launch.py help
@@ -142,9 +147,9 @@ The `mlora.py` code is a starting point for finetuning on various datasets.
 Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
 python mlora.py \
-  --base_model yahma/llama-7b-hf \
+  --base_model meta-llama/Llama-2-7b-hf \
   --config ./config/alpaca.json \
-  --load_16bit
+  --bf16
 ```
 
 You can check the template finetune configuration in [template](./template/) folder.

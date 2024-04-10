@@ -18,7 +18,8 @@ jobs:
           bash install_linux.sh
       - name: finetune lora
         run: |
-          python mlora.py --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --config ./config/dummy.json --fp16 --attn_impl eager
+          python launch.py gen --template lora --tasks ./data/dummy_data.json
+          python launch.py train --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --attn_impl eager
       - name: inference with lora
         run: |
-          python generate.py --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --lora_weights "./lora_0" --instruction "What is m-LoRA?"
+          python generate.py --base_model /host_models/TinyLlama-1.1B-intermediate-step-1431k-3T --template "./template/alpaca.json" --lora_weights "./casual_0" --instruction "What is m-LoRA?" --max_seq_len 64

@@ -113,15 +113,13 @@ Please note that once the MixLoRA model is created, the number of experts in the
 python inference.py \
   --base_model meta-llama/Llama-2-7b-hf \
   --lora_weights scukdde-llm/alpaca-mixlora-7b \
-  --template template/alpaca.json \
-  --load_16bit
+  --template template/alpaca.json
 
 # Simply Generate
 python generate.py \
   --base_model meta-llama/Llama-2-7b-hf \
   --lora_weights scukdde-llm/alpaca-mixlora-7b \
   --template template/alpaca.json \
-  --load_16bit \
   --instruction "What is m-LoRA?"
 ```
 

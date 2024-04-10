@@ -43,6 +43,10 @@ def compose_command(base_model: str,
     return command
 
 
+def inference(**kwargs):
+    os.system(compose_command(**kwargs) + " --inference")
+
+
 def evaluate(**kwargs):
     os.system(compose_command(**kwargs) + " --evaluate")
 
@@ -163,6 +167,7 @@ def show_help():
     print("Command:")
     print("    gen         generate a configuration from template")
     print("    run         Automatically training and evaluate")
+    print("    inference   Run inference on existed adapter")
     print("    evaluate    Run evaluation on existed adapter")
     print("    train       Run training with configuration")
     print("    avail       List all available tasks")
@@ -186,7 +191,7 @@ def show_help():
     print("    --use_rslora")
     print("    --group_by_length")
     print("")
-    print("Arguments of run, train and evaluate:")
+    print("Arguments of run, train, inference and evaluate:")
     print("    --base_model   model name or path")
     print("    --config       [mlora.json]")
     print("    --load_adapter [false]")
@@ -202,6 +207,7 @@ def show_help():
 
 
 command_map = {
+    "inference": inference,
     "evaluate": evaluate,
     "train": train,
     "run": run,
