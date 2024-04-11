@@ -56,8 +56,7 @@ def prepare_data(tokenizer: mlora.Tokenizer,
         for dev_data_point in dev_data:
             k -= 1
             prompt = format_prompt(dev_data_point)
-            input_ids = tokenizer.encode(
-                dev_prompt + prompt + test_prompt, True, False)
+            input_ids = tokenizer.encode(dev_prompt + prompt + test_prompt)
             if len(input_ids) <= max_seq_len:
                 tokens = input_ids
                 dev_prompt += prompt
@@ -116,7 +115,7 @@ def evaluate(subject: str,
 
     label_indices = [0] * len(choices_map)
     for idx, text in enumerate(choices_map):
-        ids = tokenizer.encode(text, False, False)
+        ids = tokenizer.encode(text)
         label_indices[idx] = ids[-1]
     label_indices = torch.tensor(
         label_indices, dtype=torch.long, device=model.device_)

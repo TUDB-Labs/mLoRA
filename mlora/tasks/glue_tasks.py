@@ -12,7 +12,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["sentence"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True}
             ),
         ),
         "glue:mnli": SequenceClassificationTask(
@@ -23,7 +22,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["premise"], data_point["hypothesis"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True},
             ),
         ),
         "glue:mrpc": SequenceClassificationTask(
@@ -34,7 +32,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["sentence1"], data_point["sentence2"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True},
             ),
         ),
         "glue:qnli": SequenceClassificationTask(
@@ -45,7 +42,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["question"], data_point["sentence"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True},
             ),
         ),
         "glue:qqp": SequenceClassificationTask(
@@ -56,7 +52,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["question1"], data_point["question2"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True},
             ),
         ),
         "glue:rte": SequenceClassificationTask(
@@ -67,7 +62,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["sentence1"], data_point["sentence2"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True},
             ),
         ),
         "glue:sst2": SequenceClassificationTask(
@@ -78,7 +72,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["sentence"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True},
             ),
         ),
         "glue:wnli": SequenceClassificationTask(
@@ -89,7 +82,6 @@ def update_task_dict(task_dict):
             dataload_function=lambda data_point: (
                 [data_point["sentence1"] + " </s> " + data_point["sentence2"]],
                 [int(data_point["label"])],
-                {"bos": True, "eos": True},
             ),
         ),
     })

@@ -156,7 +156,7 @@ def generate(model: LLMModel,
     config_dict = {}
     for config in configs:
         config_dict[config.adapter_name] = config
-        tokens = [tokenizer.encode(prompt, True, False)
+        tokens = [tokenizer.encode(prompt)
                   for prompt in config.get_prompts()]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)

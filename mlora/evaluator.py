@@ -46,7 +46,7 @@ class EvaluateConfig:
             labels = self.task_.label_list()
             label_indices = [0] * len(labels)
             for idx, label in enumerate(labels):
-                ids = tokenizer.encode(" " + label, False, False)
+                ids = tokenizer.encode(" " + label)
                 label_indices[idx] = ids[-1]
             self.label_indices_ = torch.tensor(
                 label_indices, dtype=torch.int64, device=device)

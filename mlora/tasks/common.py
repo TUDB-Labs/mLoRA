@@ -94,7 +94,7 @@ class CasualTask(BasicTask):
                 data_point["instruction"],
                 data_point.get("input", None),
                 data_point.get("output", None))
-            tokens = tokenizer.encode(data=prompt, bos=True, eos=False)
+            tokens = tokenizer.encode(data=prompt)
             ret.append(DataClass(tokens_=tokens, labels_=None))
             if idx % 10000 == 0:
                 logging.info(f"Encode text data: {idx}/{len(data)}")
@@ -144,11 +144,9 @@ class SequenceClassificationTask(BasicTask):
         logging.info(f"Preparing data for {self.task_name_.upper()}")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
-            inputs, labels, flags = self.dataload_function_(data_point)
+            inputs, labels = self.dataload_function_(data_point)
             assert isinstance(labels, List)
-            if "eos" in flags and not is_train:
-                flags["eos"] = False
-            tokens = tokenizer.encode(data=inputs, **flags)
+            tokens = tokenizer.encode(data=inputs)
             ret.append(DataClass(tokens_=tokens, labels_=labels))
             if idx % 10000 == 0:
                 logging.info(f"Encode text data: {idx}/{len(data)}")
