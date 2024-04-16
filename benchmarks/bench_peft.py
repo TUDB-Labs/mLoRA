@@ -26,7 +26,7 @@ parser.add_argument('--lora_cnt', type=int, default=4,
 # test configure
 parser.add_argument('--warmup', type=int, default=100,
                     help="The step of warm up")
-parser.add_argument('--repete', type=int, default=100,
+parser.add_argument('--repeat', type=int, default=100,
                     help="Total test iteration")
 parser.add_argument('--seq_len', type=int, default=128,
                     help="The length of the sequence")
@@ -140,14 +140,14 @@ if __name__ == "__main__":
         for lora_idx in range(0, args.lora_cnt):
             now_lora = f"lora_{lora_idx}"
             model.set_adapter(now_lora)
-            for _ in range(0, args.repete):
+            for _ in range(0, args.repeat):
                 loss = model.forward(input_ids=lables, labels=lables)[0]
                 set_backward_tracepoint(loss.grad_fn, "b_loss")
                 grad_fn_nvtx_wrapper_by_tracepoint(loss.grad_fn)
                 loss.backward()
 
     def lora_switch():
-        for _ in range(0, args.repete):
+        for _ in range(0, args.repeat):
             for lora_idx in range(0, args.lora_cnt):
                 now_lora = f"lora_{lora_idx}"
                 model.set_adapter(now_lora)
