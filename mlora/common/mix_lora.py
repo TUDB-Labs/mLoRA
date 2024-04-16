@@ -1,4 +1,4 @@
-from .modelargs import MixConfig
+from .modelargs import LLMModelArgs, MixConfig
 
 import torch
 import torch.nn.functional as F
@@ -39,14 +39,14 @@ class MixtralRouterLoss(torch.nn.Module):
 
 
 class MixtralSparseMoe(torch.nn.Module):
-    def __init__(self, in_features: int, config: MixConfig) -> None:
+    def __init__(self, args: LLMModelArgs, config: MixConfig) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
         self.dtype_: torch.dtype = torch.float32
         self.gate_ = torch.nn.Linear(
-            in_features, config.num_experts_, bias=False, device=config.device, dtype=self.dtype_)
-        self.act_ = ACT2FN[config.act_fn_]
+            args.dim_, config.num_experts_, bias=False, device=config.device, dtype=self.dtype_)
+        self.act_ = ACT2FN[args.hidden_act_ if config.act_fn_ is None else config.act_fn_]
         self.experts_ = config.num_experts_
         self.topk_ = config.top_k_
         self.router_profile_: bool = False
@@ -187,14 +187,14 @@ class SwitchRouterLoss(torch.nn.Module):
 
 
 class SwitchSparseMoe(torch.nn.Module):
-    def __init__(self, in_features: int, config: MixConfig) -> None:
+    def __init__(self, args: LLMModelArgs, config: MixConfig) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
         self.dtype_: torch.dtype = torch.float32
         self.gate_ = torch.nn.Linear(
-            in_features, config.num_experts_, bias=False, device=config.device, dtype=self.dtype_)
-        self.act_ = ACT2FN[config.act_fn_]
+            args.dim_, config.num_experts_, bias=False, device=config.device, dtype=self.dtype_)
+        self.act_ = ACT2FN[args.hidden_act_ if config.act_fn_ is None else config.act_fn_]
         self.experts_: int = config.num_experts_
         self.dropout_ = torch.nn.Dropout(
             config.ffn_dropout_) if config.ffn_dropout_ > 0 else torch.nn.Identity()
@@ -263,8 +263,8 @@ moe_layer_dict = {
 }
 
 
-def moe_layer_factory(in_features: int, config: MixConfig) -> torch.nn.Module:
+def moe_layer_factory(args: LLMModelArgs, config: MixConfig) -> torch.nn.Module:
     if config.routing_strategy_ not in router_loss_dict:
         raise ValueError(
             f"Unknown routing strategy {config.routing_strategy_}")
-    return moe_layer_dict[config.routing_strategy_](in_features, config)
+    return moe_layer_dict[config.routing_strategy_](args, config)

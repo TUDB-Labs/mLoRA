@@ -8,6 +8,7 @@ from .common import (
     MultiTask,
     task_dict,
 )
+from .qa_tasks import QuestionAnswerTask
 from . import glue_tasks, qa_tasks
 
 glue_tasks.update_task_dict(task_dict)
@@ -21,6 +22,7 @@ __all__ = [
     "CasualTask",
     "SequenceClassificationTask",
     "CommonSenseTask",
+    "QuestionAnswerTask",
     "MultiTask",
     "task_dict"
 ]

@@ -127,7 +127,7 @@ python generate.py \
 If MixLoRA has been useful for your work, please consider citing it using the appropriate citation format for your publication.
 ```bibtex
 @misc{MixLoRA,
-  author = {Dengchun, Li and Yingzi, Ma and Naizheng, Wang and Lei, Duan and Jie, Zuo and Mingjie, Tang},
+  author = {Dengchun, Li and Yingzi, Ma and Naizheng, Wang and Zhiyuan, Cheng and Lei, Duan and Jie, Zuo and Mingjie, Tang},
   title = {MixLoRA: Enhancing Large Language Models Fine-Tuning with LoRA based Mixture of Experts},
   year = {2024},
   publisher = {GitHub},
@@ -135,7 +135,7 @@ If MixLoRA has been useful for your work, please consider citing it using the ap
 }
 
 @misc{alpaca-mixlora-7b,
-  author = {Dengchun, Li and Yingzi, Ma and Naizheng, Wang and Lei, Duan and Jie, Zuo and Mingjie, Tang},
+  author = {Dengchun, Li and Yingzi, Ma and Naizheng, Wang and Zhiyuan, Cheng and Lei, Duan and Jie, Zuo and Mingjie, Tang},
   title = {MixLoRA LoRA MoE adapter based on AlpacaCleaned dataset and LLaMA-2-7B base model},
   year = {2024},
   publisher = {HuggingFace Hub},

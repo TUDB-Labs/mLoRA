@@ -136,8 +136,8 @@ def init_lora_layer_weight(
     if isinstance(config, MixConfig):
         # Inject LoRA configs into FFN layer
         gate_layer_name = f"mixlora.layers.{layer.layer_id_}.gate.weight"
-        layer.mlp_.init_moe_weight(in_features=args.dim_, config=config,
-                                   gate=weight if weight is None else weight[gate_layer_name])
+        layer.mlp_.init_moe_weight(args=args, config=config,
+                                   gate=None if weight is None else weight[gate_layer_name])
 
         moe_layer_name_list = list(layer.mlp_.state_dict().keys())
         init_moe = True

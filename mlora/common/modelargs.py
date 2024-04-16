@@ -201,7 +201,8 @@ class MixConfig(LoraConfig):
         assert isinstance(self.routing_strategy_,
                           str) and self.routing_strategy_ in available_routing_strategies
         assert isinstance(self.num_experts_, int) and self.num_experts_ > 0
-        assert isinstance(self.act_fn_, str) and self.act_fn_ in ACT2FN
+        assert self.act_fn_ is None or (isinstance(
+            self.act_fn_, str) and self.act_fn_ in ACT2FN)
         if self.routing_strategy_ == "mixtral":
             assert isinstance(self.top_k_, int) and self.top_k_ > 0
         elif self.routing_strategy_ == "switch":
@@ -228,7 +229,8 @@ class MixConfig(LoraConfig):
         self.routing_strategy_ = config["routing_strategy"]
         self.num_experts_ = config["num_experts"]
         # silu for mixtral or gelu_new for switch transformers
-        self.act_fn_ = config.get("act_fn", "silu")
+        # left blank to automatically use the original act_fn of FFN
+        self.act_fn_ = config.get("act_fn", None)
         if self.routing_strategy_ == "mixtral":
             self.top_k_ = config.get("top_k", 2)
         elif self.routing_strategy_ == "switch":
@@ -252,7 +254,8 @@ class MixConfig(LoraConfig):
             config["expert_lora"] = expert_config
         config["routing_strategy"] = self.routing_strategy_
         config["num_experts"] = self.num_experts_
-        config["act_fn"] = self.act_fn_
+        if self.act_fn_ is not None:
+            config["act_fn"] = self.act_fn_
         if self.routing_strategy_ == "mixtral":
             config["top_k"] = self.top_k_
         elif self.routing_strategy_ == "switch":

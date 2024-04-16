@@ -29,7 +29,6 @@
             },
             "routing_strategy": "mixtral",
             "num_experts": 8,
-            "act_fn": "silu",
             "top_k": 2,
             "group_by_length": false,
             "expand_side": "right"
