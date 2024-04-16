@@ -27,7 +27,7 @@ parser.add_argument('--lora_cnt', type=int, default=4,
 # test configure
 parser.add_argument('--warmup', type=int, default=100,
                     help="The step of warm up")
-parser.add_argument('--repete', type=int, default=100,
+parser.add_argument('--repeat', type=int, default=100,
                     help="Total test iteration")
 parser.add_argument('--seq_len', type=int, default=128,
                     help="The length of the sequence")
@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
     setup_trace_mode()
 
-    for _ in range(0, args.repete):
+    for _ in range(0, args.repeat):
         output = model.forward(input_data)
         with nvtx_range("f_calc_loss"):
             total_loss = calc_loss(input_data, output)
