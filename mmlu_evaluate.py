@@ -261,7 +261,7 @@ def do_evaluate(model_name: str,
     for subject, subcategory in mmlu_subcategories.items():
         logging.info(f"Performing MMLU/{subject} Benchmark")
         results = evaluate(subject, tokenizer, model,
-                           adapter_names, batch_size, model.max_seq_len_)
+                           adapter_names, batch_size, model.config_.max_seq_len_)
         category = None
         for category_name, subcategory_names in mmlu_categories.items():
             if subcategory[-1] in subcategory_names:
