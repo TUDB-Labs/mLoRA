@@ -22,7 +22,7 @@ from .utils import is_package_available
 assert is_package_available(
     "torch", "2.1.2"), "m-LoRA requires torch>=2.1.2"
 assert is_package_available(
-    "transformers", "4.38.2"), "m-LoRA requires transformers>=4.38.2"
+    "transformers", "4.40.0"), "m-LoRA requires transformers>=4.40.0"
 
 
 setup_logging()

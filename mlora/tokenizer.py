@@ -3,6 +3,8 @@ from .common import Tokens, Masks
 from transformers import AutoTokenizer
 from typing import List, Union
 
+import logging
+
 
 class Tokenizer:
     def __init__(self, model_path: str):
@@ -15,6 +17,12 @@ class Tokenizer:
         # maybe pad id is unk
         if self.pad_id_ is None and self.unk_id_ is not None:
             self.pad_id_ = self.unk_id_
+        if self.pad_id_ is None and self.eos_id_ is not None:
+            self.pad_id_ = self.eos_id_
+            logging.warn("Padding token ID is None, setting to <eos>.")
+        else:
+            raise ValueError(
+                "Can not set padding token id. <eos> and <unk> are None.")
 
     def encode(self, data: Union[str, List[str]], add_special_tokens: bool = True) -> Tokens:
         if isinstance(data, str):

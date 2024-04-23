@@ -9,9 +9,9 @@
         {
             "name": "lora_0",
             "optim": "adamw",
-            "lr": 3e-4,
+            "lr": 1e-4,
             "batch_size": 64,
-            "micro_batch_size": 32,
+            "micro_batch_size": 16,
             "test_batch_size": 64,
             "num_epochs": 20,
             "use_dora": true,
@@ -35,9 +35,9 @@
         {
             "name": "lora_1",
             "optim": "adamw",
-            "lr": 3e-4,
+            "lr": 1e-4,
             "batch_size": 64,
-            "micro_batch_size": 32,
+            "micro_batch_size": 16,
             "test_batch_size": 64,
             "num_epochs": 20,
             "r": 8,
