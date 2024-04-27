@@ -254,7 +254,10 @@ def router_loss_factory(config: MixConfig) -> torch.nn.Module:
     if config.routing_strategy_ not in router_loss_dict:
         raise ValueError(
             f"Unknown routing strategy {config.routing_strategy_}")
-    return router_loss_dict[config.routing_strategy_](config)
+    if config.router_loss_:
+        return router_loss_dict[config.routing_strategy_](config)
+    else:
+        return None
 
 
 moe_layer_dict = {

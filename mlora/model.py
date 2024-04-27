@@ -272,7 +272,8 @@ class LLMModel(torch.nn.Module):
             # compute router loss when router logits is available
             loss_fn = router_loss_factory(
                 self.adapter_configs_[output_data.adapter_name])
-            output_data.aux_loss = loss_fn(router_logits[idx])
+            if loss_fn is not None:
+                output_data.aux_loss = loss_fn(router_logits[idx])
 
         return output
 
