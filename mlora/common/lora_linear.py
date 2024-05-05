@@ -93,8 +93,7 @@ class LoraFunction(torch.autograd.Function):
 
             lora_data = drop_data @ lora_b.transpose(0, 1)
 
-            result.index_add_(
-                dim=0, index=lora_range[start_idx:end_idx], source=lora_data)
+            result.index_add_(0, lora_range[start_idx:end_idx], lora_data)
 
             save_inputs += (lora_a, lora_b, drop_data)
 
@@ -114,13 +113,12 @@ class LoraFunction(torch.autograd.Function):
         grad_scalings = None
         grad_loras = ()
 
-        data = ctx.saved_tensors[0]
-        loras = ctx.saved_tensors[1:]
+        data, *loras = ctx.saved_tensors
 
         if ctx.needs_input_grad[0]:
             grad_result = grad_output
         if ctx.needs_input_grad[1]:
-            grad_data = torch.empty_like(data)
+            grad_data = torch.zeros_like(data)
 
         lora_range = get_range_tensor(
             grad_output.device, batch_size=grad_output.shape[0])
@@ -135,8 +133,6 @@ class LoraFunction(torch.autograd.Function):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 grad_loras += (None, None)
-                grad_data.index_fill_(
-                    dim=0, index=lora_range[start_idx:end_idx], value=0)
                 continue
 
             # lora_data shape is batch_size * seq_len * in_dim
@@ -156,7 +152,8 @@ class LoraFunction(torch.autograd.Function):
 
             # grad_data shape is batch_size * seq_len * in_dim
             if grad_data is not None:
-                grad_data[start_idx:end_idx] = bstage @ lora_a
+                grad_data.index_add_(
+                    0, lora_range[start_idx:end_idx], bstage @ lora_a)
 
         return grad_result, grad_data, grad_input_args, grad_dropouts, grad_scalings, *grad_loras
 
@@ -244,13 +241,13 @@ class Lora(nn.Module):
             weight = weight.to(torch.float32)
         weight_norm = self._get_weight_norm(weight).detach()
         mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
-        return (mag_norm_scale - 1) * residual + mag_norm_scale * result_lora
+        return mag_norm_scale * residual + mag_norm_scale * result_lora
 
     def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         result_lora = self.lora_b_(self.lora_a_(self.dropout_(
             hidden_states.to(torch.float32)))) * self.scaling_
         if self.use_dora_:
-            return self.apply_dora(residual, result_lora, hidden_states).to(residual.dtype)
+            return self.apply_dora(residual, result_lora, hidden_states).to(hidden_states.dtype)
         else:
             return residual + result_lora.to(residual.dtype)
 
@@ -292,7 +289,9 @@ class Linear(nn.Module):
                    lora_delta: torch.Tensor,
                    hidden_states: torch.Tensor,
                    input_args: MultiLoraBatchData):
-        next_states = residual.clone()
+        next_states = torch.zeros_like(residual)
+        lora_range = get_range_tensor(
+            next_states.device, batch_size=next_states.shape[0])
         for lora_config in input_args.lora_batch_data_config_:
             adapter_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
@@ -301,14 +300,12 @@ class Linear(nn.Module):
             if adapter_name == "" or adapter_name not in self.loras_:
                 continue
 
-            lora_range = get_range_tensor(
-                next_states.device, batch_size=next_states.shape[0])[start_idx:end_idx]
             if self.loras_[adapter_name].use_dora_:
-                next_states.index_add_(0, lora_range, self.loras_[adapter_name].apply_dora(
+                next_states.index_add_(0, lora_range[start_idx:end_idx], self.loras_[adapter_name].apply_dora(
                     residual[start_idx:end_idx], lora_delta[start_idx:end_idx], hidden_states[start_idx:end_idx]))
             else:
                 next_states.index_add_(
-                    0, lora_range, lora_delta[start_idx:end_idx])
+                    0, lora_range[start_idx:end_idx], residual[start_idx:end_idx] + lora_delta[start_idx:end_idx])
 
         return next_states
 
