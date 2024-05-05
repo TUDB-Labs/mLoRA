@@ -250,7 +250,7 @@ class Lora(nn.Module):
         result_lora = self.lora_b_(self.lora_a_(self.dropout_(
             hidden_states.to(torch.float32)))) * self.scaling_
         if self.use_dora_:
-            return self.apply_dora(residual, result_lora, hidden_states)
+            return self.apply_dora(residual, result_lora, hidden_states).to(residual.dtype)
         else:
             return residual + result_lora.to(residual.dtype)
 
