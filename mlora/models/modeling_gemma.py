@@ -1,5 +1,5 @@
 from mlora.common import (
-    CheckpointRecomputeFunction as CheckpointFunction,
+    CHECKPOINT_CLASSES,
     FeedForward,
 )
 from mlora.models.modeling_llama import (
@@ -68,19 +68,18 @@ class GemmaSequentialWrapper(nn.Module):
 
         if module_name == "GemmaEmbedding":
             output = self.wrapper_module_.forward(input[0])
-            if input[-1]:
+            if input[-1].gradient_checkpoint_ != "none":
                 output = output.requires_grad_(True)
-            return (output, ) + input[1:]
+            return (output,) + input[1:]
         elif module_name == "GemmaRMSNorm":
             output = self.wrapper_module_.forward(input[0])
-            return (output, ) + input[1:]
+            return (output,) + input[1:]
         elif module_name == "LlamaDecoderLayer":
-            if input[-1]:
-                output = CheckpointFunction.apply(
-                    self.wrapper_module_.forward, *input[:-1])
-            else:
-                output = self.wrapper_module_.forward(*input[:-1])
-            return (output, ) + input[1:]
+            outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
+                self.wrapper_module_.forward, *input)
+            if len(outputs) > 1:
+                self.router_probs_ = outputs[1:]
+            return (outputs[0],) + input[1:]
         else:
             raise f"module invalid: {module_name}"
 
@@ -144,14 +143,12 @@ class GemmaForCausalLM(LlamaForCausalLM):
         copy_parameters(llm_model.lm_head, model.lm_head_)
 
         for idx, layer in enumerate(llm_model.model.layers):
-            decoder = LlamaDecoderLayer()
-            decoder.layer_id_ = idx
+            decoder = LlamaDecoderLayer(idx)
             decoder.self_attn_ = GEMMA_ATTENTION_CLASSES[llm_args.attn_implementation_](
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
                 layer.self_attn.o_proj,
-                idx,
                 llm_args,
             )
             decoder.mlp_ = FeedForward(LlamaMLP(

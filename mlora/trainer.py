@@ -156,11 +156,11 @@ def train(dispatcher: Dispatcher,
 
     step_cnt = 0
     while not dispatcher.check_task_done():
-        labels, input = dispatcher.get_train_data()
+        input_args = dispatcher.get_train_data()
 
         step_cnt += 1
 
-        outputs = model.forward(input, labels)
+        outputs = model.forward(input_args)
 
         total_loss = None
         for output in outputs:

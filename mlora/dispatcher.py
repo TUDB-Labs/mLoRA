@@ -350,6 +350,8 @@ class Dispatcher():
 
         self.__dispatch_task_out()
 
-        return batch_labels, MultiLoraBatchData(lora_batch_data_config_=lora_batch_data_config,
-                                                batch_tokens_=batch_tokens,
-                                                attention_masks_=attention_masks)
+        return MultiLoraBatchData(lora_batch_data_config_=lora_batch_data_config,
+                                  batch_tokens_=batch_tokens,
+                                  batch_labels_=batch_labels,
+                                  attention_masks_=attention_masks,
+                                  gradient_checkpoint_="recompute")

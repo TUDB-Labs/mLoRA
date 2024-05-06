@@ -140,8 +140,7 @@ def evaluate(subject: str,
             batch_tokens_=batch_tokens[start_pos:end_pos] * len(adapter_names),
             attention_masks_=atten_masks[start_pos:end_pos] *
             len(adapter_names),
-            gradient_checkpoint_=False,
-            inference_seq_pos_=-1 if batch_size > 1 else 0,
+            inference_mode_=True,
         )
 
         outputs = model.forward(input_args)

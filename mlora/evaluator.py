@@ -116,7 +116,7 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
                 lora_batch_data_config_=batch_data_config,
                 batch_tokens_=batch_tokens,
                 attention_masks_=atten_masks,
-                gradient_checkpoint_=False))
+                inference_mode_=True))
 
 
 def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, outputs):

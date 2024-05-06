@@ -182,7 +182,8 @@ def generate(model: LLMModel,
         input_data = MultiLoraBatchData(
             lora_batch_data_config_=batch_data_config,
             batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
-            inference_seq_pos_=prev_pos)
+            diagonal_pos_=prev_pos + 1,
+            inference_mode_=True)
         outputs = model.forward(input_data)
         for output in outputs:
             config = config_dict[output.adapter_name]

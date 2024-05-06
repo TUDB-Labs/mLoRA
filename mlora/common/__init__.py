@@ -14,6 +14,7 @@ from .attention import (
 from .checkpoint import (
     CheckpointOffloadFunction,
     CheckpointRecomputeFunction,
+    CHECKPOINT_CLASSES,
 )
 from .feed_forward import FeedForward
 # LoRA
@@ -73,6 +74,7 @@ __all__ = [
     "xformers_attention",
     "CheckpointOffloadFunction",
     "CheckpointRecomputeFunction",
+    "CHECKPOINT_CLASSES",
     "FeedForward",
     "is_quantized",
     "get_range_tensor",

@@ -3,7 +3,7 @@ from .lora_linear import get_range_tensor, Linear
 from .mix_lora import moe_layer_factory
 from .model import LLMFeedForward
 
-from typing import Dict, List, Optional
+from typing import Tuple, Dict, List, Optional
 import torch
 
 
@@ -17,12 +17,11 @@ class FeedForward(torch.nn.Module):
     def state_dict(self) -> Dict[str, Linear]:
         return self.mlp_.state_dict()
 
-    def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData,
-                router_logits: List[List] = None) -> torch.Tensor:
+    def forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> Tuple[torch.Tensor, List]:
         if len(self.moes_) == 0:
-            return self.mlp_._batch_forward(data, input_args)
+            return self.mlp_._batch_forward(data, input_args), []
         else:
-            return self._mixlora_forward(data, input_args, router_logits)
+            return self._mixlora_forward(data, input_args)
 
     # MixLoRA
     def init_moe_weight(self, args: LLMModelArgs, config: MixConfig, gate: Optional[torch.Tensor] = None):
@@ -38,11 +37,16 @@ class FeedForward(torch.nn.Module):
         lora_name = f"moe.{moe_name}.experts.{expert_idx}"
         return self.mlp_._lora_forward(lora_name, act_fn, data)
 
-    def _mixlora_forward(self, data: torch.Tensor, input_args: MultiLoraBatchData,
-                         router_logits: List[List] = None):
-        batch_size, sequence_length, hidden_dim = data.shape
-        final_hidden_states = torch.zeros(
-            (batch_size, sequence_length, hidden_dim), dtype=data.dtype, device=data.device)
+    def _mixlora_forward(self, data: torch.Tensor, input_args: MultiLoraBatchData):
+        final_hidden_states = torch.zeros_like(data)
+
+        if input_args.output_router_logits_:
+            router_logits = [None for _ in range(
+                len(input_args.lora_batch_data_config_))]
+        else:
+            router_logits = []
+
+        lora_range = get_range_tensor(data.device, data.shape[0])
         for idx, lora_config in enumerate(input_args.lora_batch_data_config_):
             moe_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
@@ -52,13 +56,13 @@ class FeedForward(torch.nn.Module):
                 current_hidden_states, current_router_outputs = self.moes_[
                     moe_name].forward(self._expert_forward_callback, data[start_idx:end_idx])
 
-                if router_logits is not None and current_router_outputs is not None:
-                    router_logits[idx].append(current_router_outputs)
+                if input_args.output_router_logits_ and current_router_outputs is not None:
+                    router_logits[idx] = current_router_outputs
             else:
                 current_hidden_states = self.mlp_._lora_forward(
                     moe_name, self.act_, data[start_idx:end_idx])
 
-            final_hidden_states.index_add_(0, get_range_tensor(data.device, batch_size)[
-                                           start_idx:end_idx], current_hidden_states)
+            final_hidden_states.index_add_(
+                0, lora_range[start_idx:end_idx], current_hidden_states)
 
-        return final_hidden_states
+        return final_hidden_states, router_logits

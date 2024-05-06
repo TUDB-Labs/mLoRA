@@ -12,7 +12,7 @@ from mlora.common import (
     Linear,
     FeedForward,
     MultiLoraBatchData,
-    CheckpointRecomputeFunction as CheckpointFunction,
+    CHECKPOINT_CLASSES,
     LLMModelArgs,
     LLMAttention,
     LLMFeedForward,
@@ -69,8 +69,7 @@ def apply_partial_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, rotary_emb_dim:
 
 # Multi-headed attention from 'Attention Is All You Need' paper.
 class PhiAttention(LLMAttention):
-    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module,
-                 layer_idx: int, args: PhiConfig):
+    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module, args: PhiConfig):
         super().__init__()
         # attention
         self.wq_: Linear = Linear(q_proj, args.device_)
@@ -78,7 +77,6 @@ class PhiAttention(LLMAttention):
         self.wv_: Linear = Linear(v_proj, args.device_)
         self.dense_: Linear = Linear(dense, args.device_)
         # config
-        self.layer_id_ = layer_idx
         self.dim_ = args.dim_
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
@@ -153,10 +151,9 @@ class PhiAttention(LLMAttention):
 
 
 class PhiXformersAttention(PhiAttention):
-    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module,
-                 layer_idx: int, args: PhiConfig):
+    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module, args: PhiConfig):
         assert _xformers_available, "xFormers Attention is not available"
-        super().__init__(q_proj, k_proj, v_proj, dense, layer_idx, args)
+        super().__init__(q_proj, k_proj, v_proj, dense, args)
 
     def forward(self,
                 hidden_states: torch.Tensor,
@@ -199,10 +196,9 @@ class PhiXformersAttention(PhiAttention):
 
 
 class PhiFlashAttention2(PhiAttention):
-    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module,
-                 layer_idx: int, args: PhiConfig):
+    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module, args: PhiConfig):
         assert _flash_attn_available, "Flash Attention is not available"
-        super().__init__(q_proj, k_proj, v_proj, dense, layer_idx, args)
+        super().__init__(q_proj, k_proj, v_proj, dense, args)
 
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
@@ -385,9 +381,9 @@ class PhiMLP(LLMFeedForward):
 
 
 class PhiDecoderLayer(LLMDecoder):
-    def __init__(self, self_attn: LLMAttention, mlp: FeedForward, args: PhiConfig) -> None:
+    def __init__(self, layer_id: int, self_attn: LLMAttention, mlp: FeedForward, args: PhiConfig) -> None:
         super().__init__()
-        self.layer_id_: int = self_attn.layer_id_
+        self.layer_id_: int = layer_id
         self.self_attn_ = self_attn
         self.mlp_ = mlp
         self.input_layernorm_ = nn.LayerNorm(
@@ -401,9 +397,8 @@ class PhiDecoderLayer(LLMDecoder):
 
     def forward(self,
                 hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None,
-                router_logits: Optional[List[List]] = None):
+                attention_mask: torch.Tensor,
+                input_args: MultiLoraBatchData):
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
         # Self Attention
@@ -412,13 +407,13 @@ class PhiDecoderLayer(LLMDecoder):
         attn_outputs = F.dropout(
             attn_outputs, self.resid_pdrop_, not input_args.inference_mode_)
         # Fully Connected
-        feed_forward_outputs = self.mlp_.forward(
-            hidden_states, input_args, router_logits)
+        feed_forward_outputs, router_logits = self.mlp_.forward(
+            hidden_states, input_args)
         feed_forward_outputs = F.dropout(
             feed_forward_outputs, self.resid_pdrop_, not input_args.inference_mode_)
         hidden_states = attn_outputs + feed_forward_outputs + residual
 
-        return hidden_states
+        return hidden_states, *router_logits
 
 
 class PhiEmbedding(nn.Module):
@@ -456,19 +451,18 @@ class PhiSequentialWrapper(nn.Module):
 
         if module_name == "PhiEmbedding":
             output = self.wrapper_module_.forward(input[0])
-            if input[-1]:
+            if input[-1].gradient_checkpoint_ != "none":
                 output = output.requires_grad_(True)
-            return (output, ) + input[1:]
+            return (output,) + input[1:]
         elif module_name == "PhiLayerNorm":
             output = self.wrapper_module_.forward(input[0])
-            return (output, ) + input[1:]
+            return (output,) + input[1:]
         elif module_name == "PhiDecoderLayer":
-            if input[-1]:
-                output = CheckpointFunction.apply(
-                    self.wrapper_module_.forward, *input[:-1])
-            else:
-                output = self.wrapper_module_.forward(*input[:-1])
-            return (output, ) + input[1:]
+            outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
+                self.wrapper_module_.forward, *input)
+            if len(outputs) > 1:
+                self.router_probs_ = outputs[1:]
+            return (outputs[0],) + input[1:]
         else:
             raise f"module invalid: {module_name}"
 
@@ -563,12 +557,12 @@ class PhiForCausalLM(LLMForCausalLM):
 
         for idx, layer in enumerate(llm_model.model.layers):
             decoder = PhiDecoderLayer(
+                idx,
                 PHI_ATTENTION_CLASSES[llm_args.attn_implementation_](
                     layer.self_attn.q_proj,
                     layer.self_attn.k_proj,
                     layer.self_attn.v_proj,
                     layer.self_attn.dense,
-                    idx,
                     llm_args,
                 ),
                 FeedForward(PhiMLP(

@@ -309,7 +309,7 @@ class Linear(nn.Module):
 
         return next_states
 
-    def forward(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def _efficient_impl(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
         # hidden_states shape is: batch_size * max_seq_len * dim
         # result = hidden_states @ self.weight_.transpose(0, 1)
         residual = self.base_layer_.forward(hidden_states)
@@ -348,3 +348,35 @@ class Linear(nn.Module):
                 residual.to(torch.float32), hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
 
         return next_states.to(hidden_states.dtype)
+
+    def _compatible_impl(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+        # hidden_states shape is: batch_size * max_seq_len * dim
+        # result = hidden_states @ self.weight_.transpose(0, 1)
+        residual = self.base_layer_.forward(hidden_states)
+
+        if len(self.loras_) == 0:
+            return residual
+
+        next_states = torch.zeros_like(residual)
+        lora_range = get_range_tensor(
+            hidden_states.device, hidden_states.shape[0])
+
+        for lora_config in input_args.lora_batch_data_config_:
+            adapter_name = lora_config.adapter_name_
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
+
+            if adapter_name == "" or adapter_name not in self.loras_:
+                continue
+
+            lora_data = self.loras_[adapter_name].forward(
+                residual[start_idx: end_idx], hidden_states[start_idx:end_idx])
+            next_states.index_add_(0, lora_range[start_idx:end_idx], lora_data)
+
+        return next_states
+
+    def forward(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+        if input_args.efficient_operator_:
+            return self._efficient_impl(hidden_states, input_args)
+        else:
+            return self._compatible_impl(hidden_states, input_args)

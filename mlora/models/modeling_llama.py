@@ -12,7 +12,7 @@ from mlora.common import (
     Linear,
     FeedForward,
     MultiLoraBatchData,
-    CheckpointRecomputeFunction as CheckpointFunction,
+    CHECKPOINT_CLASSES,
     LLMModelArgs,
     LLMAttention,
     LLMFeedForward,
@@ -44,8 +44,7 @@ class LlamaConfig(LLMModelArgs):
 
 # Multi-headed attention from 'Attention Is All You Need' paper.
 class LlamaAttention(LLMAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module,
-                 layer_idx: int, args: LlamaConfig):
+    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: LlamaConfig):
         super().__init__()
         # attention
         self.wq_: Linear = Linear(wq, args.device_)  # dim * dim
@@ -56,7 +55,6 @@ class LlamaAttention(LLMAttention):
         self.cos_, self.sin_ = precompute_rope_angle(
             args.dim_ // args.n_heads_, args.max_seq_len_, args.rope_theta_, args.device_)
         # config
-        self.layer_id_ = layer_idx
         self.dim_ = args.dim_
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
@@ -111,10 +109,9 @@ class LlamaAttention(LLMAttention):
 
 
 class LlamaXformersAttention(LlamaAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module,
-                 layer_idx: int, args: LlamaConfig):
+    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: LlamaConfig):
         assert _xformers_available, "xFormers Attention is not available"
-        super().__init__(wq, wk, wv, wo, layer_idx, args)
+        super().__init__(wq, wk, wv, wo, args)
 
     def forward(self,
                 hidden_states: torch.Tensor,
@@ -154,10 +151,9 @@ class LlamaXformersAttention(LlamaAttention):
 
 
 class LlamaFlashAttention(LlamaAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module,
-                 layer_idx: int, args: LlamaConfig):
+    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: LlamaConfig):
         assert _flash_attn_available, "Flash Attention is not available"
-        super().__init__(wq, wk, wv, wo, layer_idx, args)
+        super().__init__(wq, wk, wv, wo, args)
 
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
@@ -355,9 +351,9 @@ class LlamaRMSNorm(nn.Module):
 
 
 class LlamaDecoderLayer(LLMDecoder):
-    def __init__(self) -> None:
+    def __init__(self, layer_id: int) -> None:
         super().__init__()
-        self.layer_id_: int = None
+        self.layer_id_: int = layer_id
         self.self_attn_: LlamaAttention = None
         self.mlp_: FeedForward = None
         self.input_layernorm_: LlamaRMSNorm = None
@@ -370,9 +366,9 @@ class LlamaDecoderLayer(LLMDecoder):
 
     def forward(self,
                 hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None,
-                router_logits: Optional[List[List]] = None):
+                attention_mask: torch.Tensor,
+                input_args: MultiLoraBatchData):
+
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
         # Self Attention
@@ -382,11 +378,11 @@ class LlamaDecoderLayer(LLMDecoder):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm_(hidden_states)
-        hidden_states = self.mlp_.forward(
-            hidden_states, input_args, router_logits)
+        hidden_states, router_logits = self.mlp_.forward(
+            hidden_states, input_args)
         hidden_states = residual + hidden_states
 
-        return hidden_states
+        return hidden_states, *router_logits
 
 
 class LlamaEmbedding(nn.Module):
@@ -414,19 +410,18 @@ class LlamaSequentialWrapper(nn.Module):
 
         if module_name == "LlamaEmbedding":
             output = self.wrapper_module_.forward(input[0])
-            if input[-1]:
+            if input[-1].gradient_checkpoint_ != "none":
                 output = output.requires_grad_(True)
-            return (output, ) + input[1:]
+            return (output,) + input[1:]
         elif module_name == "LlamaRMSNorm":
             output = self.wrapper_module_.forward(input[0])
-            return (output, ) + input[1:]
+            return (output,) + input[1:]
         elif module_name == "LlamaDecoderLayer":
-            if input[-1]:
-                output = CheckpointFunction.apply(
-                    self.wrapper_module_.forward, *input[:-1])
-            else:
-                output = self.wrapper_module_.forward(*input[:-1])
-            return (output, ) + input[1:]
+            outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
+                self.wrapper_module_.forward, *input)
+            if len(outputs) > 1:
+                self.router_probs_ = outputs[1:]
+            return (outputs[0],) + input[1:]
         else:
             raise f"module invalid: {module_name}"
 
@@ -515,14 +510,12 @@ class LlamaForCausalLM(LLMForCausalLM):
         copy_parameters(llm_model.lm_head, model.lm_head_)
 
         for idx, layer in enumerate(llm_model.model.layers):
-            decoder = LlamaDecoderLayer()
-            decoder.layer_id_ = idx
+            decoder = LlamaDecoderLayer(idx)
             decoder.self_attn_ = LLAMA_ATTENTION_CLASSES[llm_args.attn_implementation_](
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
                 layer.self_attn.o_proj,
-                idx,
                 llm_args,
             )
             decoder.mlp_ = FeedForward(LlamaMLP(

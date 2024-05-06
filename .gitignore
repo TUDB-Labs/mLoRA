@@ -178,3 +178,7 @@ data_train.json
 
 # macOS junk files
 .DS_Store
+
+# LoRA adapters
+adapter_model.bin
+adapter_config.json

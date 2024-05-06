@@ -40,10 +40,9 @@ class MistralConfig(LlamaConfig):
 
 
 class MistralFlashAttention(LlamaAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module,
-                 layer_idx: int, args: MistralConfig):
+    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: MistralConfig):
         assert _flash_attn_available, "Flash Attention is not available"
-        super().__init__(wq, wk, wv, wo, layer_idx, args)
+        super().__init__(wq, wk, wv, wo, args)
         # Qwen2
         self.use_sliding_window_ = args.use_sliding_window_
         self.max_window_layers_ = args.max_window_layers_
@@ -297,14 +296,12 @@ class MistralForCausalLM(LlamaForCausalLM):
         copy_parameters(llm_model.lm_head, model.lm_head_)
 
         for idx, layer in enumerate(llm_model.model.layers):
-            decoder = LlamaDecoderLayer()
-            decoder.layer_id_ = idx
+            decoder = LlamaDecoderLayer(idx)
             decoder.self_attn_ = MISTRAL_ATTENTION_CLASSES[llm_args.attn_implementation_](
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
                 layer.self_attn.o_proj,
-                idx,
                 llm_args,
             )
             decoder.mlp_ = FeedForward(LlamaMLP(
