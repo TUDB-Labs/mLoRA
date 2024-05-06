@@ -55,7 +55,7 @@ class ARC(QuestionAnswerTask):
         return ret
 
 
-class Boolq(QuestionAnswerTask):
+class BoolQ(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["true", "false"])
 
@@ -144,11 +144,107 @@ class PIQA(QuestionAnswerTask):
         return ret
 
 
+class SIQA(QuestionAnswerTask):
+    def __init__(self) -> None:
+        super().__init__(["A", "B", "C"])
+
+    def loading_data(self,
+                     tokenizer: Tokenizer,
+                     is_train: bool = True) -> List[DataClass]:
+        data = hf_datasets.load_dataset(
+            "social_i_qa")["train" if is_train else "validation"]
+        logging.info("Preparing data for SIQA")
+        ret: List[DataClass] = []
+        for idx, data_point in enumerate(data):
+            prompt = "Please choose the correct answer to the question.\n"
+            prompt += f"Question: {data_point['context']} {data_point['question']}"
+            prompt += f"\n(A) {data_point['answerA']}"
+            prompt += f"\n(B) {data_point['answerB']}"
+            prompt += f"\n(C) {data_point['answerC']}"
+            prompt += "\nAnswer:"
+            label = int(data_point['label']) - 1
+            if is_train:
+                prompt += f" {self.labels_[label]}"
+                labels = None
+            else:
+                labels = [label]
+            tokens = tokenizer.encode(data=prompt)
+            ret.append(DataClass(tokens_=tokens, labels_=labels))
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return ret
+
+
+class HellaSwag(QuestionAnswerTask):
+    def __init__(self) -> None:
+        super().__init__(["A", "B", "C", "D"])
+
+    def loading_data(self,
+                     tokenizer: Tokenizer,
+                     is_train: bool = True) -> List[DataClass]:
+        data = hf_datasets.load_dataset(
+            "Rowan/hellaswag")["train" if is_train else "validation"]
+        logging.info("Preparing data for HellaSwag")
+        ret: List[DataClass] = []
+        for idx, data_point in enumerate(data):
+            prompt = "Please choose the correct ending to complete the given sentence.\n"
+            prompt += f"Sentence: {data_point['activity_label']}. {data_point['ctx']}"
+            for label, text in enumerate(data_point["endings"]):
+                prompt += f"\n({self.labels_[label]}) {text}"
+            prompt += "\nAnswer:"
+            label = int(data_point["label"])
+            if is_train:
+                prompt += f" {self.labels_[label]}"
+                labels = None
+            else:
+                labels = [label]
+            tokens = tokenizer.encode(data=prompt)
+            ret.append(DataClass(tokens_=tokens, labels_=labels))
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return ret
+
+
+class WinoGrande(QuestionAnswerTask):
+    def __init__(self) -> None:
+        super().__init__(["A", "B"])
+
+    def loading_data(self,
+                     tokenizer: Tokenizer,
+                     is_train: bool = True) -> List[DataClass]:
+        data = hf_datasets.load_dataset(
+            "winogrande", "winogrande_debiased")["train" if is_train else "validation"]
+        logging.info("Preparing data for WinoGrande")
+        ret: List[DataClass] = []
+        for idx, data_point in enumerate(data):
+            prompt = "Please choose the correct answer to fill in the blank to complete the given sentence.\n"
+            prompt += f"Sentence: {data_point['sentence']}"
+            prompt += f"\n(A) {data_point['option1']}\n(B) {data_point['option2']}"
+            prompt += "\nAnswer:"
+            label = int(data_point["answer"]) - 1
+            if is_train:
+                prompt += f" {self.labels_[label]}"
+                labels = None
+            else:
+                labels = [label]
+            tokens = tokenizer.encode(data=prompt)
+            ret.append(DataClass(tokens_=tokens, labels_=labels))
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return ret
+
+
 def update_task_dict(task_dict):
     task_dict.update({
         "arc-e": ARC("ARC-Easy"),
         "arc-c": ARC("ARC-Challenge"),
-        "boolq": Boolq(),
+        "boolq": BoolQ(),
         "obqa": OpenBookQA(),
         "piqa": PIQA(),
+        "siqa": SIQA(),
+        "hellaswag": HellaSwag(),
+        "winogrande": WinoGrande(),
     })
