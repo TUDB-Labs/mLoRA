@@ -53,7 +53,7 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 | &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0`        |
 | &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `use_dora: true`                 |
 | &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `use_rslora: true`               |
-| &check; | MixLoRA                                                  | See [MixLoRA](./docs/MixLoRA.md) |
+| &check; | [MixLoRA](https://arxiv.org/abs/2404.15159)              | See [MixLoRA](./docs/MixLoRA.md) |
 
 *: Arguments of configuration file
 

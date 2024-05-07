@@ -60,8 +60,8 @@ MixLoRA have two routing strategies: top-k routing (like *Mixtral*) and top-1 sw
   "routing_strategy": "mixtral",
   "router_init_range": 0.02,
   "num_experts": 8,
-  "act_fn": "silu",
   "top_k": 2,
+  "router_loss": true,
   "router_aux_loss_coef": 0.01,
   ...
 }
@@ -74,15 +74,17 @@ MixLoRA have two routing strategies: top-k routing (like *Mixtral*) and top-1 sw
   "routing_strategy": "switch",
   "router_init_range": 0.02,
   "num_experts": 8,
-  "act_fn": "gelu_new",
   "expert_capacity": 32,
-  "jitter_noise": 0.1,
-  "ffn_dropout": 0.1,
+  "router_loss": true,
   "router_aux_loss_coef": 0.01,
   "router_z_loss_coef": 0.01,
   ...
 }
 ```
+expert_capacity = (max_sequence_length / num_experts) * capacity_factor
+
+common values of capacity_factor: 1.0, 1.25, 2.0
+
 You can add these items into training configurations to enable the MixLoRA architecture.
 
 If you want to control the lora settings of experts separately, just add `"expert_lora"` block to the config:
