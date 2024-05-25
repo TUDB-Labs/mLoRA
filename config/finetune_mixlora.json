@@ -28,7 +28,6 @@
                 "w3_proj": false
             },
             "data": "data/data_demo.json",
-            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
             "expand_side": "right"
@@ -55,9 +54,7 @@
             },
             "routing_strategy": "mixtral",
             "num_experts": 8,
-            "act_fn": "silu",
             "data": "data/data_demo.json",
-            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
             "expand_side": "right"
@@ -86,11 +83,9 @@
                 "use_rslora": true
             },
             "routing_strategy": "switch",
-            "expert_capacity": 192,
-            "num_experts": 8,
-            "act_fn": "gelu_new",
+            "num_experts": 16,
+            "sparse_step": 2,
             "data": "data/data_demo.json",
-            "test_data": "data/test_data_demo.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,
             "expand_side": "right"

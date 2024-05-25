@@ -60,8 +60,9 @@ def _prepare_tasks(model, tokenizer, configs):
         if not isinstance(model.adapter_configs_[config.adapter_name], MixConfig):
             continue
         for layer in model.model_.layers_:
-            layer.mlp_.moes_[
-                config.adapter_name].router_profile_ = config.router_profile
+            if config.adapter_name in layer.mlp_.moes_:
+                layer.mlp_.moes_[
+                    config.adapter_name].router_profile_ = config.router_profile
 
 
 def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
@@ -135,6 +136,8 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
                 router_statistic_ = list(
                     0 for _ in range(adapter_config.num_experts_))
                 for layer in model.model_.layers_:
+                    if config.adapter_name not in layer.mlp_.moes_:
+                        continue
                     for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
                         router_statistic_[idx] += val
                 for idx, val in enumerate(router_statistic_):
@@ -180,6 +183,8 @@ def _compute_result(model, configs, save_file):
                 router_statistic_ = list(
                     0 for _ in range(adapter_config.num_experts_))
                 for layer in model.model_.layers_:
+                    if config.adapter_name not in layer.mlp_.moes_:
+                        continue
                     for idx, val in enumerate(layer.mlp_.moes_[config.adapter_name].profiler_):
                         router_statistic_[idx] += val
                     layer.mlp_.moes_[config.adapter_name].profiler_ = None

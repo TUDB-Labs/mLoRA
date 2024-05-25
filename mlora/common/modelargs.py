@@ -192,6 +192,7 @@ class MixConfig(LoraConfig):
     router_z_loss_coef_: float = None
     expert_capacity_: int = None
     ffn_dropout_: float = None
+    sparse_step_: int = None
 
     def check(self) -> "MixConfig":
         super().check()
@@ -214,6 +215,9 @@ class MixConfig(LoraConfig):
         elif self.routing_strategy_ == "switch":
             assert isinstance(self.router_z_loss_coef_,
                               float) and self.router_z_loss_coef_ >= 0
+            if self.sparse_step_ is not None:
+                assert isinstance(self.sparse_step_,
+                                  int) and self.sparse_step_ > 0
             assert isinstance(self.expert_capacity_,
                               int) and self.expert_capacity_ > 0
             assert isinstance(self.ffn_dropout_,
@@ -229,23 +233,26 @@ class MixConfig(LoraConfig):
             self.expert_config_ = LoraConfig().from_config(expert_config)
         self.router_aux_loss_coef_ = config.get(
             "router_aux_loss_coef", 0.001)  # for training
-        self.router_init_range_ = config.get("router_init_range", 0.02)
         self.routing_strategy_ = config["routing_strategy"]
-        self.jitter_noise_ = config.get("jitter_noise", 0.0)
         self.router_loss_ = config.get("router_loss", True)
         self.num_experts_ = config["num_experts"]
         # silu for mixtral or gelu_new for switch transformers
         # left blank to automatically use the original act_fn of FFN
         self.act_fn_ = config.get("act_fn", None)
         if self.routing_strategy_ == "mixtral":
+            self.router_init_range_ = config.get("router_init_range", 0.02)
+            self.jitter_noise_ = config.get("jitter_noise", 0.0)
             self.top_k_ = config.get("top_k", 2)
         elif self.routing_strategy_ == "switch":
+            self.router_init_range_ = config.get("router_init_range", 1.0)
+            self.jitter_noise_ = config.get("jitter_noise", 0.01)
             self.router_z_loss_coef_ = config.get(
                 "router_z_loss_coef", 0.001)  # for training
             # expert_capacity = (max_sequence_length / num_experts) * capacity_factor
             # common values of capacity_factor: 1.0, 1.25, 2.0
-            self.expert_capacity_ = config.get("expert_capacity", 64)
+            self.expert_capacity_ = config.get("expert_capacity", 32)
             self.ffn_dropout_ = config.get("ffn_dropout", 0.0)
+            self.sparse_step_ = config.get("sparse_step", None)
 
         return self
 
@@ -265,6 +272,7 @@ class MixConfig(LoraConfig):
             config["top_k"] = self.top_k_
         elif self.routing_strategy_ == "switch":
             config["expert_capacity"] = self.expert_capacity_
+            config["sparse_step"] = self.sparse_step_
 
         return config
 

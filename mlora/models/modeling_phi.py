@@ -19,6 +19,7 @@ from mlora.common import (
     LLMDecoder,
     LLMForCausalLM,
 )
+from mlora.common.mix_lora import _mixtral_slice_tensor
 from mlora.backends import _backend, get_backend
 from mlora.utils import copy_parameters
 
@@ -378,6 +379,32 @@ class PhiMLP(LLMFeedForward):
             hidden_states = self.fc2_.base_layer_.forward(hidden_states)
 
         return hidden_states
+
+    def _mixlora_forward(self, moe_name, act_fn, expert_mask, hidden_states, input_dtype):
+        common_fc1 = self.fc1_.base_layer_.forward(
+            hidden_states.to(input_dtype))
+        final_expert_states = []
+        for expert_idx in range(expert_mask.shape[0]):
+            _, top_x = torch.where(expert_mask[expert_idx])
+
+            lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+            if lora_name in self.fc1_.loras_:
+                lora_data = _mixtral_slice_tensor(
+                    hidden_states, top_x, input_dtype)
+                act_result = act_fn(self.fc1_.loras_[lora_name].forward(
+                    _mixtral_slice_tensor(common_fc1, top_x, input_dtype), lora_data))
+            else:
+                act_result = act_fn(_mixtral_slice_tensor(
+                    common_fc1, top_x, input_dtype))
+
+            if lora_name in self.fc2_.loras_:
+                final_expert_states.append(self.fc2_.loras_[lora_name].forward(
+                    self.fc2_.base_layer_.forward(act_result), act_result))
+            else:
+                final_expert_states.append(
+                    self.fc2_.base_layer_.forward(act_result))
+
+        return final_expert_states
 
 
 class PhiDecoderLayer(LLMDecoder):

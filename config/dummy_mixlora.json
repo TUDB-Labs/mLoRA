@@ -54,9 +54,8 @@
                 "w3_proj": true
             },
             "routing_strategy": "switch",
-            "expert_capacity": 200,
-            "ffn_dropout": 0.1,
-            "num_experts": 8,
+            "num_experts": 16,
+            "sparse_step": 2,
             "data": "data/dummy_data.json",
             "prompt": "template/template_demo.json",
             "group_by_length": false,

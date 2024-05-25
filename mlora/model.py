@@ -134,12 +134,15 @@ def init_lora_layer_weight(
         linear_layer_name_list.append(name)
 
     if isinstance(config, MixConfig):
-        # Inject LoRA configs into FFN layer
-        gate_layer_name = f"mixlora.layers.{layer.layer_id_}.gate.weight"
-        layer.mlp_.init_moe_weight(args=args, config=config,
-                                   gate=None if weight is None else weight[gate_layer_name])
+        if config.sparse_step_ is None or layer.layer_id_ % config.sparse_step_ == 1:
+            # Inject LoRA configs into FFN layer
+            gate_layer_name = f"mixlora.layers.{layer.layer_id_}.gate.weight"
+            layer.mlp_.init_moe_weight(args=args, config=config,
+                                       gate=None if weight is None else weight[gate_layer_name])
+            moe_layer_name_list = list(layer.mlp_.state_dict().keys())
+        else:
+            moe_layer_name_list = []
 
-        moe_layer_name_list = list(layer.mlp_.state_dict().keys())
         init_moe = True
     else:
         moe_layer_name_list = []
@@ -262,7 +265,8 @@ class LLMModel(torch.nn.Module):
             if not hasattr(seq_layer, "router_probs_"):
                 continue
             for idx in range(len(input_args.lora_batch_data_config_)):
-                router_logits[idx].append(seq_layer.router_probs_[idx])
+                if seq_layer.router_probs_[idx] is not None:
+                    router_logits[idx].append(seq_layer.router_probs_[idx])
 
         # calculate loss
         output = data[0]

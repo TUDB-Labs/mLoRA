@@ -19,6 +19,7 @@ from mlora.common import (
     LLMDecoder,
     LLMForCausalLM,
 )
+from mlora.common.mix_lora import _mixtral_slice_tensor
 from mlora.backends import _backend, get_backend
 from mlora.utils import copy_parameters
 
@@ -334,6 +335,39 @@ class LlamaMLP(LLMFeedForward):
                 self.w2_.base_layer_.forward(act_result), act_result)
         else:
             return self.w2_.base_layer_.forward(act_result)
+
+    def _mixlora_forward(self, moe_name, act_fn, expert_mask, hidden_states, input_dtype):
+        common_w1 = self.w1_.base_layer_.forward(hidden_states.to(input_dtype))
+        common_w3 = self.w3_.base_layer_.forward(hidden_states.to(input_dtype))
+        final_expert_states = []
+        for expert_idx in range(expert_mask.shape[0]):
+            _, top_x = torch.where(expert_mask[expert_idx])
+
+            lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+            if lora_name in self.w1_.loras_:
+                lora_data = _mixtral_slice_tensor(
+                    hidden_states, top_x, input_dtype)
+                w1 = self.w1_.loras_[lora_name].forward(
+                    _mixtral_slice_tensor(common_w1, top_x, input_dtype), lora_data)
+            else:
+                lora_data = None
+                w1 = _mixtral_slice_tensor(common_w1, top_x, input_dtype)
+
+            if lora_name in self.w3_.loras_:
+                w3 = self.w3_.loras_[lora_name].forward(_mixtral_slice_tensor(common_w3, top_x, input_dtype),
+                                                        _mixtral_slice_tensor(hidden_states, top_x, input_dtype, lora_data))
+            else:
+                w3 = _mixtral_slice_tensor(common_w3, top_x, input_dtype)
+
+            act_result = act_fn(w1) * w3
+            if lora_name in self.w2_.loras_:
+                final_expert_states.append(self.w2_.loras_[lora_name].forward(
+                    self.w2_.base_layer_.forward(act_result), act_result))
+            else:
+                final_expert_states.append(
+                    self.w2_.base_layer_.forward(act_result))
+
+        return final_expert_states
 
 
 class LlamaRMSNorm(nn.Module):
