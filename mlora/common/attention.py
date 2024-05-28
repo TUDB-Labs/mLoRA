@@ -6,7 +6,6 @@ import torch.nn.functional as F
 import torch
 import math
 
-_xformers_available = is_package_available("xformers")
 _flash_attn_available = is_package_available("flash_attn")
 
 
@@ -114,21 +113,3 @@ def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: 
     attention_score = torch.matmul(attention_score, value)
     attention_score = attention_score.transpose(1, 2).contiguous()
     return attention_score
-
-
-if _xformers_available:
-    import xformers.ops
-    import xformers.ops.fmha.attn_bias
-
-    def xformers_attention(xq: torch.Tensor, xk: torch.Tensor, xv: torch.Tensor,
-                           attention_mask: torch.Tensor) -> torch.Tensor:
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
-        attention_score = xformers.ops.memory_efficient_attention(
-            xq, xk, xv, attention_mask)
-        return attention_score
-else:
-    def xformers_attention(xq: torch.Tensor, xk: torch.Tensor, xv: torch.Tensor,
-                           attention_mask: torch.Tensor) -> torch.Tensor:
-        raise RuntimeError("xFormers Attention is not available")

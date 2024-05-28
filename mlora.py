@@ -224,8 +224,6 @@ if __name__ == "__main__":
     if args.attn_impl is None:
         if mlora.common._flash_attn_available:
             args.attn_impl = "flash_attn"
-        elif mlora.common._xformers_available and is_train:
-            args.attn_impl = "xformers"
         else:
             args.attn_impl = "eager"
 

@@ -1,9 +1,7 @@
 from mlora.common import (
     _flash_attn_available,
-    _xformers_available,
     prepare_4d_causal_attention_mask,
     scaled_dot_product_attention,
-    xformers_attention,
     precompute_rope_angle,
     apply_rotary_emb,
     get_unpad_data,
@@ -101,48 +99,6 @@ class LlamaAttention(LLMAttention):
         xv = repeat_kv(xv, self.n_rep_)
 
         attention_score = scaled_dot_product_attention(
-            xq, xk, xv, attention_mask)
-
-        attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
-
-        # get output attention score
-        return self.wo_.forward(attention_score, input_args)
-
-
-class LlamaXformersAttention(LlamaAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: LlamaConfig):
-        assert _xformers_available, "xFormers Attention is not available"
-        super().__init__(wq, wk, wv, wo, args)
-
-    def forward(self,
-                hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None):
-        batch_size, max_seq_len, _ = hidden_states.shape
-
-        xq = self.wq_.forward(hidden_states, input_args)
-        xk = self.wk_.forward(hidden_states, input_args)
-        xv = self.wv_.forward(hidden_states, input_args)
-
-        # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-
-        # apply rotary embedding
-        assert xq.dtype == xk.dtype
-        xq, xk = apply_rotary_emb(xq, xk, max_seq_len, self.cos_, self.sin_)
-
-        # for llama2 need to repeat the heads
-        # before dim: batch_size, n_kv_head, seq_len, head_dim
-        # after dim: batch_size, n_head, seq_len, head_dim
-        xk = repeat_kv(xk, self.n_rep_)
-        xv = repeat_kv(xv, self.n_rep_)
-
-        attention_score = xformers_attention(
             xq, xk, xv, attention_mask)
 
         attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
@@ -288,7 +244,6 @@ class LlamaFlashAttention(LlamaAttention):
 
 LLAMA_ATTENTION_CLASSES = {
     "eager": LlamaAttention,
-    "xformers": LlamaXformersAttention,
     "flash_attn": LlamaFlashAttention,
 }
 
@@ -495,15 +450,9 @@ class LlamaForCausalLM(LLMForCausalLM):
     def causal_mask(self,
                     input_tokens: torch.Tensor,
                     additional_mask: List[Masks] = None,
-                    multi_head: bool = False,
                     diagonal: int = 1) -> torch.Tensor:
-        if multi_head:
-            assert self.config_.attn_implementation_ == "xformers"
-        else:
-            assert self.config_.attn_implementation_ != "xformers"
 
-        return prepare_4d_causal_attention_mask(input_tokens=input_tokens,
-                                                n_heads=self.config_.n_heads_ if multi_head else 1,
+        return prepare_4d_causal_attention_mask(input_tokens=input_tokens, n_heads=1,
                                                 additional_mask=additional_mask, diagonal=diagonal,
                                                 dtype=self.config_.dtype_, device=self.config_.device_)
 

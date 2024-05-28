@@ -1,7 +1,6 @@
 from mlora.models.modeling_llama import (
     LlamaConfig,
     LlamaAttention,
-    LlamaXformersAttention,
     LlamaMLP,
     LlamaDecoderLayer,
     LlamaRMSNorm,
@@ -241,7 +240,6 @@ class MistralFlashAttention(LlamaAttention):
 
 MISTRAL_ATTENTION_CLASSES = {
     "eager": LlamaAttention,
-    "xformers": LlamaXformersAttention,
     "flash_attn": MistralFlashAttention,
 }
 

@@ -244,7 +244,6 @@ class LLMModel(torch.nn.Module):
             causal_mask = self.model_.causal_mask(
                 input_tokens=tokens,
                 additional_mask=input_args.attention_masks_,
-                multi_head=(self.config_.attn_implementation_ == "xformers"),
                 diagonal=input_args.diagonal_pos_)
         else:
             causal_mask = attn_mask

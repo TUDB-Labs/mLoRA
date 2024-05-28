@@ -43,7 +43,7 @@ class LLMModelArgs:
     pad_token_id_: int = -1
     rope_theta_: float = 10000.0
     max_seq_len_: int = 2048
-    # eager, xformers, flash_attn
+    # eager or flash_attn
     attn_implementation_: str = "eager"
     # data type
     dtype_: torch.dtype = None

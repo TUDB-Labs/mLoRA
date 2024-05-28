@@ -79,7 +79,6 @@ class LLMForCausalLM(metaclass=ABCMeta):
     def causal_mask(self,
                     input_tokens: torch.Tensor,
                     additional_mask: List[Masks] = None,
-                    multi_head: bool = False,
                     diagonal: int = 1) -> torch.Tensor:
         pass
 

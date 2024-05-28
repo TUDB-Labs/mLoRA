@@ -22,12 +22,12 @@ Please note that the functions, interfaces, and performance of this fork are sli
 
 ## Supported Platform
 
-| OS      | Backend | Model Precision        | Quantization  | xFormers | Flash Attention |
-|---------|---------|------------------------|---------------|----------|-----------------|
-| Linux   | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | &check;  | &check;         |
-| Windows | CUDA    | FP32, FP16, TF32, BF16 | &cross;       | &cross;  | &cross;         |
-| macOS   | MPS     | FP32, FP16             | &cross;       | &cross;  | &cross;         |
-| All     | CPU     | FP32, FP16, BF16       | &cross;       | &cross;  | &cross;         |
+| OS      | Backend | Model Precision        | Quantization  | Flash Attention |
+|---------|---------|------------------------|---------------|-----------------|
+| Linux   | CUDA    | FP32, FP16, TF32, BF16 | 8bit and 4bit | &check;         |
+| Windows | CUDA    | FP32, FP16, TF32, BF16 | &cross;       | &cross;         |
+| macOS   | MPS     | FP32, FP16             | &cross;       | &cross;         |
+| All     | CPU     | FP32, FP16, BF16       | &cross;       | &cross;         |
 
 You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use a specific backend. For example, if you want m-LoRA to run only on CPU, you can set `MLORA_BACKEND_TYPE=CPU` before importing `mlora`.
 
@@ -62,18 +62,11 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 |         | Attention Methods                                        | Name           | Arguments*               |
 |---------|----------------------------------------------------------|----------------|--------------------------|
 | &check; | [Scaled Dot Product](https://arxiv.org/abs/1706.03762)   | `"eager"`      | `--attn_impl eager`      |
-| &check; | [xFormers](https://github.com/facebookresearch/xformers) | `"xformers"`   | `--attn_impl xformers`   |
 | &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)    | `"flash_attn"` | `--attn_impl flash_attn` |
 
 *: Arguments of `mlora.py`
 
-m-LoRA only supports scaled-dot product attention (eager) by default. Additional requirements are necessary for xFormers and flash attention.
-
-To utilize xFormers attention, you must manually install additional dependencies:
-
-```bash
-pip3 install xformers==0.0.23.post1
-```
+m-LoRA only supports scaled-dot product attention (eager) by default. Additional requirements are necessary for flash attention.
 
 For flash attention, manual installation of the following dependencies is required:
 
@@ -82,7 +75,7 @@ pip3 install ninja
 pip3 install flash-attn==2.5.6 --no-build-isolation
 ```
 
-If the attention method is not specified, xFormers is automatically employed during training if available, while scaled-dot product attention is used during inference and evaluation. It's important to note that xFormers attention necessitates aligning the sequence length to a multiple of 8, otherwise, an error will occur.
+If the attention method is not specified, flash attention is used during inference and evaluation.
 
 ## Supported Quantize Methods
 

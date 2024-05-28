@@ -1,6 +1,5 @@
 # Attention and Feed Forward
 from .attention import (
-    _xformers_available,
     _flash_attn_available,
     prepare_4d_causal_attention_mask,
     precompute_rope_angle,
@@ -9,7 +8,6 @@ from .attention import (
     apply_rotary_emb,
     get_unpad_data,
     scaled_dot_product_attention,
-    xformers_attention,
 )
 from .checkpoint import (
     CheckpointOffloadFunction,
@@ -62,7 +60,6 @@ from .modelargs import (
 
 
 __all__ = [
-    "_xformers_available",
     "_flash_attn_available",
     "prepare_4d_causal_attention_mask",
     "precompute_rope_angle",
@@ -71,7 +68,6 @@ __all__ = [
     "apply_rotary_emb",
     "get_unpad_data",
     "scaled_dot_product_attention",
-    "xformers_attention",
     "CheckpointOffloadFunction",
     "CheckpointRecomputeFunction",
     "CHECKPOINT_CLASSES",
