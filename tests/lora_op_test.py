@@ -1,5 +1,5 @@
-from mlora.model.LoraLinear import LoraFunction
-from mlora.model.modelargs import MultiLoraBatchData, LoraBatchDataConfig
+from mlora.model.linear import LoRAFunction
+from mlora.model.args import MLoRABatchData, MLoRADataConfig
 
 import torch
 import unittest
@@ -38,10 +38,10 @@ class TestLoraFunction(unittest.TestCase):
 
     def lora_mlora(self):
         lora_a, lora_b, in_data, weight = self.set_test_tensor()
-        input_args = MultiLoraBatchData(
-            lora_batch_data_config_=[LoraBatchDataConfig("", 0, 2)])
+        input_args = MLoRABatchData(
+            lora_batch_data_config_=[MLoRADataConfig("", 0, 2)])
 
-        weight = LoraFunction.apply(weight, in_data, input_args, [
+        weight = LoRAFunction.apply(weight, in_data, input_args, [
             1e-4], [2.0], lora_a, lora_b)
 
         loss = weight.sum()

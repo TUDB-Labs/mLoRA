@@ -1,4 +1,4 @@
-from mlora.model.modelargs import MultiLoraBatchData
+from mlora.model.args import MLoRABatchData
 
 import torch
 
@@ -21,4 +21,4 @@ class PipeMessage:
     msg_id_: int
 
     tensor_data_: torch.Tensor
-    batch_data_: MultiLoraBatchData
+    batch_data_: MLoRABatchData

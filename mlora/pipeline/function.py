@@ -1,6 +1,6 @@
 from mlora.pipeline.messages import PipeMessage, PipeMessageType
 from mlora.pipeline.transport import Transport
-from mlora.model.modelargs import MultiLoraBatchData
+from mlora.model.args import MLoRABatchData
 
 import logging
 import torch
@@ -14,7 +14,7 @@ class SendOperator(torch.autograd.Function):
                 tensor_data: torch.Tensor,
                 transport: Transport,
                 msg_id: int,
-                input_args: MultiLoraBatchData):
+                input_args: MLoRABatchData):
         assert isinstance(tensor_data, torch.Tensor)
 
         msg = PipeMessage(src_=transport.worker_name,
