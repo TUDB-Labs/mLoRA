@@ -43,9 +43,13 @@ class CasualOutputLayer(LLMOutput):
     def loss(self,
              input_ids: torch.Tensor,
              output_logits: torch.Tensor,
-             labels: List[List[int]]) -> torch.Tensor:
-        labels = torch.tensor(labels, dtype=torch.long,
-                              device=output_logits.device)
+             labels) -> torch.Tensor:
+        if isinstance(labels, torch.Tensor):
+            labels = labels.clone().detach().to(dtype=torch.long,
+                                                device=output_logits.device)
+        else:
+            labels = torch.tensor(
+                labels, dtype=torch.long, device=output_logits.device)
         loss_fn = torch.nn.CrossEntropyLoss()
         return loss_fn(output_logits[..., :-1, :].contiguous().view(-1, self.vocab_size_),
                        labels[..., 1:].contiguous().view(-1))
@@ -83,9 +87,13 @@ class ClassificationOutputLayer(LLMOutput):
     def loss(self,
              input_ids: torch.Tensor,
              output_logits: torch.Tensor,
-             labels: List[List[int]]) -> torch.Tensor:
-        labels = torch.tensor(
-            labels, dtype=self.label_dtype_, device=output_logits.device)
+             labels) -> torch.Tensor:
+        if isinstance(labels, torch.Tensor):
+            labels = labels.clone().detach().to(dtype=self.label_dtype_,
+                                                device=output_logits.device)
+        else:
+            labels = torch.tensor(
+                labels, dtype=self.label_dtype_, device=output_logits.device)
         batch_size = input_ids.shape[0]
         sequence_lengths = (torch.eq(
             input_ids, self.pad_id_).int().argmax(-1) - 1).to(output_logits.device)
@@ -224,19 +232,26 @@ class LLMModel(torch.nn.Module):
     # compute the model: output probs
     def forward(self, input_args: MultiLoraBatchData) -> List[LLMModelOutput]:
         assert input_args.batch_tokens_ is not None
-        assert input_args.gradient_checkpoint_ != "none" or input_args.inference_mode_
 
         labels = input_args.batch_labels_
 
         # prepare inputs
-        tokens = torch.tensor(input_args.batch_tokens_,
-                              dtype=torch.int64, device=self.device_)
+        if isinstance(input_args.batch_tokens_, torch.Tensor):
+            tokens = input_args.batch_tokens_.to(
+                dtype=torch.int64, device=self.device_)
+        else:
+            tokens = torch.tensor(input_args.batch_tokens_,
+                                  dtype=torch.int64, device=self.device_)
 
         # prepare mask
         if input_args.attention_masks_ is not None and 0 in input_args.attention_masks_:
             # 2d mask is passed through the layers
-            attn_mask = torch.tensor(input_args.attention_masks_,
-                                     dtype=torch.int64, device=self.device_)
+            if isinstance(input_args.attention_masks_, torch.Tensor):
+                attn_mask = input_args.attention_masks_.to(
+                    dtype=torch.int64, device=self.device_)
+            else:
+                attn_mask = torch.tensor(input_args.attention_masks_,
+                                         dtype=torch.int64, device=self.device_)
         else:
             attn_mask = None
 
