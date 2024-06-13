@@ -1,6 +1,6 @@
-from mlora.model.model import LLMModel
-from mlora.model.modelargs import Tokens, MultiLoraBatchData
-from mlora.tokenizer.tokenizer import Tokenizer
+from mlora.model.llm.model import LLMModel
+from mlora.model.args import Tokens, MLoRABatchData
+from mlora.model.tokenizer.tokenizer import Tokenizer
 from mlora.evaluator.evaluator_factory import Evaluator
 
 import math
@@ -155,8 +155,8 @@ class MMLUEvaluator(Evaluator):
                 token) for token in aligned_batch_data]
 
             # TODO lora model
-            output: torch.Tensor = self.model_.forward(MultiLoraBatchData(batch_tokens_=aligned_batch_data,
-                                                                          additional_mask_=attention_mask,
+            output: torch.Tensor = self.model_.forward(MLoRABatchData(batch_tokens_=aligned_batch_data,
+                                                                          batch_mask_=attention_mask,
                                                                           lora_batch_data_config_=None,
                                                                           inference_model_=True))
             # only get the last predict value

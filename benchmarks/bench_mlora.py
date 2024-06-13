@@ -1,6 +1,6 @@
 from mlora.utils import setup_seed
-from mlora.config import LoraConfig
-from mlora.model.modelargs import MultiLoraBatchData, LoraBatchDataConfig
+from mlora.config import LoRAConfig
+from mlora.model.args import MLoRABatchData, MLoRADataConfig
 from mlora.profiler.profiler import setup_trace_mode, set_backward_tracepoint, grad_fn_nvtx_wrapper_by_tracepoint, nvtx_range
 
 import mlora
@@ -51,11 +51,11 @@ args = parser.parse_args()
 assert not (args.load_4bit and args.load_8bit)
 
 
-def setup_lora_adapter_config() -> List[LoraConfig]:
-    lora_config: List[LoraConfig] = []
+def setup_lora_adapter_config() -> List[LoRAConfig]:
+    lora_config: List[LoRAConfig] = []
 
     for idx in range(0, args.lora_cnt):
-        lora_config.append(LoraConfig({
+        lora_config.append(LoRAConfig({
             "name": f"lora_{idx}",
             "r": g_default_rank,
             "alpha": g_default_alpha,
@@ -79,10 +79,10 @@ def setup_lora_adapter_config() -> List[LoraConfig]:
     return lora_config
 
 
-def setup_input() -> MultiLoraBatchData:
+def setup_input() -> MLoRABatchData:
     batch_tokens = []
     additional_masks = []
-    lora_batch_data_config: List[LoraBatchDataConfig] = []
+    lora_batch_data_config: List[MLoRADataConfig] = []
 
     start_idx = 0
     end_idx = 0
@@ -96,7 +96,7 @@ def setup_input() -> MultiLoraBatchData:
             additional_masks.append([False] * args.seq_len)
             end_idx += 1
 
-        lora_batch_data_config.append(LoraBatchDataConfig(
+        lora_batch_data_config.append(MLoRADataConfig(
             adapter_name_=adapter_name,
             batch_start_idx_=start_idx,
             batch_end_idx_=end_idx,
@@ -104,13 +104,13 @@ def setup_input() -> MultiLoraBatchData:
 
         start_idx = end_idx
 
-    return MultiLoraBatchData(batch_tokens_=batch_tokens,
-                              additional_mask_=additional_masks,
+    return MLoRABatchData(batch_tokens_=batch_tokens,
+                              batch_mask_=additional_masks,
                               lora_batch_data_config_=lora_batch_data_config,
                               inference_model_=False)
 
 
-def calc_loss(train_data: MultiLoraBatchData, model_output: torch.Tensor) -> torch.Tensor:
+def calc_loss(train_data: MLoRABatchData, model_output: torch.Tensor) -> torch.Tensor:
     labels = torch.tensor(train_data.batch_tokens_, dtype=torch.long)
     total_loss = None
 

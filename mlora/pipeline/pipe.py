@@ -3,8 +3,8 @@ from mlora.pipeline.transport import RpcTransport
 from mlora.pipeline.stream import CudaStream
 from mlora.pipeline.messages import PipeMessage, PipeMessageType
 from mlora.pipeline.function import RecvOperator, SendOperator
-from mlora.model.model import LLMModel, precompute_mask
-from mlora.model.modelargs import LoraBatchDataConfig, MultiLoraBatchData
+from mlora.model.llm.model import LLMModel, precompute_mask
+from mlora.model.args import MLoRADataConfig, MLoRABatchData
 from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
 from mlora.trainer.trainer import MultiTrainerContext
 from mlora.config import MLoRAConfig
@@ -224,7 +224,7 @@ class Pipe():
 
             self.trainer_step(lora_configs)
 
-    def trainer_step(self, lora_configs: List[LoraBatchDataConfig]):
+    def trainer_step(self, lora_configs: List[MLoRADataConfig]):
         for lora_config in lora_configs:
             adapter_name = lora_config.adapter_name_
             self.multi_trainer_context_.step(adapter_name)
@@ -266,9 +266,9 @@ class Pipe():
 
     def send_next_worker(self,
                          tensor_data: torch.Tensor,
-                         batch_data: MultiLoraBatchData) -> None:
+                         batch_data: MLoRABatchData) -> None:
         assert isinstance(tensor_data, torch.Tensor)
-        assert batch_data is None or isinstance(batch_data, MultiLoraBatchData)
+        assert batch_data is None or isinstance(batch_data, MLoRABatchData)
 
         msg_id = uuid.uuid4().int
         assert msg_id not in self.backward_cache_
@@ -311,9 +311,9 @@ class Pipe():
 
     def forward(self,
                 tensor_data: torch.Tensor,
-                batch_data: MultiLoraBatchData):
+                batch_data: MLoRABatchData):
         mask = precompute_mask(tensor_data, self.n_heads_,
-                               self.device_, batch_data.additional_mask_)
+                               self.device_, batch_data.batch_mask_)
         data = (tensor_data, mask, batch_data, True)
 
         for seq in self.model_partition_:

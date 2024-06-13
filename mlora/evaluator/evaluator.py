@@ -1,13 +1,13 @@
-from mlora.model.model import LLMModel
-from mlora.tokenizer.tokenizer import Tokenizer
+from mlora.model.llm.model import LLMModel
+from mlora.model.tokenizer.tokenizer import Tokenizer
 
-from abc import ABCMeta, abstractclassmethod
+from abc import ABCMeta, abstractmethod
 
 
 class Evaluator(metaclass=ABCMeta):
     model_: LLMModel = None
     tokenizer_: Tokenizer = None
 
-    @abstractclassmethod
+    @abstractmethod
     def evaluate(self) -> float:
         ...
