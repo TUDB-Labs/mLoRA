@@ -105,9 +105,9 @@ def setup_input() -> MLoRABatchData:
         start_idx = end_idx
 
     return MLoRABatchData(batch_tokens_=batch_tokens,
-                              batch_mask_=additional_masks,
-                              lora_batch_data_config_=lora_batch_data_config,
-                              inference_model_=False)
+                          batch_mask_=additional_masks,
+                          lora_batch_data_config_=lora_batch_data_config,
+                          inference_model_=False)
 
 
 def calc_loss(train_data: MLoRABatchData, model_output: torch.Tensor) -> torch.Tensor:

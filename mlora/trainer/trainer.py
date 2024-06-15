@@ -27,7 +27,7 @@ class Trainer:
         hook_func = {
             "init": self.__task_init_hook,
             "running": self.__task_to_running_hook,
-            "ready":  self.__task_to_ready_hook,
+            "ready": self.__task_to_ready_hook,
             "done": self.__task_to_done_hook,
         }
 

@@ -1,4 +1,4 @@
-from mlora.model.args import MLoRABatchData, LinearInfo
+from mlora.model.args import MLoRABatchData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 import torch

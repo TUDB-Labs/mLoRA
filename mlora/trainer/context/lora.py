@@ -70,7 +70,7 @@ class LoRATaskContext(TaskContext):
         ret_val = {}
         for name, adapter in self.adapter_.items():
             prefix_name = "base_model.model.model." + name
-            ret_val[prefix_name+".lora_A.weight"] = adapter.lora_a_
-            ret_val[prefix_name+".lora_B.weight"] = adapter.lora_b_
+            ret_val[prefix_name + ".lora_A.weight"] = adapter.lora_a_
+            ret_val[prefix_name + ".lora_B.weight"] = adapter.lora_b_
 
         return ret_val
