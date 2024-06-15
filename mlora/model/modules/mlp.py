@@ -1,5 +1,5 @@
-from mlora.trainer.context import TaskContext
-from mlora.model.args import MLoRABatchData, LinearInfo
+from mlora.model.modules import AdapterModel
+from mlora.model.args import LinearInfo, ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 import torch
@@ -21,7 +21,7 @@ class MLP(torch.nn.Module):
         self.down_: Linear = None  # also down dim * FNN
         self.up_: Linear = None  # also up   FNN * dim
 
-    def forward(self, data: torch.Tensor, input_args: MLoRABatchData) -> torch.Tensor:
+    def forward(self, data: torch.Tensor, input_args: ModelData) -> torch.Tensor:
         # feed forward fully connected
         with nvtx_range("f_mlp"):
             w1 = self.gate_.forward(data, input_args)
@@ -47,11 +47,11 @@ class MLP(torch.nn.Module):
             f"layers.{self.layer_id_}.mlp.up_proj": self.up_
         }
 
-    def load_adapter(self, context: TaskContext):
+    def load_adapter(self, adapter_model: AdapterModel):
         for name, module in self.linear_dict.items():
-            if name not in context.adapter_:
+            if name not in adapter_model:
                 continue
-            module.load_adapter(context.adapter_[name])
+            module.load_adapter(adapter_model[name])
 
     def offload_adapter(self, adapter_name: str):
         for _, module in self.linear_dict.items():

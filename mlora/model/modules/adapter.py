@@ -1,5 +1,7 @@
 import torch
 
+from typing import Dict
+
 
 class Adapter(torch.nn.Module):
     adapter_type_: str = ""
@@ -10,3 +12,6 @@ class Adapter(torch.nn.Module):
 
         self.adapter_type_ = adapter_type
         self.adapter_name_ = adapter_name
+
+
+AdapterModel = Dict[str, Adapter]

@@ -11,11 +11,6 @@ def get_cmd_args():
                         help='Specify which GPU to be used, default is cuda:0')
     parser.add_argument('--precision', type=str, default="int8",
                         help='Load model with different precision, include int8')
-    # mmlu evaluate model
-    parser.add_argument('--evaluate', type=str,
-                        help='Enable the evaluate mode.')
-    parser.add_argument('--evaluate_data', type=str,
-                        help='The evaluate dataset name or path.')
     # configuration
     parser.add_argument('--config', type=str,
                         help='Path to finetune configuration')

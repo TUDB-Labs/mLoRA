@@ -1,5 +1,5 @@
 from mlora.model.modules import LoRAFunction
-from mlora.model.args import MLoRABatchData, MLoRADataConfig
+from mlora.model.args import ModelData, ModelDataConfig
 
 import torch
 import unittest
@@ -38,8 +38,8 @@ class TestLoraFunction(unittest.TestCase):
 
     def lora_mlora(self):
         lora_a, lora_b, in_data, weight = self.set_test_tensor()
-        input_args = MLoRABatchData(
-            data_config_=[MLoRADataConfig("", "", 0, 2)])
+        input_args = ModelData(
+            data_config_=[ModelDataConfig("", "", 0, 2)])
 
         weight = LoRAFunction.apply(weight, in_data, input_args, [
             1e-4], [2.0], lora_a, lora_b)

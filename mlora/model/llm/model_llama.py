@@ -1,7 +1,6 @@
-from mlora.model.modules import Embedding, Decoder, RMSNorm, OutputLayer
+from mlora.model.modules import Embedding, Decoder, RMSNorm, OutputLayer, AdapterModel
 from mlora.model.checkpoint import CheckpointRecomputeFunction
-from mlora.trainer.context import TaskContext
-from mlora.model.args import LLMModelArgs, MLoRABatchData, Masks, LinearInfo
+from mlora.model.args import LLMModelArgs, Masks, LinearInfo, ModelData
 from mlora.profiler import nvtx_wrapper, set_backward_tracepoint
 
 import torch
@@ -54,10 +53,10 @@ def precompute_mask(input_tokens: torch.Tensor,
     return mask.to(device=device, dtype=dtype)
 
 
-LlamaSequentialModuleIO = Tuple[torch.Tensor,       # the input batch tokens
-                                torch.Tensor,       # the mask matrics
-                                MLoRABatchData,     # batch data config
-                                bool                # whether to use checkpoint
+LlamaSequentialModuleIO = Tuple[torch.Tensor,  # the input batch tokens
+                                torch.Tensor,  # the mask matrics
+                                ModelData,     # batch data config
+                                bool           # whether to use checkpoint
                                 ]
 LEN_LLAMA_SEQUENTIAL_MODULE_IO = 4
 
@@ -77,7 +76,7 @@ class LlamaSequentialWrapper(torch.nn.Module):
         assert len(input) == LEN_LLAMA_SEQUENTIAL_MODULE_IO
         assert isinstance(input[0], torch.Tensor)
         assert isinstance(input[1], torch.Tensor)
-        assert isinstance(input[2], MLoRABatchData)
+        assert isinstance(input[2], ModelData)
         assert isinstance(input[3], bool)
 
         # auto catch the input argument
@@ -139,7 +138,7 @@ class LlamaModel(LLMModel):
         self.pad_token_id_ = args.pad_token_id_
         self.eos_token_id_ = -1
 
-    def forward(self, input: MLoRABatchData) -> torch.Tensor:
+    def forward(self, input: ModelData) -> torch.Tensor:
         # train model or inference model: output is probs
         tokens = torch.tensor(input.batch_tokens_,
                               dtype=torch.int64,
@@ -148,10 +147,10 @@ class LlamaModel(LLMModel):
         mask = precompute_mask(tokens, self.n_heads_,
                                self.device_, input.batch_mask_)
 
-        if input.inference_model_:
-            data = (tokens, mask, input, False)
-        else:
+        if input.enable_checkpoint_:
             data = (tokens, mask, input, True)
+        else:
+            data = (tokens, mask, input, False)
 
         for seq_layer in self.seq_module_:
             data = seq_layer.forward(data)
@@ -261,12 +260,12 @@ class LlamaModel(LLMModel):
 
         return model
 
-    def load_adapter(self, context: TaskContext):
+    def load_adapter(self, adapter_model: AdapterModel):
         # module is LlamaSequentialWrapper
         for module in self.seq_module_:
             if module.name() != "Decoder":
                 continue
-            module.wrapper_module_.load_adapter(context)
+            module.wrapper_module_.load_adapter(adapter_model)
 
     def offload_adapter(self, adapter_name: str):
         # now only transformers block have adapter

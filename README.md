@@ -17,7 +17,9 @@ mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for effi
 
 - Efficient pipeline parallelism algorithm.
 
-- Support for multiple LoRA variant algorithms and multiple models.
+- Support for multiple LoRA variant algorithms and various base models.
+
+- Support for multiple reinforcement learning preference alignment algorithms.
 
 ## Quickstart
 
@@ -61,12 +63,18 @@ We fine-tuned the LoRA adapter using four A6000 graphics cards with fp32 precisi
 
 |         | Model                                              |
 | ------- | -------------------------------------------------- |
-| &check; | [LLaMA](https://github.com/facebookresearch/llama) |
+| &check; | [LLaMA](https://llama.meta.com/) |
 
 ### Supported LoRA variants
+
 |         | Variant                                   |
 | ------- | ----------------------------------------- |
-| &check; | [QLoRA](https://arxiv.org/abs/2402.12354) |
+| &check; | [QLoRA](https://arxiv.org/abs/2305.14314) |
+
+### Supported preference alignment algorithms
+|         | Variant                                   |
+| ------- | ----------------------------------------- |
+| &check; | [DPO](https://arxiv.org/abs/2305.18290) |
 
 ## Document
 

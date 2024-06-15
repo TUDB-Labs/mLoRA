@@ -1,4 +1,4 @@
-from mlora.model.args import MLoRABatchData
+from mlora.model.args import ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 import torch
@@ -26,7 +26,7 @@ class Linear(torch.nn.Module):
         self.weight_ = weight
         self.adapters_: Dict[str, Adapter] = {}
 
-    def forward(self, data: torch.Tensor, input_args: MLoRABatchData) -> torch.Tensor:
+    def forward(self, data: torch.Tensor, input_args: ModelData) -> torch.Tensor:
         # data shape is: batch_size * max_seq_len * dim
         # result = data @ self.weight_.transpose(0, 1)
         if len(self.adapters_) == 0:
@@ -40,7 +40,7 @@ class Linear(torch.nn.Module):
 
     def __lora_forward(self,
                        data: torch.Tensor,
-                       input_args: MLoRABatchData,
+                       input_args: ModelData,
                        result: torch.Tensor) -> torch.Tensor:
         # split the data and result
         dropouts: List[float] = []
