@@ -79,7 +79,8 @@ class Dispatcher:
         for task in done_task:
             self.done_event_.notify(task)
 
-    def __align_batch_tokens(self, batch_tokens: List[Tokens], configs: List[MLoRADataConfig]) -> Tuple[List[Tokens], List[Masks]]:
+    def __align_batch_tokens(self, batch_tokens: List[Tokens],
+                             configs: List[MLoRADataConfig]) -> Tuple[List[Tokens], List[Masks]]:
         max_seq_len = max(map(lambda x: len(x), batch_tokens))
         max_seq_len = math.ceil(max_seq_len / 8) * 8
 

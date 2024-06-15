@@ -88,7 +88,8 @@ class Task:
 
     def get_train_data(self) -> List[Tokens]:
         logging.info(
-            f"Task - {self.context_.name_} epoch: {self.now_epoch_}/{self.config_.num_epochs_} iteration: {self.now_data_idx_}/{len(self.train_data_)} step: {self.now_step_}")
+            f'Task - {self.context_.name_} epoch: {self.now_epoch_}/{self.config_.num_epochs_}'
+            f' iteration: {self.now_data_idx_}/{len(self.train_data_)} step: {self.now_step_}')
         data_idx_s = self.now_data_idx_
         data_idx_e = self.now_data_idx_ + self.config_.mini_batch_size_
 
@@ -100,7 +101,8 @@ class Task:
     def get_loss_fn(self) -> torch.nn.Module:
         return self.context_.loss_fn_
 
-    def expand_batch_tokens(self, batch_tokens: List[Tokens], align_len: Optional[int] = None) -> Tuple[List[Tokens], List[Masks]]:
+    def expand_batch_tokens(self, batch_tokens: List[Tokens],
+                            align_len: Optional[int] = None) -> Tuple[List[Tokens], List[Masks]]:
         if align_len is None:
             align_len = max(map(lambda x: len(x), batch_tokens))
 
@@ -121,8 +123,8 @@ class Task:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        torch.save(self.context_.weight_dict(),  output_dir +
-                   os.sep + "adapter_model.bin")
+        torch.save(self.context_.weight_dict(),
+                   output_dir + os.sep + "adapter_model.bin")
 
         adapter_config: Dict[str, str] = {}
         adapter_config["base_model_name_or_path"] = self.llm_name_

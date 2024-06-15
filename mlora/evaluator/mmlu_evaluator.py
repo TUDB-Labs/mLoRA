@@ -156,9 +156,9 @@ class MMLUEvaluator(Evaluator):
 
             # TODO lora model
             output: torch.Tensor = self.model_.forward(MLoRABatchData(batch_tokens_=aligned_batch_data,
-                                                                          batch_mask_=attention_mask,
-                                                                          lora_batch_data_config_=None,
-                                                                          inference_model_=True))
+                                                                      batch_mask_=attention_mask,
+                                                                      lora_batch_data_config_=None,
+                                                                      inference_model_=True))
             # only get the last predict value
             output = [output[idx][len - 1]
                       for idx, len in enumerate(bd_tokens_len)]
