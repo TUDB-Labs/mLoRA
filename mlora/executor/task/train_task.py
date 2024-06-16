@@ -24,7 +24,7 @@ class TrainTask(Task):
             return False
         return True
 
-    def init(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
+    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
         # prepare the dataset and context
         self._pre_dataset()
@@ -80,9 +80,9 @@ class TrainTask(Task):
         return ret_batch_tokens, ret_batch_masks
 
     def _save(self, dir_suffix: str = "", additional_info: Dict[str, str] = {}):
-        output_dir = self.context_.name_
+        output_dir = self.context_.path_
         if dir_suffix != "":
-            output_dir += os.sep + self.context_.name_ + "_" + dir_suffix
+            output_dir += os.sep + self.context_.path_ + "_" + dir_suffix
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -100,6 +100,8 @@ class TrainTask(Task):
 
     def done(self):
         self._save()
+        # release the context
+        del self.context_
 
     def step(self):
         stepd: bool = False

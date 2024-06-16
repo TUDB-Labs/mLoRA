@@ -43,7 +43,8 @@ class Task:
         self.llm_name_ = llm_name
 
     @abstractmethod
-    def init(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
+    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
+        # task prepare for execute
         ...
 
     @abstractmethod
@@ -86,10 +87,9 @@ class Task:
             self.data_.append(data_point)
 
     def _pre_context(self, linears_info: OrderedDict[str, LinearInfo]):
-        self.context_ = TASKCONTEXT_CLASS[self.config_.adapter_.type_](
-            self.config_.adapter_.name_)
-
-        self.context_.init(self.config_.adapter_, linears_info)
+        adapter_type = self.config_.adapter_.type_
+        self.context_ = TASKCONTEXT_CLASS[adapter_type](
+            self.config_.adapter_, linears_info)
 
     def _expand_batch_tokens(self,
                              batch_tokens: List[Tokens],

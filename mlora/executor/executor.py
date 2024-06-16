@@ -40,7 +40,7 @@ class Executor:
             f"Init {task.task_type()} task with adapters: {task.adapter_name()}")
         # init the task's dataset
         # init the task's adapter weight
-        task.init(self.model_.linears_info(), self.tokenizer_)
+        task.prepare(self.model_.linears_info(), self.tokenizer_)
 
     def __task_to_running_hook(self, task: Task):
         logging.info(
@@ -64,7 +64,7 @@ class Executor:
 
     def __task_to_done_hook(self, task: Task):
         logging.info(
-            f"Finish adapter - {task.adapter_name()}")
+            f"Finish and base model offload adapter - {task.adapter_name()}")
         # offload the adapter
         # move the task's adapter weight to the cpu
         for adapter_name in task.adapter_name():

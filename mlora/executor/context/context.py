@@ -1,16 +1,15 @@
 from mlora.model.modules import AdapterModel
-from mlora.model.args import LinearInfo
-from mlora.config import AdapterConfig, OptimizerConfig, LRSchedulerConfig
+from mlora.config import OptimizerConfig, LRSchedulerConfig
 
 import torch.optim
 from typing import Dict, List, Callable
-from collections import OrderedDict
 from abc import ABCMeta, abstractmethod
 
 
 class TaskContext(metaclass=ABCMeta):
     type_: str = ""
     name_: str = ""
+    path_: str = ""
 
     device_: str = ""
 
@@ -20,9 +19,10 @@ class TaskContext(metaclass=ABCMeta):
     optimizer_: torch.optim.Optimizer = None
     lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
 
-    def __init__(self, context_type: str, context_name: str) -> None:
+    def __init__(self, context_type: str, context_name: str, context_path: str) -> None:
         self.type_ = context_type
         self.name_ = context_name
+        self.path_ = context_path
 
         self.device_ = "cpu"
 
@@ -31,11 +31,6 @@ class TaskContext(metaclass=ABCMeta):
         self.loss_fn_ = None
         self.optimizer_ = None
         self.lr_scheduler_ = None
-
-    @abstractmethod
-    def init(self, config: AdapterConfig,
-             linears_info: OrderedDict[str, LinearInfo]) -> None:
-        ...
 
     @abstractmethod
     def switch_device(self, device: str) -> None:
