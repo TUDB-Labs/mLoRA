@@ -12,11 +12,9 @@ from .context import TaskContext
 
 
 class LoRATaskContext(TaskContext):
-    def __init__(self, context_name: str) -> None:
-        super().__init__("lora", context_name)
+    def __init__(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo]) -> None:
+        super().__init__("lora", config.name_, config.path_)
 
-    def init(self, config: LoRAConfig,
-             linears_info: OrderedDict[str, LinearInfo]) -> None:
         # init the adapter's weight
         for linear_name, linear_info in linears_info.items():
             target_name = linear_name.split('.')[3]
@@ -50,9 +48,10 @@ class LoRATaskContext(TaskContext):
     def __init_weight(self):
         weight_dict = None
 
-        if os.path.isdir(self.name_):
-            logging.info(f"Adapter {self.name_} weight exist, load from file.")
-            weight_dict = torch.load(f"{self.name_}{os.sep}adapter_model.bin")
+        if os.path.isdir(self.path_):
+            logging.info(
+                f"Adapter {self.name_}:{self.path_} weight exist, load from file.")
+            weight_dict = torch.load(f"{self.path_}{os.sep}adapter_model.bin")
             prefix_name = "base_model.model.model."
 
         for name, module in self.adapter_model_.items():

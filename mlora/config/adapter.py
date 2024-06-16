@@ -8,6 +8,7 @@ from .scheduler import LRSchedulerConfig, LRSCHEDULERCONFIG_CLASS
 class AdapterConfig(DictConfig):
     type_: str = ""
     name_: str = ""
+    path_: str = ""
 
     optimizer_config_: OptimizerConfig = None
     lr_scheduler_config_: LRSchedulerConfig = None
@@ -15,6 +16,7 @@ class AdapterConfig(DictConfig):
     __params_map: Dict[str, str] = {
         "type_": "type",
         "name_": "name",
+        "path_": "path"
     }
 
     def __init_optim(self, config: Dict[str, str]):

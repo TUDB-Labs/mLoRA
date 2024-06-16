@@ -9,6 +9,7 @@ datasets:
 adapters:
   - type: "lora"
     name: "lora_0"
+    path: "adapters/lora_0"
     optimizer: "adamw"
     lr: 3e-4
     lrscheduler: "none"
@@ -25,6 +26,7 @@ adapters:
       up_proj: false
   - type: "lora"
     name: "lora_1"
+    path: "adapters/lora_1"
     optimizer: "adamw"
     lr: 3e-4
     lrscheduler: "cosine"

@@ -22,7 +22,7 @@ class DPOTask(TrainTask):
 
         self.prompter_ = DPOPrompter(config.dataset_.prompt_path_)
 
-    def init(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
+    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
         # prepare the dataset and context
         self._pre_dataset()
@@ -41,9 +41,9 @@ class DPOTask(TrainTask):
             self.ref_context_ = None
             return
 
-        self.ref_context_ = TASKCONTEXT_CLASS[self.config_.reference_.type_](
-            self.config_.reference_.name_)
-        self.ref_context_.init(self.config_.reference_, linears_info)
+        ref_adapter_type = self.config_.reference_.type_
+        self.ref_context_ = TASKCONTEXT_CLASS[ref_adapter_type](
+            self.config_.reference_, linears_info)
 
     def __dpo_loss_sigmoid(self, logits: torch.Tensor) -> torch.Tensor:
         loss = -F.logsigmoid(self.config_.beta_ * logits) * \
@@ -162,3 +162,10 @@ class DPOTask(TrainTask):
                                               self._expand_batch_tokens, loss_fn)
 
         return ret_tokens, [ref_model_config, policy_model_config]
+
+    def done(self):
+        self._save()
+        # release the context
+        del self.context_
+        if self.ref_context_ is not None:
+            del self.ref_context_

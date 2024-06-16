@@ -13,6 +13,7 @@ datasets:
 adapters:
   - type: "lora"
     name: "lora_sft"
+    path: "adapters/lora_sft"
     optimizer: "adamw"
     lr: 3e-4
     lrscheduler: "none"
@@ -29,6 +30,7 @@ adapters:
       up_proj: true
   - type: "lora"
     name: "lora_dpo"
+    path: "adapters/lora_base_dpo"
     optimizer: "adamw"
     lr: 3e-4
     lrscheduler: "none"
