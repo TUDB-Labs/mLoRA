@@ -1,5 +1,5 @@
-from mlora.model.args import LLMModelArgs, MLoRABatchData, LinearInfo
-from mlora.trainer.context import TaskContext
+from mlora.model.modules import AdapterModel
+from mlora.model.args import LLMModelArgs, LinearInfo, ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 import torch
@@ -25,7 +25,7 @@ class Decoder(torch.nn.Module):
     def forward(self,
                 hidden_states: torch.Tensor,
                 mask: torch.Tensor,
-                input_args: MLoRABatchData):
+                input_args: ModelData):
         # Attention
         with nvtx_range("f_attention_norm"):
             attn_norm_output = self.attn_norm_.forward(hidden_states)
@@ -61,9 +61,9 @@ class Decoder(torch.nn.Module):
         self.attn_.from_pretrained(transformer_layer.self_attn)
         self.mlp_.from_pretrained(transformer_layer.mlp)
 
-    def load_adapter(self, context: TaskContext):
-        self.attn_.load_adapter(context)
-        self.mlp_.load_adapter(context)
+    def load_adapter(self, adapter_model: AdapterModel):
+        self.attn_.load_adapter(adapter_model)
+        self.mlp_.load_adapter(adapter_model)
 
     def offload_adapter(self, adapter_name: str):
         self.attn_.offload_adapter(adapter_name)

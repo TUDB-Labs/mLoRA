@@ -17,7 +17,8 @@
 # Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
 
 import mlora.utils
-import mlora.trainer
+import mlora.executor
+import mlora.config
 
 if __name__ == "__main__":
     args = mlora.utils.get_cmd_args()
@@ -31,11 +32,11 @@ if __name__ == "__main__":
         mlora.utils.setup_trace_mode()
 
     tokenizer, model = mlora.utils.load_model(args)
-    config = mlora.MLoRAConfig(args.config)
+    config = mlora.config.MLoRAConfig(args.config)
 
     # init all task from config file
-    trainer = mlora.trainer.Trainer(model, tokenizer, config)
+    executor = mlora.executor.Executor(model, tokenizer, config)
     for item in config.tasks_:
-        trainer.add_task(item)
+        executor.add_task(item)
 
-    trainer.train()
+    executor.execute()

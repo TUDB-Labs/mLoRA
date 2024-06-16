@@ -1,10 +1,9 @@
 from mlora.config.dispatcher import DispatcherConfig
 from mlora.config.task import TaskConfig
-from mlora.trainer.task import Task
-from mlora.model.args import MLoRABatchData, Tokens, Masks, MLoRADataConfig
+from mlora.executor.task import Task, TASK_CLASS
+from mlora.model.args import Tokens, Masks, MLoRADataConfig, MLoRAData
 
 import math
-import torch
 from typing import List, Callable, Tuple
 
 
@@ -53,7 +52,8 @@ class Dispatcher:
         event_map[name].register(cb)
 
     def add_task(self, config: TaskConfig, llm_name: str):
-        task = Task(config, llm_name)
+        assert config.type_ in TASK_CLASS
+        task = TASK_CLASS[config.type_](config, llm_name)
         self.ready_.append(task)
         self.init_event_.notify(task)
 
@@ -86,44 +86,37 @@ class Dispatcher:
 
         batch_masks: List[Masks] = []
 
-        for idx, task in enumerate(self.running_):
-            data_config = configs[idx]
-            assert data_config.adapter_name_ == task.context_.name_
+        for data_config in configs:
             s_idx = data_config.batch_start_idx_
             e_idx = data_config.batch_end_idx_
-
-            batch_tokens[s_idx:e_idx], masks = task.expand_batch_tokens(
+            batch_tokens[s_idx:e_idx], masks = data_config.expand_fn_(
                 batch_tokens[s_idx:e_idx], max_seq_len)
             batch_masks.extend(masks)
 
         return batch_tokens, batch_masks
 
-    def get_train_data(self) -> Tuple[MLoRABatchData, List[torch.nn.Module]]:
+    def data(self) -> MLoRAData:
         self.__dispatch_task_in()
 
         batch_tokens: List[Tokens] = []
         batch_masks: List[Masks] = []
         data_configs: List[MLoRADataConfig] = []
-        loss_fns: List[torch.nn.Module] = []
 
         # get all train data
         start_idx: int = 0
         for task in self.running_:
-            data = task.get_train_data()
-            end_idx = start_idx + len(data)
-            data_configs.append(MLoRADataConfig(
-                adapter_name_=task.context_.name_, adapter_type_=task.context_.type_,
-                batch_start_idx_=start_idx, batch_end_idx_=end_idx))
+            data, data_config = task.data(start_idx)
+            data_configs.extend(data_config)
             batch_tokens.extend(data)
-            loss_fns.append(task.get_loss_fn())
-            start_idx = end_idx
+            start_idx = start_idx + len(data)
 
         # post process this batch data
         batch_tokens, batch_masks = self.__align_batch_tokens(
             batch_tokens, data_configs)
 
-        return MLoRABatchData(batch_tokens_=batch_tokens, batch_mask_=batch_masks,
-                              data_config_=data_configs, inference_model_=False), loss_fns
+        return MLoRAData(batch_tokens=batch_tokens,
+                         batch_mask=batch_masks,
+                         data_config=data_configs)
 
     def step(self):
         for _, task in enumerate(self.running_):

@@ -1,9 +1,9 @@
-from mlora.model.modules import Adapter
+from mlora.model.modules import AdapterModel
 from mlora.model.args import LinearInfo
 from mlora.config import AdapterConfig, OptimizerConfig, LRSchedulerConfig
 
 import torch.optim
-from typing import Dict, List
+from typing import Dict, List, Callable
 from collections import OrderedDict
 from abc import ABCMeta, abstractmethod
 
@@ -14,23 +14,27 @@ class TaskContext(metaclass=ABCMeta):
 
     device_: str = ""
 
-    adapter_: Dict[str, Adapter] = {}
+    adapter_model_: AdapterModel = {}
 
-    loss_fn_: torch.nn.Module = None
+    loss_fn_: Callable = None
     optimizer_: torch.optim.Optimizer = None
     lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
 
     def __init__(self, context_type: str, context_name: str) -> None:
         self.type_ = context_type
         self.name_ = context_name
-        self.adapter_ = {}
+
+        self.device_ = "cpu"
+
+        self.adapter_model_ = {}
+
+        self.loss_fn_ = None
         self.optimizer_ = None
         self.lr_scheduler_ = None
-        self.loss_fn_ = torch.nn.CrossEntropyLoss()
 
     @abstractmethod
-    def init_adapter(self, config: AdapterConfig,
-                     linears_info: OrderedDict[str, LinearInfo]) -> None:
+    def init(self, config: AdapterConfig,
+             linears_info: OrderedDict[str, LinearInfo]) -> None:
         ...
 
     @abstractmethod
@@ -41,8 +45,15 @@ class TaskContext(metaclass=ABCMeta):
     def step(self) -> None:
         ...
 
+    @abstractmethod
     def weight_dict(self) -> Dict[str, torch.Tensor]:
-        return self.adapter_
+        ...
+
+    def adapter_model(self) -> AdapterModel:
+        return self.adapter_model_
+
+    def set_loss_fn(self, loss_fn: Callable):
+        self.loss_fn_ = loss_fn
 
     def create_optimizer(self, parameters: List[torch.Tensor],
                          optim_config: OptimizerConfig, lr_scheduler_config: LRSchedulerConfig) -> torch.optim:
@@ -77,7 +88,8 @@ class TaskContext(metaclass=ABCMeta):
             self.switch_tensor(value, device)
 
     def switch_optimizer(self, device: str):
-        assert self.optimizer_ is not None
+        if self.optimizer_ is None:
+            return
 
         for value in self.optimizer_.state.values():
             if isinstance(value, torch.Tensor):

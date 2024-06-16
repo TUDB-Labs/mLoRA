@@ -1,9 +1,8 @@
-from mlora.model.args import MLoRABatchData
+from mlora.model.args import ModelData
 
 import math
 import torch
 import torch.nn.functional as F
-
 from typing import Dict, List
 
 from .adapter import Adapter
@@ -29,7 +28,7 @@ class LoRAFunction(torch.autograd.Function):
     def forward(ctx,
                 result: torch.Tensor,
                 data: torch.Tensor,
-                input_args: MLoRABatchData,
+                input_args: ModelData,
                 dropouts: List[float],
                 scalings: List[float],
                 *args):
@@ -46,7 +45,12 @@ class LoRAFunction(torch.autograd.Function):
                                                                  scalings):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
-                save_inputs += (lora_a, lora_b, None)
+                save_inputs += (None, None, None)
+                continue
+
+            assert not ((lora_a.requires_grad) ^ (lora_b.requires_grad))
+            if not lora_a.requires_grad and not lora_b.requires_grad:
+                save_inputs += (None, None, None)
                 continue
 
             start_idx = lora_config.batch_start_idx_
@@ -151,7 +155,16 @@ class LoRA(Adapter):
         self.scaling_: float = alpha / r
 
     def init_weight(self, lora_a: torch.Tensor = None, lora_b: torch.Tensor = None):
-        torch.nn.init.kaiming_normal_(self.lora_a_, a=math.sqrt(5))
+        if lora_a is None:
+            torch.nn.init.kaiming_normal_(self.lora_a_, a=math.sqrt(5))
+        else:
+            self.lora_a_ = lora_a.to("cpu").detach().clone().to(
+                dtype=torch.float32).requires_grad_(True)
 
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
-        return LoRAFunction.apply(data, self.lora_a_, self.lora_b_, self.dropout_, self.scaling_)
+        if lora_b is not None:
+            self.lora_b_ = lora_b.to("cpu").detach().clone().to(
+                dtype=torch.float32).requires_grad_(True)
+
+    def disable_grad(self):
+        self.lora_a_.requires_grad_(False)
+        self.lora_b_.requires_grad_(False)

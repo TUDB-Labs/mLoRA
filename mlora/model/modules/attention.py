@@ -1,5 +1,5 @@
-from mlora.trainer.context import TaskContext
-from mlora.model.args import LLMModelArgs, MLoRABatchData, LinearInfo
+from mlora.model.modules import AdapterModel
+from mlora.model.args import LLMModelArgs, LinearInfo, ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 import math
@@ -89,7 +89,7 @@ class Attention(torch.nn.Module):
     def forward(self,
                 data: torch.Tensor,
                 mask: torch.Tensor,
-                input_args: MLoRABatchData):
+                input_args: ModelData):
         batch_size, max_seq_len, _ = data.shape
 
         xq = self.wq_.forward(data, input_args)
@@ -149,11 +149,11 @@ class Attention(torch.nn.Module):
             f"layers.{self.layer_id_}.self_attn.o_proj": self.wo_
         }
 
-    def load_adapter(self, context: TaskContext):
+    def load_adapter(self, adapter_model: AdapterModel):
         for name, module in self.linear_dict.items():
-            if name not in context.adapter_:
+            if name not in adapter_model:
                 continue
-            module.load_adapter(context.adapter_[name])
+            module.load_adapter(adapter_model[name])
 
     def offload_adapter(self, adapter_name: str):
         for _, module in self.linear_dict.items():

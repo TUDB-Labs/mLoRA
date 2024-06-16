@@ -9,7 +9,7 @@ class Prompter:
         with open(template) as fp:
             self.template_ = json.load(fp)
 
-    def generate_prompt(self, data: Dict[str, str]) -> str:
+    def generate_prompt(self, data: Dict[str, str]) -> List[str]:
         ret_val = ""
 
         try:
@@ -17,15 +17,15 @@ class Prompter:
         except:
             ret_val = ""
 
-        if ret_val != "":
-            return ret_val
+        if ret_val == "":
+            ret_val = self.template_["prompt_no_input"].format(**data)
 
-        return self.template_["prompt_no_input"].format(**data)
+        return [ret_val]
 
     def generate_prompt_batch(self, datas: List[Dict[str, str]]) -> List[str]:
         ret_data = []
         for data in datas:
-            ret_data.append(self.generate_prompt(data))
+            ret_data.extend(self.generate_prompt(data))
         return ret_data
 
     def get_response(self, output: str) -> str:

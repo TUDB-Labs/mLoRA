@@ -1,11 +1,8 @@
-from mlora.model.args import MLoRABatchData, LinearInfo
+from mlora.model.args import LinearInfo, ModelData
+from mlora.model.modules import AdapterModel
 
 from collections import OrderedDict
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from mlora.trainer.context import TaskContext
 
 
 class LLMModel(metaclass=ABCMeta):
@@ -16,11 +13,11 @@ class LLMModel(metaclass=ABCMeta):
     dim_: int = -1
 
     @abstractmethod
-    def forward(self, input: MLoRABatchData):
+    def forward(self, input: ModelData):
         pass
 
     @abstractmethod
-    def load_adapter(self, context: "TaskContext"):
+    def load_adapter(self, adapter_model: AdapterModel):
         pass
 
     @abstractmethod

@@ -1,6 +1,7 @@
 from mlora.config import MLoRAConfig, TaskConfig
 from mlora.model.llm import LLMModel
 from mlora.model.tokenizer import Tokenizer
+from mlora.model.args import MLoRAData
 
 import torch
 import logging
@@ -9,7 +10,7 @@ from .dispatcher import Dispatcher
 from .task import Task
 
 
-class Trainer:
+class Executor:
     model_: LLMModel = None
     tokenizer_: Tokenizer = None
 
@@ -35,63 +36,60 @@ class Trainer:
             self.dispatcher_.register_hook(hook, cb)
 
     def __task_init_hook(self, task: Task):
-        logging.info(f"Init task - {task.config_.adapter_.name_}")
+        logging.info(
+            f"Init {task.task_type()} task with adapters: {task.adapter_name()}")
         # init the task's dataset
         # init the task's adapter weight
-        # init the task's optimizer state
-        # init the task's lr scheduler state
-        task.pre_init(self.model_.linears_info(), self.tokenizer_)
+        task.init(self.model_.linears_info(), self.tokenizer_)
 
     def __task_to_running_hook(self, task: Task):
         logging.info(
-            f"Base model load adapter - {task.config_.adapter_.name_}")
+            f"Base model load adapters: {task.adapter_name()}")
         # move the task's adapter weight to the gpu
         # move the task's optimizer weight to the gpu
         # attach the adapter to the model
         # NOTE: must ensure the weight be loaded in the device befor attach to the model
         task.switch_device(self.model_.device_)
-        self.model_.load_adapter(task.context_)
+        for adapter_model in task.adapter_model():
+            self.model_.load_adapter(adapter_model)
 
     def __task_to_ready_hook(self, task: Task):
         logging.info(
-            f"Base model offload adapter - {task.config_.adapter_.name_}")
+            f"Base model offload adapters: {task.adapter_name()}")
         # offload the adapter
         # move the task's adapter weight to the cpu
-        self.model_.offload_adapter(task.config_.adapter_.name_)
+        for adapter_name in task.adapter_name():
+            self.model_.offload_adapter(adapter_name)
         task.switch_device("cpu")
 
     def __task_to_done_hook(self, task: Task):
         logging.info(
-            f"Finish adapter - {task.config_.adapter_.name_}")
+            f"Finish adapter - {task.adapter_name()}")
         # offload the adapter
         # move the task's adapter weight to the cpu
-        self.model_.offload_adapter(task.config_.adapter_.name_)
+        for adapter_name in task.adapter_name():
+            self.model_.offload_adapter(adapter_name)
         task.switch_device("cpu")
-        # to save the model
-        task.save()
+        task.done()
 
     def add_task(self, config: TaskConfig):
         self.dispatcher_.add_task(config, self.model_.name_or_path_)
 
-    def train(self) -> None:
+    def execute(self) -> None:
         while not self.dispatcher_.is_done():
-            data, loss_fns = self.dispatcher_.get_train_data()
+            data: MLoRAData = self.dispatcher_.data()
 
-            output = self.model_.forward(data)
+            output = self.model_.forward(data.model_data())
+            labels = torch.tensor(data.batch_tokens_, dtype=torch.long)
 
             total_loss = None
-            labels = torch.tensor(data.batch_tokens_, dtype=torch.long)
-            for idx, config in enumerate(data.data_config_):
-                s_idx = config.batch_start_idx_
-                e_idx = config.batch_end_idx_
-                vocab_size = output.shape[-1]
-                loss_input = output[s_idx:e_idx][...,
-                                                 :-1, :].contiguous().view(-1, vocab_size)
-                loss_target = labels[s_idx:e_idx][...,
-                                                  1:].contiguous().view(-1).to(loss_input.device)
-                loss = loss_fns[idx](loss_input, loss_target)
+
+            for config in data.data_config_:
+                loss = config.loss_fn_(
+                    output, labels, torch.tensor(data.batch_mask_))
+                if loss is None:
+                    continue
                 total_loss = loss if total_loss is None else total_loss + loss
-                logging.info(f"Task - {config.adapter_name_} loss: {loss}")
 
             total_loss.backward()
 

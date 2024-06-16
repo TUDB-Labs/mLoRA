@@ -5,11 +5,9 @@ from .config import DictConfig
 
 class OptimizerConfig(DictConfig):
     optimizer_: str = ""
-    lr_: float = 0.0
 
     __params_map: Dict[str, str] = {
         "optimizer_": "optimizer",
-        "lr_": "lr"
     }
 
     def __init__(self, config: Dict[str, str]) -> None:
@@ -18,9 +16,11 @@ class OptimizerConfig(DictConfig):
 
 
 class SGDOptimizerConfig(OptimizerConfig):
+    lr_: float = 0.0
     momentum_: float = 0.0
 
     __params_map: Dict[str, str] = {
+        "lr_": "lr",
         "momentum_": "momentum"
     }
 
@@ -30,7 +30,11 @@ class SGDOptimizerConfig(OptimizerConfig):
 
 
 class AdamWOptimizerConfig(OptimizerConfig):
-    __params_map: Dict[str, str] = {}
+    lr_: float = 0.0
+
+    __params_map: Dict[str, str] = {
+        "lr_": "lr"
+    }
 
     def __init__(self, config: Dict[str, str]) -> None:
         super().__init__(config)
@@ -38,6 +42,7 @@ class AdamWOptimizerConfig(OptimizerConfig):
 
 
 OPTIMIZERCONFIG_CLASS = {
+    "none": OptimizerConfig,
     "sgd": SGDOptimizerConfig,
     "adamw": AdamWOptimizerConfig
 }

@@ -1,11 +1,10 @@
 import yaml
-
 from typing import Dict, List
 
 from .dispatcher import DispatcherConfig
 from .dataset import DatasetConfig
 from .adapter import AdapterConfig, ADAPTERCONFIG_CLASS
-from .task import TaskConfig
+from .task import TaskConfig, TASKCONFIG_CLASS
 
 
 class MLoRAConfig:
@@ -27,10 +26,9 @@ class MLoRAConfig:
 
     def __init_tasks(self, config: List[Dict[str, any]]):
         for item in config:
-            adapter_name = item["adapter"]
-            dataset_name = item["dataset"]
-            self.tasks_.append(TaskConfig(item, self.__adapters_[
-                               adapter_name], self.__datasets_[dataset_name]))
+            assert item["type"] in TASKCONFIG_CLASS
+            self.tasks_.append(TASKCONFIG_CLASS[item["type"]](
+                item, self.__adapters_, self.__datasets_))
 
     def __init__(self, path: str):
         with open(path) as fp:

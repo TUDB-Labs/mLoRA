@@ -5,8 +5,7 @@ from mlora.pipeline.messages import PipeMessage, PipeMessageType
 from mlora.pipeline.function import RecvOperator, SendOperator
 from mlora.model.llm.model import LLMModel, precompute_mask
 from mlora.model.args import MLoRADataConfig, MLoRABatchData
-from mlora.dispatcher.pipeline_dispatcher import PipelineDispatcher
-from mlora.trainer.trainer import MultiTrainerContext
+from mlora.executor.executor import MultiTrainerContext
 from mlora.config import MLoRAConfig
 
 import torch
@@ -18,6 +17,10 @@ import time
 
 from enum import Enum, auto
 from typing import Dict, List
+
+
+class PipelineDispatcher:
+    None
 
 
 class WorkerRole(Enum):
@@ -66,7 +69,8 @@ class Pipe():
 
         if rank == 0:
             self.role_ = WorkerRole.HEAD
-            self.input_queue_ = DeviceSwapQueue(torch.device('cpu'), device, 4, 'input_data_queue')
+            self.input_queue_ = DeviceSwapQueue(
+                torch.device('cpu'), device, 4, 'input_data_queue')
             self.input_queue_.start()
         elif rank == self.world_size_ - 1:
             self.role_ = WorkerRole.TAIL
@@ -130,7 +134,8 @@ class Pipe():
                 return
             for lora_config in train_input.lora_batch_data_config_:
                 logging.info(f'load lora: {lora_config.adapter_name_}')
-            data = torch.tensor(train_input.batch_tokens_, dtype=torch.int64, device="cpu")
+            data = torch.tensor(train_input.batch_tokens_,
+                                dtype=torch.int64, device="cpu")
             msg = PipeMessage(self.device_, self.device_, PipeMessageType.ACTIVATIONS,
                               0, data, train_input)
             self.input_queue_.put(msg)
@@ -218,8 +223,10 @@ class Pipe():
         # tail worker need to calc the backward
         if not self.forward_stop_ and not self.is_stop_signal(message.tensor_data_):
             lora_configs = message.batch_data_.lora_batch_data_config_
-            total_loss = self.multi_trainer_context_.calc_loss(message.batch_data_, data)
-            message.batch_data_.batch_tokens_ = None  # backward doesn't need to save batch_tokens
+            total_loss = self.multi_trainer_context_.calc_loss(
+                message.batch_data_, data)
+            # backward doesn't need to save batch_tokens
+            message.batch_data_.batch_tokens_ = None
             total_loss.backward()
 
             self.trainer_step(lora_configs)
@@ -251,16 +258,19 @@ class Pipe():
         for layer_model in self.model_partition_:
             wrapper_module = layer_model.wrapper_module_
             if hasattr(wrapper_module, 'get_lora_weight_dict'):
-                lora_weight, _ = wrapper_module.get_lora_weight_dict(adapter_name)
+                lora_weight, _ = wrapper_module.get_lora_weight_dict(
+                    adapter_name)
                 lora_weights.update(lora_weight)
 
-        saved_path = lora_output_dir + os.sep + f"adapter_model_{self.rank_}.bin"
+        saved_path = lora_output_dir + os.sep + \
+            f"adapter_model_{self.rank_}.bin"
         logging.info(f'save {adapter_name} to {saved_path}')
         torch.save(lora_weights, saved_path)
 
         # save json only on tail worker
         if self.role_ == WorkerRole.TAIL:
-            context = self.multi_trainer_context_.get_trainer_context(adapter_name)
+            context = self.multi_trainer_context_.get_trainer_context(
+                adapter_name)
             with open(lora_output_dir + os.sep + "adapter_config.json", "w") as f:
                 json.dump(context.export_config(), f, indent=4)
 
