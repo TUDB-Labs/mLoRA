@@ -1,0 +1,16 @@
+name: Main branch fine-tuning test
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model"
+        required: true
+        type: string
+
+jobs:
+  test:
+    uses: ./.github/workflows/branch-finetune-test.yaml
+    with:
+      model: ${{ inputs.model }}
+      branch: main

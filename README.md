@@ -3,11 +3,11 @@
   <p>An Efficient "Factory" to Build Multiple LoRA Adapters</p>
 </h3>
 
-[![](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml/badge.svg)](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml)
-[![](https://img.shields.io/github/stars/TUDB-Labs/multi-lora-fine-tune?logo=GitHub)](https://github.com/TUDB-Labs/multi-lora-fine-tune/stargazers)
-[![](https://img.shields.io/github/license/TUDB-Labs/multi-lora-fine-tune)](http://www.apache.org/licenses/LICENSE-2.0)
-[![](https://img.shields.io/github/v/release/TUDB-Labs/multi-lora-fine-tune)](https://github.com/TUDB-Labs/multi-lora-fine-tune/releases/latest)
-[![](https://img.shields.io/github/languages/top/TUDB-Labs/multi-lora-fine-tune)](https://www.python.org/)  
+[![](https://img.shields.io/github/stars/TUDB-Labs/mLoRA?logo=GitHub)](https://github.com/TUDB-Labs/mLoRA/stargazers)
+[![](https://img.shields.io/github/license/TUDB-Labs/mLoRA)](http://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/github/languages/top/TUDB-Labs/mLoRA)](https://www.python.org/)
+[![](https://img.shields.io/github/v/release/TUDB-Labs/mLoRA)](https://github.com/TUDB-Labs/mLoRA/releases/latest)
+[![](https://github.com/TUDB-Labs/mLoRA/actions/workflows/main-finetune-test.yml/badge.svg)](https://github.com/TUDB-Labs/mLoRA/actions/workflows/main-finetune-test.yml)
 
 <div align="center">
 <img src="./docs/assets/theme.webp" width="50%">
