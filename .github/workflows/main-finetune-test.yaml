@@ -9,7 +9,7 @@ on:
         type: string
 
 jobs:
-  test:
+  finetune_main_branch:
     uses: ./.github/workflows/branch-finetune-test.yaml
     with:
       model: ${{ inputs.model }}
