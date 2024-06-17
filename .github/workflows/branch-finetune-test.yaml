@@ -25,14 +25,20 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  finetune_inference:
     runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
-      - name: Install dependencies
+      - name: get repo
+        run: |
+          cd $HOME
+          git clone https://github.com/TUDB-Labs/mLoRA
+          cd ./mLoRA
+      - name: checkout branch
+        run: |
+          git pull origin ${{ inputs.branch }}:local_tmp
+          git checkout local_tmp
+      - name: install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install .[test]
@@ -42,3 +48,7 @@ jobs:
       - name: inference all test case
         run: |
           python tests/inference_all_case.py --base_model ${{ inputs.model }}
+      - name: clean repo
+        run: |
+          cd $HOME
+          rm -rf ./mLoRA
