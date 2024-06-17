@@ -1,7 +1,7 @@
 from .prompter import Prompter
-from .dpo_prompter import DPOPrompter
+from .preference_data_prompter import PreferenceDataPrompter
 
 __all__ = [
     "Prompter",
-    "DPOPrompter"
+    "PreferenceDataPrompter",
 ]
