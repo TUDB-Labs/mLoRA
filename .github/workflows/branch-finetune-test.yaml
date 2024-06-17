@@ -31,21 +31,23 @@ jobs:
     steps:
       - name: get repo
         run: |
-          cd $HOME
-          rm -rf ./mLoRA
-          git clone https://github.com/TUDB-Labs/mLoRA
-          cd ./mLoRA
+          rm -rf $HOME/mLoRA
+          git clone https://github.com/TUDB-Labs/mLoRA $HOME/mLoRA
       - name: checkout branch
         run: |
+          cd $HOME/mLoRA
           git pull origin ${{ inputs.branch }}:local_tmp
           git checkout local_tmp
       - name: install dependencies
         run: |
+          cd $HOME/mLoRA
           python -m pip install --upgrade pip
           pip install .[test]
       - name: finetune all test case
         run: |
+          cd $HOME/mLoRA
           tests/finetune_all_case.sh ${{ inputs.model }}
       - name: inference all test case
         run: |
+          cd $HOME/mLoRA
           python tests/inference_all_case.py --base_model ${{ inputs.model }}
