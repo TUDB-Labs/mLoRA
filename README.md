@@ -1,6 +1,6 @@
 <h1 align="center"> <p>mLoRA</p></h1>
 <h3 align="center">
-  <p>Efficient LLM Model Fine-Tune via Multi-LoRA Optimization</p>
+  <p>An Efficient "Factory" to Build Multiple LoRA Adapters</p>
 </h3>
 
 [![](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml/badge.svg)](https://github.com/TUDB-Labs/multi-lora-fine-tune/actions/workflows/python-test-main.yml)
@@ -9,7 +9,12 @@
 [![](https://img.shields.io/github/v/release/TUDB-Labs/multi-lora-fine-tune)](https://github.com/TUDB-Labs/multi-lora-fine-tune/releases/latest)
 [![](https://img.shields.io/github/languages/top/TUDB-Labs/multi-lora-fine-tune)](https://www.python.org/)  
 
-mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for efficient fine-tuning of Large Language Models (LLMs) using LoRA and its variants. Key features of mLoRA include:
+<div align="center">
+<img src="./docs/assets/theme.webp" width="50%">
+</div>
+
+
+mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for efficient fine-tuning of multiple Large Language Models (LLMs) using LoRA and its variants. Key features of mLoRA include:
 
 - Concurrent fine-tuning of multiple LoRA adapters.
 
@@ -29,17 +34,19 @@ Firstly, you should clone this repository and install dependencies:
 git clone https://github.com/TUDB-Labs/mLoRA
 cd mLoRA
 # Install requirements
-pip install -r requirements.txt
+pip install .
 ```
 
-The `mlora.py` code is a starting point for finetuning.
+The `mlora.py` code is a starting point for batch fine-tuning LoRA adapters.
 ```bash
 python mlora.py \
   --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
   --config ./demo/dummy.yaml \
 ```
 
-You can check the adapters' configuration in [demo](./demo/) folder.
+You can check the adapters' configuration in [demo](./demo/) and [tests](./tests/) folder.
+
+In [tests](./tests/) folder, there are some configuration regarding the use of different LoRA variants and reinforcement learning preference alignment algorithms.
 
 For further detailed usage information, please use `--help` option:
 ```bash
@@ -51,7 +58,7 @@ python mlora.py --help
 Using mLoRA can save significant computational and memory resources when training multiple adapters simultaneously.
 
 ### High performance on consumer hardware
-We fine-tuned the LoRA adapter using four A6000 graphics cards with fp32 precision and without using checkpointing or quantization techniques.
+We fine-tuned multiple LoRA adapters using four A6000 graphics cards with fp32 precision and without using checkpointing and any quantization techniques: 
 
 | Model                                                               | mLoRA (tokens/s) | PEFT-LoRA with FSDP (tokens/s) | PEFT-LoRA with TP (tokens/s) |
 | ------------------------------------------------------------------- | ---------------- | ------------------------------ | ---------------------------- |
@@ -61,8 +68,8 @@ We fine-tuned the LoRA adapter using four A6000 graphics cards with fp32 precisi
 
 ### Supported model
 
-|         | Model                                              |
-| ------- | -------------------------------------------------- |
+|         | Model                            |
+| ------- | -------------------------------- |
 | &check; | [LLaMA](https://llama.meta.com/) |
 
 ### Supported LoRA variants
@@ -70,10 +77,11 @@ We fine-tuned the LoRA adapter using four A6000 graphics cards with fp32 precisi
 |         | Variant                                   |
 | ------- | ----------------------------------------- |
 | &check; | [QLoRA](https://arxiv.org/abs/2305.14314) |
+| &check; | [LoRA+](https://arxiv.org/abs/2402.12354) |
 
 ### Supported preference alignment algorithms
-|         | Variant                                   |
-| ------- | ----------------------------------------- |
+|         | Variant                                 |
+| ------- | --------------------------------------- |
 | &check; | [DPO](https://arxiv.org/abs/2305.18290) |
 
 ## Document

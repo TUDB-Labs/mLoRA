@@ -8,8 +8,8 @@ datasets:
     preprocess: "default"
 adapters:
   - type: "lora"
-    name: "lora_dpo_sft"
-    path: "adapters/lora_dpo_sft"
+    name: "loraplus_sft"
+    path: "adapters/loraplus_sft_0"
     r: 32
     alpha: 64
     dropout: 0.05
@@ -18,12 +18,13 @@ adapters:
       k_proj: true
       v_proj: true
       o_proj: true
-      gate_proj: true
-      down_proj: true
-      up_proj: true
-  - type: "lora"
+      gate_proj: false
+      down_proj: false
+      up_proj: false
+  - type: "loraplus"
     name: "lora_dpo"
-    path: "adapters/lora_dpo"
+    path: "adapters/loraplus_dpo"
+    lr_ratio: 8.0
     optimizer: "adamw"
     lr: 3e-4
     r: 32
@@ -40,7 +41,7 @@ adapters:
 tasks:
   - type: "dpo"
     adapter: "lora_dpo"
-    reference: "lora_dpo_sft"
+    reference: "loraplus_sft"
     dataset: "dpo_data"
     batch_size: 16
     mini_batch_size: 16

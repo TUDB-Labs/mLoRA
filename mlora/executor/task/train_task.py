@@ -7,7 +7,7 @@ import json
 import torch
 import logging
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, override
 
 from .task import Task
 
@@ -19,20 +19,24 @@ class TrainTask(Task):
         super().__init__(config, llm_name)
         self.now_epoch_ = 1
 
+    @override
     def is_done(self) -> bool:
         if self.now_epoch_ <= self.config_.num_epochs_:
             return False
         return True
 
+    @override
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
         # prepare the dataset and context
         self._pre_dataset()
         self._pre_context(linears_info)
 
+    @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
         logging.info(
-            f'Adapter {self.context_.name_} epoch: {self.now_epoch_}/{self.config_.num_epochs_}'
+            f'Adapter {self.context_.name_} epoch: {
+                self.now_epoch_}/{self.config_.num_epochs_}'
             f' iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_}')
         data_idx_s = self.now_data_idx_
         data_idx_e = self.now_data_idx_ + self.config_.mini_batch_size_
@@ -98,15 +102,17 @@ class TrainTask(Task):
         with open(output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)
 
+    @override
     def done(self):
         self._save()
         # release the context
         del self.context_
 
+    @override
     def step(self):
         stepd: bool = False
 
-        if self.now_step_ % self.config_.accumulate_step == 0:
+        if self.now_step_ % self.config_.accumulate_step_ == 0:
             stepd = True
             self.context_.step()
 

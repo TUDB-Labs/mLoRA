@@ -3,7 +3,7 @@ from mlora.prompter import Prompter
 from mlora.model.modules import AdapterModel
 from mlora.model.args import LinearInfo, Tokens, Masks, MLoRADataConfig
 from mlora.model.tokenizer import Tokenizer
-from mlora.executor.context import TaskContext, TASKCONTEXT_CLASS
+from mlora.executor.context import TaskContext, TRAINCONTEXT_CLASS
 
 import logging
 from tqdm import tqdm
@@ -88,7 +88,7 @@ class Task:
 
     def _pre_context(self, linears_info: OrderedDict[str, LinearInfo]):
         adapter_type = self.config_.adapter_.type_
-        self.context_ = TASKCONTEXT_CLASS[adapter_type](
+        self.context_ = TRAINCONTEXT_CLASS[adapter_type](
             self.config_.adapter_, linears_info)
 
     def _expand_batch_tokens(self,

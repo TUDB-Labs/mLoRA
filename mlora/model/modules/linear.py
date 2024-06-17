@@ -7,7 +7,7 @@ import bitsandbytes
 from typing import Dict, Tuple, List
 
 from .adapter import Adapter
-from .lora import LoRAFunction
+from .lora import LoRA, LoRAFunction
 
 
 class Linear(torch.nn.Module):
@@ -50,7 +50,7 @@ class Linear(torch.nn.Module):
         for lora_config in input_args.data_config_:
             adapter_name = lora_config.adapter_name_
 
-            if adapter_name == "" or adapter_name not in self.adapters_ or lora_config.adapter_type_ != "lora":
+            if adapter_name not in self.adapters_ or not isinstance(self.adapters_[adapter_name], LoRA):
                 loras += (None, None)
                 dropouts.append(None)
                 scalings.append(None)

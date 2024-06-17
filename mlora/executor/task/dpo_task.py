@@ -3,13 +3,13 @@ from mlora.model.modules import AdapterModel
 from mlora.config import DPOTaskConfig
 from mlora.prompter import DPOPrompter
 from mlora.model.args import Tokens, MLoRADataConfig, LinearInfo
-from mlora.executor.context import TaskContext, TASKCONTEXT_CLASS
+from mlora.executor.context import TaskContext, INFERENCECONTEXT_CLASS
 
 import copy
 import torch
 import logging
 import torch.nn.functional as F
-from typing import List, Tuple, OrderedDict
+from typing import List, Tuple, OrderedDict, override
 
 from .train_task import TrainTask
 
@@ -22,6 +22,7 @@ class DPOTask(TrainTask):
 
         self.prompter_ = DPOPrompter(config.dataset_.prompt_path_)
 
+    @override
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
         # prepare the dataset and context
@@ -42,7 +43,7 @@ class DPOTask(TrainTask):
             return
 
         ref_adapter_type = self.config_.reference_.type_
-        self.ref_context_ = TASKCONTEXT_CLASS[ref_adapter_type](
+        self.ref_context_ = INFERENCECONTEXT_CLASS[ref_adapter_type](
             self.config_.reference_, linears_info)
 
     def __dpo_loss_sigmoid(self, logits: torch.Tensor) -> torch.Tensor:
@@ -56,24 +57,28 @@ class DPOTask(TrainTask):
         loss = (logits - 1 / (2 * self.config_.beta_)) ** 2
         return loss
 
+    @override
     def adapter_model(self) -> List[AdapterModel]:
         if self.ref_context_ is None:
             return super().adapter_model()
 
         return [self.context_.adapter_model(), self.ref_context_.adapter_model()]
 
+    @override
     def adapter_name(self) -> List[str]:
         if self.ref_context_ is None:
             return super().adapter_name()
 
         return [self.config_.adapter_.name_, self.config_.reference_.name_]
 
+    @override
     def switch_device(self, device: str):
         if self.ref_context_ is not None:
             self.ref_context_.switch_device(device)
 
         self.context_.switch_device(device)
 
+    @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
         logging.info(
             f'Task - {self.context_.name_} epoch: {self.now_epoch_}/{self.config_.num_epochs_}'
@@ -163,6 +168,7 @@ class DPOTask(TrainTask):
 
         return ret_tokens, [ref_model_config, policy_model_config]
 
+    @override
     def done(self):
         self._save()
         # release the context

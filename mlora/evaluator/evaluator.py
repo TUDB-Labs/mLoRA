@@ -1,4 +1,4 @@
-from mlora.model.llm.model import LLMModel
+from mlora.model.llm.model_llm import LLMModel
 from mlora.model.tokenizer.tokenizer import Tokenizer
 
 from abc import ABCMeta, abstractmethod

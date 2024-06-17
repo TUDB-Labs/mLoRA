@@ -2,34 +2,15 @@ dispatcher:
   name: "default"
   concurrency_num: 2
 datasets:
-  - name: "dpo_data"
-    data: "tests/dpo/dpo_data.json"
-    prompt: "demo/dummy_template.json"
-    preprocess: "default"
   - name: "dummy_data"
     data: "demo/dummy_data.json"
     prompt: "demo/dummy_template.json"
-    preprocess: "shuffle"
+    preprocess: "default"
 adapters:
-  - type: "lora"
-    name: "lora_dpo_sft"
-    path: "adapters/lora_dpo_sft"
-    optimizer: "adamw"
-    lr: 3e-4
-    r: 32
-    alpha: 64
-    dropout: 0.05
-    target_modules:
-      q_proj: true
-      k_proj: true
-      v_proj: true
-      o_proj: true
-      gate_proj: true
-      down_proj: true
-      up_proj: true
-  - type: "lora"
-    name: "lora_dpo"
-    path: "adapters/lora_base_dpo"
+  - type: "loraplus"
+    name: "lora_0"
+    path: "adapters/loraplus_sft_0"
+    lr_ratio: 8
     optimizer: "adamw"
     lr: 3e-4
     r: 32
@@ -43,21 +24,37 @@ adapters:
       gate_proj: false
       down_proj: false
       up_proj: false
+  - type: "loraplus"
+    name: "lora_1"
+    path: "adapters/loraplus_sft_1"
+    lr_ratio: 16
+    optimizer: "adamw"
+    lr: 3e-4
+    lrscheduler: "cosine"
+    t_max: 10000
+    eta_min: 0
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: true
+      down_proj: true
+      up_proj: true
 tasks:
-  - type: "dpo"
-    adapter: "lora_dpo"
-    reference: "base"
-    dataset: "dpo_data"
-    batch_size: 16
-    mini_batch_size: 16
+  - type: "train"
+    adapter: "lora_0"
+    dataset: "dummy_data"
+    batch_size: 64
+    mini_batch_size: 64
     num_epochs: 10
     cutoff_len: 256
     save_step: 2000
-    loss_type: "sigmoid"
-    beta: 0.1
-    label_smoothing: 0.0
   - type: "train"
-    adapter: "lora_dpo_sft"
+    adapter: "lora_1"
     dataset: "dummy_data"
     batch_size: 64
     mini_batch_size: 64
