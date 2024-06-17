@@ -83,6 +83,8 @@ We fine-tuned multiple LoRA adapters using four A6000 graphics cards with fp32 p
 |         | Variant                                 |
 | ------- | --------------------------------------- |
 | &check; | [DPO](https://arxiv.org/abs/2305.18290) |
+| &check; | [CPO](https://arxiv.org/abs/2401.08417) |
+
 
 ## Document
 

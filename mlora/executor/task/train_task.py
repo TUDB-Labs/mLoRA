@@ -21,9 +21,7 @@ class TrainTask(Task):
 
     @override
     def is_done(self) -> bool:
-        if self.now_epoch_ <= self.config_.num_epochs_:
-            return False
-        return True
+        return self.now_epoch_ > self.config_.num_epochs_
 
     @override
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
@@ -52,10 +50,10 @@ class TrainTask(Task):
 
         def loss_fn(input: torch.Tensor, target: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
             vacab_size = input.shape[-1]
-            loss_input = input[start_idx:end_idx][...,
-                                                  :-1, :].contiguous().view(-1, vacab_size)
-            loss_target = target[start_idx:end_idx][...,
-                                                    1:].contiguous().view(-1).to(loss_input.device)
+            loss_input = input[start_idx:end_idx, :-1,
+                               :].contiguous().view(-1, vacab_size)
+            loss_target = target[start_idx:end_idx,
+                                 1:].contiguous().view(-1).to(loss_input.device)
             loss = self.context_.loss_fn_(loss_input, loss_target)
 
             logging.info(f"Adapter {self.context_.name_} loss: {loss}")

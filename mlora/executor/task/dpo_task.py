@@ -1,7 +1,7 @@
 from mlora.model.tokenizer import Tokenizer
 from mlora.model.modules import AdapterModel
 from mlora.config import DPOTaskConfig
-from mlora.prompter import DPOPrompter
+from mlora.prompter import PreferenceDataPrompter
 from mlora.model.args import Tokens, MLoRADataConfig, LinearInfo
 from mlora.executor.context import TaskContext, INFERENCECONTEXT_CLASS
 
@@ -20,7 +20,7 @@ class DPOTask(TrainTask):
     def __init__(self, config: DPOTaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
 
-        self.prompter_ = DPOPrompter(config.dataset_.prompt_path_)
+        self.prompter_ = PreferenceDataPrompter(config.dataset_.prompt_path_)
 
     @override
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
@@ -112,18 +112,18 @@ class DPOTask(TrainTask):
         policy_end_idx = policy_start_idx + len(policy_model_token)
 
         def loss_fn(input: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-            mask = ~mask[ref_start_idx:policy_end_idx]
+            mask = ~mask[ref_start_idx:policy_end_idx, 1:]
 
-            logits = input[ref_start_idx:policy_end_idx][:,
-                                                         :-1, :].log_softmax(-1)
-            labels = target[ref_start_idx:policy_end_idx][:, 1:].to(
+            logits = input[ref_start_idx:policy_end_idx,
+                           :-1, :].log_softmax(-1)
+            labels = target[ref_start_idx:policy_end_idx, 1:].to(
                 input.device)
-            mask = mask.long()[:, 1:].to(input.device)
+            mask = mask.long().to(input.device)
 
-            pre_token_logps = torch.gather(
+            per_token_logps = torch.gather(
                 logits, dim=2, index=labels.unsqueeze(2)).squeeze(2)
 
-            logps = (pre_token_logps * mask).sum(-1)
+            logps = (per_token_logps * mask).sum(-1)
 
             data_len = policy_end_idx - ref_start_idx
             assert data_len % 4 == 0

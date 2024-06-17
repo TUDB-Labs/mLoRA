@@ -4,7 +4,7 @@ from .prompter import Prompter
 from typing import Dict, List, Tuple, override
 
 
-class DPOPrompter(Prompter):
+class PreferenceDataPrompter(Prompter):
     def __init__(self, template: str):
         super().__init__(template)
 

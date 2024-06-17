@@ -83,7 +83,24 @@ class DPOTaskConfig(TrainTaskConfig):
         self.reference_ = adapters[config["reference"]]
 
 
+class CPOTaskConfig(TrainTaskConfig):
+    loss_type_: str = "sigmoid"
+    beta_: float = 0.2
+
+    __params_map: Dict[str, str] = {
+        "loss_type_": "loss_type",
+        "beta_": "beta"
+    }
+
+    def __init__(self, config: Dict[str, str],
+                 adapters: Dict[str, AdapterConfig],
+                 datasets: Dict[str, DatasetConfig]):
+        super().__init__(config, adapters, datasets)
+        self.init(self.__params_map, config)
+
+
 TASKCONFIG_CLASS = {
     "train": TrainTaskConfig,
-    "dpo": DPOTaskConfig
+    "dpo": DPOTaskConfig,
+    "cpo": CPOTaskConfig
 }
