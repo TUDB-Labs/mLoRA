@@ -1,0 +1,44 @@
+name: Branch fine-tuning test
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model"
+        required: true
+        type: string
+      branch:
+        description: "Branch"
+        required: true
+        type: string
+
+  workflow_call:
+    inputs:
+      model:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: self-host
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[test]
+      - name: finetune all test case
+        run: |
+          tests/finetune_all_case.sh ${{ inputs.model }}
+      - name: inference all test case
+        run: |
+          python tests/inference_all_case.py --base_model ${{ inputs.model }}
