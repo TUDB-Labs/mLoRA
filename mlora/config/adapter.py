@@ -1,8 +1,10 @@
-from typing import Dict
+import logging
+from typing import Dict, Any, override
+from abc import abstractmethod
 
 from .config import DictConfig
 from .optimizer import OptimizerConfig, OPTIMIZERCONFIG_CLASS
-from .scheduler import LRSchedulerConfig, LRSCHEDULERCONFIG_CLASS
+from .lr_scheduler import LRSchedulerConfig, LRSCHEDULERCONFIG_CLASS
 
 
 class AdapterConfig(DictConfig):
@@ -37,9 +39,21 @@ class AdapterConfig(DictConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
+        if "optimizer" not in config:
+            logging.info(
+                f"Adapter {self.name_} without optimizer, only for inference")
+            return
+
         self.__init_optim(config)
+
+        if "lrscheduler" not in config:
+            logging.info(
+                f"Adapter {self.name_} without lr_scheduler.")
+            return
+
         self.__init_lr_scheduler(config)
 
+    @abstractmethod
     def export(self) -> Dict[str, str]:
         ...
 
@@ -57,10 +71,11 @@ class LoRAConfig(AdapterConfig):
         "target_": "target_modules",
     }
 
-    def __init__(self, config: Dict[str, any]):
+    def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.init(self.__params_map, config)
 
+    @override
     def export(self) -> Dict[str, str]:
         return {
             "lora_alpha": self.alpha_,
@@ -73,6 +88,19 @@ class LoRAConfig(AdapterConfig):
         }
 
 
+class LoRAPlusConfig(LoRAConfig):
+    lr_ratio_: float = 8.0
+
+    __params_map: Dict[str, str] = {
+        "lr_ratio_": "lr_ratio"
+    }
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.init(self.__params_map, config)
+
+
 ADAPTERCONFIG_CLASS = {
-    "lora": LoRAConfig
+    "lora": LoRAConfig,
+    "loraplus": LoRAPlusConfig
 }

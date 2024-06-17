@@ -3,7 +3,7 @@ from mlora.pipeline.transport import RpcTransport
 from mlora.pipeline.stream import CudaStream
 from mlora.pipeline.messages import PipeMessage, PipeMessageType
 from mlora.pipeline.function import RecvOperator, SendOperator
-from mlora.model.llm.model import LLMModel, precompute_mask
+from mlora.model.llm.model_llm import LLMModel, precompute_mask
 from mlora.model.args import MLoRADataConfig, MLoRABatchData
 from mlora.executor.executor import MultiTrainerContext
 from mlora.config import MLoRAConfig

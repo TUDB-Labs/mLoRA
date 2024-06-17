@@ -1,4 +1,4 @@
-from mlora.model.llm.model import LLMModel
+from mlora.model.llm.model_llm import LLMModel
 from mlora.model.args import Tokens, MLoRABatchData
 from mlora.model.tokenizer.tokenizer import Tokenizer
 from mlora.evaluator.evaluator_factory import Evaluator
@@ -185,4 +185,4 @@ class MMLUEvaluator(Evaluator):
     def evaluate(self) -> float:
         logging.info(f"Performing MMLU/{self.subject_} Benchmark.")
         result = self.evaluate_subject(self.subject_)
-        logging.info(f"Accuracy: {sum(result)/len(result)}")
+        logging.info(f"Accuracy: {sum(result) / len(result)}")

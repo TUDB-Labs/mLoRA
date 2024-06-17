@@ -1,6 +1,6 @@
 # The system's design
 
-![](./assets/desing.jpg)
+![](./assets/design.jpg)
 
 mLoRA includes the following main modules:
 

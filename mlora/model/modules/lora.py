@@ -3,7 +3,7 @@ from mlora.model.args import ModelData
 import math
 import torch
 import torch.nn.functional as F
-from typing import Dict, List
+from typing import Dict, List, override
 
 from .adapter import Adapter
 
@@ -165,6 +165,6 @@ class LoRA(Adapter):
             self.lora_b_ = lora_b.to("cpu").detach().clone().to(
                 dtype=torch.float32).requires_grad_(True)
 
-    def disable_grad(self):
-        self.lora_a_.requires_grad_(False)
-        self.lora_b_.requires_grad_(False)
+    @override
+    def get_tensors(self) -> List[torch.Tensor]:
+        return [self.lora_a_, self.lora_b_]

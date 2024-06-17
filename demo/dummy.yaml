@@ -9,10 +9,9 @@ datasets:
 adapters:
   - type: "lora"
     name: "lora_0"
-    path: "adapters/lora_0"
+    path: "adapters/lora_sft_0"
     optimizer: "adamw"
     lr: 3e-4
-    lrscheduler: "none"
     r: 32
     alpha: 64
     dropout: 0.05
@@ -26,7 +25,7 @@ adapters:
       up_proj: false
   - type: "lora"
     name: "lora_1"
-    path: "adapters/lora_1"
+    path: "adapters/lora_sft_1"
     optimizer: "adamw"
     lr: 3e-4
     lrscheduler: "cosine"

@@ -1,4 +1,4 @@
-from .model import LLMModel
+from .model_llm import LLMModel
 from .model_llama import LlamaModel
 
 __all__ = [

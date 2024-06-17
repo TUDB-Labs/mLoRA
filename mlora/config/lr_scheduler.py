@@ -1,4 +1,5 @@
-from typing import Dict
+from typing import Dict, override
+from abc import abstractmethod
 
 from .config import DictConfig
 
@@ -14,6 +15,10 @@ class LRSchedulerConfig(DictConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
+    @abstractmethod
+    def to_fn_parameters(self) -> Dict[str, str]:
+        ...
+
 
 class CosineLRSchedulerConfig(LRSchedulerConfig):
     t_max_: int = -1
@@ -28,8 +33,14 @@ class CosineLRSchedulerConfig(LRSchedulerConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
+    @override
+    def to_fn_parameters(self) -> Dict[str, str]:
+        return {
+            "T_max": float(self.t_max_),
+            "eta_min": float(self.eta_min_)
+        }
+
 
 LRSCHEDULERCONFIG_CLASS = {
-    "none": LRSchedulerConfig,
     "cosine": CosineLRSchedulerConfig,
 }

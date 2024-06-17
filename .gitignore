@@ -168,12 +168,7 @@ __pycache__/
 *.egg
 
 data/*
-!data/AlpacaDataCleaned/
-template/*
-!data/data_demo.json
-!data/dummy_data.json
-!template/test_data_demo.json
-!template/template_demo.json
+adapters/*
 
 # macOS junk files
 .DS_Store

@@ -1,12 +1,21 @@
 from .context import TaskContext
-from .lora import LoRATaskContext
+from .lora import TrainLoRAContext, InferenceLoRAContext
+from .loraplus import TrainLoRAPlusContext
 
-TASKCONTEXT_CLASS = {
-    "lora": LoRATaskContext
+TRAINCONTEXT_CLASS = {
+    "lora": TrainLoRAContext,
+    "loraplus": TrainLoRAPlusContext
+}
+
+INFERENCECONTEXT_CLASS = {
+    "lora": InferenceLoRAContext
 }
 
 __all__ = [
-    "TASKCONTEXT_CLASS",
+    "TRAINCONTEXT_CLASS",
+    "INFERENCECONTEXT_CLASS",
     "TaskContext",
-    "LoRATaskContext"
+    "TrainLoRAContext",
+    "InferenceLoRAContext",
+    "TrainLoRAPlusContext",
 ]

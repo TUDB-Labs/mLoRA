@@ -7,9 +7,9 @@ import torch
 import logging
 from transformers import AutoConfig, AutoModelForCausalLM
 from collections import OrderedDict
-from typing import Tuple, List
+from typing import Tuple, List, override
 
-from .model import LLMModel
+from .model_llm import LLMModel
 
 
 # input_tokens shape is: batch_size * seq_len
@@ -116,7 +116,8 @@ class LlamaSequentialWrapper(torch.nn.Module):
         }
 
         module_name = self.name()
-        assert module_name in forward_func_dict, f"error module name {module_name}"
+        assert module_name in forward_func_dict, f"error module name {
+            module_name}"
 
         return forward_func_dict[module_name]()
 
@@ -138,6 +139,7 @@ class LlamaModel(LLMModel):
         self.pad_token_id_ = args.pad_token_id_
         self.eos_token_id_ = -1
 
+    @override
     def forward(self, input: ModelData) -> torch.Tensor:
         # train model or inference model: output is probs
         tokens = torch.tensor(input.batch_tokens_,
@@ -217,7 +219,8 @@ class LlamaModel(LLMModel):
             path, **additional_load_args)
 
         if llama_model.config.model_type not in LlamaCompatibleModelTypes:
-            assert f"unsupported model type {llama_model.config.model_type}, loading with llama compatible mode."
+            assert f"unsupported model type {
+                llama_model.config.model_type}, loading with llama compatible mode."
 
         logging.info(
             f"loading llama compatible model - {llama_model.config.model_type}")
@@ -260,6 +263,7 @@ class LlamaModel(LLMModel):
 
         return model
 
+    @override
     def load_adapter(self, adapter_model: AdapterModel):
         # module is LlamaSequentialWrapper
         for module in self.seq_module_:
@@ -267,6 +271,7 @@ class LlamaModel(LLMModel):
                 continue
             module.wrapper_module_.load_adapter(adapter_model)
 
+    @override
     def offload_adapter(self, adapter_name: str):
         # now only transformers block have adapter
         for module in self.seq_module_:
@@ -274,6 +279,7 @@ class LlamaModel(LLMModel):
                 continue
             module.wrapper_module_.offload_adapter(adapter_name)
 
+    @override
     def linears_info(self) -> OrderedDict[str, LinearInfo]:
         ret_val = OrderedDict()
         for module in self.seq_module_:

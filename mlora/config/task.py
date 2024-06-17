@@ -51,7 +51,7 @@ class TrainTaskConfig(TaskConfig):
         assert self.batch_size_ % self.mini_batch_size_ == 0
 
     @property
-    def accumulate_step(self) -> int:
+    def accumulate_step_(self) -> int:
         return self.batch_size_ // self.mini_batch_size_
 
 

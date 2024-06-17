@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlora"
-version = "0.1"
-description = "A tool for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently."
+version = "0.2"
+description = "A system for fine-tuning multiple large language models (LLMs) using the LoRA and its variants more efficiently."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -21,14 +21,20 @@ dependencies = [
     "transformers==4.38.2",
     "bitsandbytes==0.41.1",
     "sentencepiece==0.1.99",
-    "scipy==1.10.1",
     "protobuf==3.20.2",
-    "xformers==0.0.25"
+    "scipy==1.11.4",
 ]
 
+[project.optional-dependencies]
+test = ["pytest", "flake8", "lizard"]
+debug = ["graphviz"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "mlora"]
+
 [project.urls]
-"Homepage" = "https://github.com/TUDB-Labs/multi-lora-fine-tune"
-"Bug Tracker" = "https://github.com/TUDB-Labs/multi-lora-fine-tune/issues"
+"Homepage" = "https://github.com/TUDB-Labs/mLoRA"
+"Bug Tracker" = "https://github.com/TUDB-Labs/mLoRA/issues"
 
 [tool.setuptools.packages.find]
 include = ["mlora"]
