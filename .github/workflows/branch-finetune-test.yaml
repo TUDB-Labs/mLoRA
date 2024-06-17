@@ -32,6 +32,7 @@ jobs:
       - name: get repo
         run: |
           cd $HOME
+          rm -rf ./mLoRA
           git clone https://github.com/TUDB-Labs/mLoRA
           cd ./mLoRA
       - name: checkout branch
@@ -48,7 +49,3 @@ jobs:
       - name: inference all test case
         run: |
           python tests/inference_all_case.py --base_model ${{ inputs.model }}
-      - name: clean repo
-        run: |
-          cd $HOME
-          rm -rf ./mLoRA
