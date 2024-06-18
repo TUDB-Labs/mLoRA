@@ -7,7 +7,7 @@
 [![](https://img.shields.io/github/license/TUDB-Labs/mLoRA)](http://www.apache.org/licenses/LICENSE-2.0)
 [![](https://img.shields.io/github/languages/top/TUDB-Labs/mLoRA)](https://www.python.org/)
 [![](https://img.shields.io/github/v/release/TUDB-Labs/mLoRA)](https://github.com/TUDB-Labs/mLoRA/releases/latest)
-[![](https://github.com/TUDB-Labs/mLoRA/actions/workflows/main-finetune-test.yml/badge.svg)](https://github.com/TUDB-Labs/mLoRA/actions/workflows/main-finetune-test.yml)
+[![](https://github.com/TUDB-Labs/mLoRA/actions/workflows/main-finetune-test.yaml/badge.svg)](https://github.com/TUDB-Labs/mLoRA/actions/workflows/main-finetune-test.yaml)
 
 <div align="center">
 <img src="./docs/assets/theme.webp" width="50%">
@@ -41,12 +41,10 @@ The `mlora.py` code is a starting point for batch fine-tuning LoRA adapters.
 ```bash
 python mlora.py \
   --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
-  --config ./demo/dummy.yaml \
+  --config demo/lora/lora_case_1.yaml
 ```
 
-You can check the adapters' configuration in [demo](./demo/) and [tests](./tests/) folder.
-
-In [tests](./tests/) folder, there are some configuration regarding the use of different LoRA variants and reinforcement learning preference alignment algorithms.
+You can check the adapters' configuration in [demo](./demo/) folder, there are some configuration regarding the use of different LoRA variants and reinforcement learning preference alignment algorithms.
 
 For further detailed usage information, please use `--help` option:
 ```bash

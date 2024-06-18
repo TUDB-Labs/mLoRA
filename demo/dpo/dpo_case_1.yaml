@@ -3,28 +3,13 @@ dispatcher:
   concurrency_num: 2
 datasets:
   - name: "dpo_data"
-    data: "tests/dpo/dpo_data.json"
-    prompt: "demo/dummy_template.json"
+    data: "demo/data.json"
+    prompt: "demo/preference_template.json"
     preprocess: "default"
 adapters:
-  - type: "lora"
-    name: "loraplus_sft"
-    path: "adapters/loraplus_sft_0"
-    r: 32
-    alpha: 64
-    dropout: 0.05
-    target_modules:
-      q_proj: true
-      k_proj: true
-      v_proj: true
-      o_proj: true
-      gate_proj: false
-      down_proj: false
-      up_proj: false
-  - type: "loraplus"
-    name: "lora_dpo"
-    path: "adapters/loraplus_dpo"
-    lr_ratio: 8.0
+  - name: "lora_dpo"
+    type: "lora"
+    path: "adapters/lora_base_dpo"
     optimizer: "adamw"
     lr: 3e-4
     r: 32
@@ -41,7 +26,7 @@ adapters:
 tasks:
   - type: "dpo"
     adapter: "lora_dpo"
-    reference: "loraplus_sft"
+    reference: "base"
     dataset: "dpo_data"
     batch_size: 16
     mini_batch_size: 16

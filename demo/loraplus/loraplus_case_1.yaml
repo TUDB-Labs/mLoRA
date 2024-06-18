@@ -2,16 +2,16 @@ dispatcher:
   name: "default"
   concurrency_num: 2
 datasets:
-  - name: "dummy_data"
-    data: "demo/dummy_data.json"
-    prompt: "demo/dummy_template.json"
-    preprocess: "default"
+  - name: "data"
+    data: "demo/data.json"
+    prompt: "demo/template.json"
+    preprocess: "shuffle"
 adapters:
-  - type: "loraplus"
-    name: "lora_0"
+  - name: "lora_0"
+    type: "loraplus"
     path: "adapters/loraplus_sft_0"
-    lr_ratio: 8
     optimizer: "adamw"
+    lr_ratio: 8
     lr: 3e-4
     r: 32
     alpha: 64
@@ -24,15 +24,12 @@ adapters:
       gate_proj: false
       down_proj: false
       up_proj: false
-  - type: "loraplus"
-    name: "lora_1"
+  - name: "lora_1"
+    type: "loraplus"
     path: "adapters/loraplus_sft_1"
-    lr_ratio: 16
     optimizer: "adamw"
-    lr: 3e-4
-    lrscheduler: "cosine"
-    t_max: 10000
-    eta_min: 0
+    lr_ratio: 8
+    lr: 3e-5
     r: 32
     alpha: 64
     dropout: 0.05
@@ -47,7 +44,7 @@ adapters:
 tasks:
   - type: "train"
     adapter: "lora_0"
-    dataset: "dummy_data"
+    dataset: "data"
     batch_size: 64
     mini_batch_size: 64
     num_epochs: 10
@@ -55,7 +52,7 @@ tasks:
     save_step: 2000
   - type: "train"
     adapter: "lora_1"
-    dataset: "dummy_data"
+    dataset: "data"
     batch_size: 64
     mini_batch_size: 64
     num_epochs: 10
