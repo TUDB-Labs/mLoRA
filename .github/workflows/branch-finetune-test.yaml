@@ -36,8 +36,8 @@ jobs:
       - name: checkout branch
         run: |
           cd $HOME/mLoRA
-          git pull origin ${{ inputs.branch }}:local_tmp
-          git checkout local_tmp
+          git fetch origin ${{ inputs.branch }}:local_tmp
+          git switch local_tmp
       - name: install dependencies
         run: |
           cd $HOME/mLoRA
