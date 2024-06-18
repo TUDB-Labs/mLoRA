@@ -11,12 +11,12 @@ G_TEST_ADAPTERS = [
     "adapters/loraplus_sft_0",
     "adapters/loraplus_sft_1",
     # dpo adapter
-    "adapters/lora_dpo_sft",
     "adapters/lora_base_dpo",
-    "adapters/lora_dpo",
-    "adapters/loraplus_dpo",
+    "adapters/lora_sft_dpo",
+    "adapters/loraplus_sft_dpo",
     # cpo adapter
-    "adapters/lora_cpo"
+    "adapters/lora_cpo",
+    "adapters/loraplus_cpo"
 ]
 
 
@@ -56,10 +56,12 @@ if __name__ == "__main__":
         sequences = pipeline(
             "What is mLoRA?",
             do_sample=True,
-            top_k=5,
+            top_k=1,
             num_return_sequences=1,
             eos_token_id=tokenizer.eos_token_id,
             max_length=128,
         )
 
-        print(f"Adapter {adapter} Output is: {sequences[0]['generated_text']}")
+        output: str = sequences[0]['generated_text'].strip().replace(
+            "\r", " ").replace("\n", " ")
+        print(f"Adapter {adapter} Output is: {output}")

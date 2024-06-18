@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ci_test = ["pytest", "flake8", "lizard"]
-test = ["peft"]
+test = ["peft", "setuptools"]
 debug = ["graphviz"]
 
 [tool.pytest.ini_options]
