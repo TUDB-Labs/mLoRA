@@ -60,6 +60,7 @@ if __name__ == "__main__":
             num_return_sequences=1,
             eos_token_id=tokenizer.eos_token_id,
             max_length=128,
+            truncation=True,
         )
 
         output: str = sequences[0]['generated_text'].strip().replace(

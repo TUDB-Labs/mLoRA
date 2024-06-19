@@ -42,6 +42,7 @@ adapters:
       up_proj: false
 tasks:
   - type: "cpo"
+    name: "task_0"
     adapter: "lora_cpo"
     dataset: "cpo_data"
     batch_size: 16
@@ -53,6 +54,7 @@ tasks:
     beta: 0.1
     label_smoothing: 0.0
   - type: "cpo"
+    name: "task_1"
     adapter: "loraplus_cpo"
     dataset: "cpo_data"
     batch_size: 16

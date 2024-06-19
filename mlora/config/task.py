@@ -7,12 +7,14 @@ from .adapter import AdapterConfig
 
 
 class TaskConfig(DictConfig):
+    name_: str = ""
     type_: str = ""
 
     adapter_: AdapterConfig = None
     dataset_: DatasetConfig = None
 
     __params_map: Dict[str, str] = {
+        "name_": "name",
         "type_": "type",
     }
 
@@ -47,6 +49,12 @@ class TrainTaskConfig(TaskConfig):
         super().__init__(config, adapters, datasets)
         self.init(self.__params_map, config)
 
+        self.batch_size_ = int(self.batch_size_)
+        self.mini_batch_size_ = int(self.mini_batch_size_)
+        self.num_epochs_ = int(self.num_epochs_)
+        self.cutoff_len_ = int(self.cutoff_len_)
+        self.save_step_ = int(self.save_step_)
+
         assert self.mini_batch_size_ <= self.batch_size_
         assert self.batch_size_ % self.mini_batch_size_ == 0
 
@@ -74,6 +82,9 @@ class DPOTaskConfig(TrainTaskConfig):
         super().__init__(config, adapters, datasets)
         self.init(self.__params_map, config)
 
+        self.beta_ = float(self.beta_)
+        self.label_smoothing_ = float(self.label_smoothing_)
+
         if config["reference"] not in adapters:
             self.reference_ = None
             logging.info(
@@ -97,6 +108,8 @@ class CPOTaskConfig(TrainTaskConfig):
                  datasets: Dict[str, DatasetConfig]):
         super().__init__(config, adapters, datasets)
         self.init(self.__params_map, config)
+
+        self.beta_ = float(self.beta_)
 
 
 TASKCONFIG_CLASS = {

@@ -8,7 +8,8 @@ TRAINCONTEXT_CLASS = {
 }
 
 INFERENCECONTEXT_CLASS = {
-    "lora": InferenceLoRAContext
+    "lora": InferenceLoRAContext,
+    "loraplus": InferenceLoRAContext
 }
 
 __all__ = [

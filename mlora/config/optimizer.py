@@ -17,6 +17,8 @@ class OptimizerConfig(DictConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
+        self.lr_ = float(self.lr_)
+
     @abstractmethod
     def to_fn_parameters(self) -> Dict[str, str]:
         ...
@@ -32,6 +34,8 @@ class SGDOptimizerConfig(OptimizerConfig):
     def __init__(self, config: Dict[str, str]) -> None:
         super().__init__(config)
         self.init(self.__params_map, config)
+
+        self.momentum_ = float(self.momentum_)
 
     @override
     def to_fn_parameters(self) -> Dict[str, str]:
@@ -52,7 +56,7 @@ class AdamWOptimizerConfig(OptimizerConfig):
     @override
     def to_fn_parameters(self) -> Dict[str, str]:
         return {
-            "lr": float(self.lr_),
+            "lr": self.lr_,
         }
 
 

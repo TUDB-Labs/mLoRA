@@ -80,7 +80,8 @@ class Task:
 
         data = preprocess_func[preprocess_type](data)
         logging.info(
-            f'Adapter {self.config_.adapter_.name_} data size: {len(data["train"])} '
+            f'Adapter {self.config_.adapter_.name_} data size: {
+                len(data["train"])} '
             f'epoch: {self.config_.num_epochs_} batch size: {self.config_.batch_size_} / {self.config_.mini_batch_size_}')
 
         for _, data_point in tqdm(enumerate(data["train"])):
@@ -88,6 +89,7 @@ class Task:
 
     def _pre_context(self, linears_info: OrderedDict[str, LinearInfo]):
         adapter_type = self.config_.adapter_.type_
+        assert adapter_type in TRAINCONTEXT_CLASS
         self.context_ = TRAINCONTEXT_CLASS[adapter_type](
             self.config_.adapter_, linears_info)
 
@@ -114,6 +116,14 @@ class Task:
 
     def task_type(self) -> str:
         return self.config_.type_
+
+    def task_name(self) -> str:
+        return self.config_.name_
+
+    def task_progress(self) -> int:
+        total_step = len(self.data_) // self.config_.mini_batch_size_
+        total_step = total_step * self.config_.num_epochs_
+        return int((self.now_step_ / total_step) * 100)
 
     def switch_device(self, device: str):
         self.context_.switch_device(device)
