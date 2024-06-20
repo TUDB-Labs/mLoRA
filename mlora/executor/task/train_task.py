@@ -84,7 +84,7 @@ class TrainTask(Task):
     def _save(self, dir_suffix: str = "", additional_info: Dict[str, str] = {}):
         output_dir = self.context_.path_
         if dir_suffix != "":
-            output_dir += os.sep + self.context_.path_ + "_" + dir_suffix
+            output_dir = self.context_.path_ + "_" + dir_suffix
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
