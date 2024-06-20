@@ -1,4 +1,4 @@
-from .cmd import get_cmd_args
+from .cmd import get_cmd_args, get_server_cmd_args
 from .loader import load_model
 from .setup import (
     setup_seed,
@@ -9,6 +9,7 @@ from .setup import (
 
 __all__ = [
     "get_cmd_args",
+    "get_server_cmd_args",
     "load_model",
     "setup_seed",
     "setup_logging",

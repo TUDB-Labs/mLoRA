@@ -8,7 +8,7 @@ from .task import TaskConfig, TASKCONFIG_CLASS
 
 
 class MLoRAConfig:
-    dispather_: DispatcherConfig = None
+    dispatcher_: DispatcherConfig = None
     tasks_: List[TaskConfig] = []
     __datasets_: Dict[str, DatasetConfig] = {}
     __adapters_: Dict[str, AdapterConfig] = {}
@@ -34,10 +34,16 @@ class MLoRAConfig:
         with open(path) as fp:
             config = yaml.safe_load(fp)
 
-        self.dispather_ = DispatcherConfig(config["dispatcher"])
+        self.dispatcher_ = DispatcherConfig(config["dispatcher"])
 
         # must ensure the adapter and datasets init before the task
         self.__init_datasets(config["datasets"])
         self.__init_adapters(config["adapters"])
 
         self.__init_tasks(config["tasks"])
+
+
+class MLoRAServerConfig(MLoRAConfig):
+
+    def __init__(self, config: Dict[str, str]) -> None:
+        self.dispatcher_ = DispatcherConfig(config)

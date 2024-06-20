@@ -51,6 +51,31 @@ For further detailed usage information, please use `--help` option:
 python mlora.py --help
 ```
 
+## Deploy as service
+We can deploy mLoAR as a service to continuously receive user requests and perform fine-tuning task.
+
+[![asciicast](https://asciinema.org/a/IifqdtBoJAVP4r8wg1lrcm9LI.svg)](https://asciinema.org/a/IifqdtBoJAVP4r8wg1lrcm9LI)
+
+```bash
+# Install requirements for deploy
+pip install .[deploy]
+# Start the server
+python mlora_server.py \
+  --base_model /data/TinyLlama-1.1B-Chat-v1.0/ \
+  --root /tmp/mlora
+```
+For further detailed usage information, please use `--help` option:
+
+```bash
+python mlora_server.py --help
+```
+
+Once the service is deployed, use `mlora_cli.py` to interact with the server.
+
+```bash
+python mlora_cli.py
+```
+
 ## Why you should use mLoRA
 
 Using mLoRA can save significant computational and memory resources when training multiple adapters simultaneously.

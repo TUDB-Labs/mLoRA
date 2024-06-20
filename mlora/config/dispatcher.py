@@ -15,3 +15,5 @@ class DispatcherConfig(DictConfig):
     def __init__(self, config: Dict[str, str]):
         super().__init__(config)
         self.init(self.__params_map, config)
+
+        self.concurrency_num_ = int(self.concurrency_num_)

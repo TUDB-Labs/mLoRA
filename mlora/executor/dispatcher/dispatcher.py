@@ -4,7 +4,7 @@ from mlora.executor.task import Task, TASK_CLASS
 from mlora.model.args import Tokens, Masks, MLoRADataConfig, MLoRAData
 
 import math
-from typing import List, Callable, Tuple
+from typing import List, Callable, Tuple, Dict
 
 
 class DispatcherEvent():
@@ -32,6 +32,7 @@ class Dispatcher:
     running_event_: DispatcherEvent = DispatcherEvent()
     ready_event_: DispatcherEvent = DispatcherEvent()
     done_event_: DispatcherEvent = DispatcherEvent()
+    step_event_: DispatcherEvent = DispatcherEvent()
 
     concurrency_num_: int = 2
 
@@ -39,12 +40,19 @@ class Dispatcher:
         self.name_ = config.name_
         self.concurrency_num_ = config.concurrency_num_
 
+    def info(self) -> Dict[str, str]:
+        return {
+            "name": self.name_,
+            "concurrency_num": self.concurrency_num_
+        }
+
     def register_hook(self, name: str, cb: Callable) -> None:
         event_map = {
             "init": self.init_event_,
             "running": self.running_event_,
             "ready": self.ready_event_,
-            "done": self.done_event_
+            "done": self.done_event_,
+            "step": self.step_event_
         }
 
         assert name in event_map
@@ -54,13 +62,13 @@ class Dispatcher:
     def add_task(self, config: TaskConfig, llm_name: str):
         assert config.type_ in TASK_CLASS
         task = TASK_CLASS[config.type_](config, llm_name)
-        self.ready_.append(task)
         self.init_event_.notify(task)
+        self.ready_.append(task)
 
     def is_done(self) -> bool:
         return len(self.running_) == 0 and len(self.ready_) == 0
 
-    def __dispatch_task_in(self):
+    def _dispatch_task_in(self):
         # ready task to running task
         assert len(self.running_) <= self.concurrency_num_
         if len(self.running_) == self.concurrency_num_:
@@ -71,7 +79,7 @@ class Dispatcher:
             self.running_.append(task)
             self.running_event_.notify(task)
 
-    def __dispatch_task_out(self):
+    def _dispatch_task_out(self):
         # running task to ready task or done task
         done_task = [task for task in self.running_ if task.is_done()]
         self.running_ = [task for task in self.running_ if not task.is_done()]
@@ -79,8 +87,8 @@ class Dispatcher:
         for task in done_task:
             self.done_event_.notify(task)
 
-    def __align_batch_tokens(self, batch_tokens: List[Tokens],
-                             configs: List[MLoRADataConfig]) -> Tuple[List[Tokens], List[Masks]]:
+    def _align_batch_tokens(self, batch_tokens: List[Tokens],
+                            configs: List[MLoRADataConfig]) -> Tuple[List[Tokens], List[Masks]]:
         max_seq_len = max(map(lambda x: len(x), batch_tokens))
         max_seq_len = math.ceil(max_seq_len / 8) * 8
 
@@ -96,7 +104,7 @@ class Dispatcher:
         return batch_tokens, batch_masks
 
     def data(self) -> MLoRAData:
-        self.__dispatch_task_in()
+        self._dispatch_task_in()
 
         batch_tokens: List[Tokens] = []
         batch_masks: List[Masks] = []
@@ -111,7 +119,7 @@ class Dispatcher:
             start_idx = start_idx + len(data)
 
         # post process this batch data
-        batch_tokens, batch_masks = self.__align_batch_tokens(
+        batch_tokens, batch_masks = self._align_batch_tokens(
             batch_tokens, data_configs)
 
         return MLoRAData(batch_tokens=batch_tokens,
@@ -121,5 +129,6 @@ class Dispatcher:
     def step(self):
         for _, task in enumerate(self.running_):
             task.step()
+            self.step_event_.notify(task)
 
-        self.__dispatch_task_out()
+        self._dispatch_task_out()

@@ -25,6 +25,7 @@ adapters:
       up_proj: false
 tasks:
   - type: "dpo"
+    name: "task_0"
     adapter: "lora_dpo"
     reference: "base"
     dataset: "dpo_data"

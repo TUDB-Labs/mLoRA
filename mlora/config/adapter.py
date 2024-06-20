@@ -75,6 +75,13 @@ class LoRAConfig(AdapterConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
+        self.r_ = int(self.r_)
+        self.alpha_ = int(self.alpha_)
+        self.dropout_ = float(self.dropout_)
+
+        for key, value in self.target_.items():
+            self.target_[key] = bool(value)
+
     @override
     def export(self) -> Dict[str, str]:
         return {
@@ -98,6 +105,8 @@ class LoRAPlusConfig(LoRAConfig):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.init(self.__params_map, config)
+
+        self.lr_ratio_ = float(self.lr_ratio_)
 
 
 ADAPTERCONFIG_CLASS = {

@@ -33,6 +33,9 @@ class CosineLRSchedulerConfig(LRSchedulerConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
+        self.t_max_ = int(self.t_max_)
+        self.eta_min_ = int(self.eta_min_)
+
     @override
     def to_fn_parameters(self) -> Dict[str, str]:
         return {

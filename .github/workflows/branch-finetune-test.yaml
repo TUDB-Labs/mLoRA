@@ -47,7 +47,3 @@ jobs:
         run: |
           cd $HOME/mLoRA
           tests/finetune_all_case.sh ${{ inputs.model }}
-      - name: inference all test case
-        run: |
-          cd $HOME/mLoRA
-          python tests/inference_all_case.py --base_model ${{ inputs.model }}

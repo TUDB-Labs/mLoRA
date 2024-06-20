@@ -14,7 +14,7 @@
 #
 # Copyright (C) 2024 All Rights Reserved.
 #
-# Github:  https://github.com/TUDB-Labs/multi-lora-fine-tune
+# Github:  https://github.com/TUDB-Labs/mLoRA
 
 import mlora.utils
 import mlora.executor

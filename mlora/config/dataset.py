@@ -7,7 +7,6 @@ class DatasetConfig(DictConfig):
     name_: str = ""
     data_path_: str = ""
     prompt_path_: str = ""
-    expand_side_: str = "right"
     preprocess_: str = "shuffle"
 
     __params_map: Dict[str, str] = {

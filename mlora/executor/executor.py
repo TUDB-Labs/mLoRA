@@ -5,8 +5,9 @@ from mlora.model.args import MLoRAData
 
 import torch
 import logging
+from typing import Dict, Callable
 
-from .dispatcher import Dispatcher
+from .dispatcher import Dispatcher, DISPATCHER_CLASS
 from .task import Task
 
 
@@ -23,7 +24,10 @@ class Executor:
         self.model_ = model
         self.tokenizer_ = tokenizer
 
-        self.dispatcher_ = Dispatcher(config.dispather_)
+        dispatcher_name = config.dispatcher_.name_
+        assert dispatcher_name in DISPATCHER_CLASS
+        self.dispatcher_ = DISPATCHER_CLASS[dispatcher_name](
+            config.dispatcher_)
 
         hook_func = {
             "init": self.__task_init_hook,
@@ -35,9 +39,12 @@ class Executor:
         for hook, cb in hook_func.items():
             self.dispatcher_.register_hook(hook, cb)
 
+    def register_hook(self, name: str, cb: Callable):
+        self.dispatcher_.register_hook(name, cb)
+
     def __task_init_hook(self, task: Task):
         logging.info(
-            f"Init {task.task_type()} task with adapters: {task.adapter_name()}")
+            f"Init {task.task_type()} : {task.task_name()} task with adapters: {task.adapter_name()}")
         # init the task's dataset
         # init the task's adapter weight
         task.prepare(self.model_.linears_info(), self.tokenizer_)
@@ -71,6 +78,9 @@ class Executor:
             self.model_.offload_adapter(adapter_name)
         task.switch_device("cpu")
         task.done()
+
+    def dispatcher_info(self) -> Dict[str, str]:
+        return self.dispatcher_.info()
 
     def add_task(self, config: TaskConfig):
         self.dispatcher_.add_task(config, self.model_.name_or_path_)

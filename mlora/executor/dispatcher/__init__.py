@@ -1,7 +1,13 @@
 from .dispatcher import Dispatcher
-from .pipeline_dispatcher import PipelineDispatcher
+from .backend_dispatcher import BackendDispatcher
+
+DISPATCHER_CLASS = {
+    "default": Dispatcher,
+    "backend": BackendDispatcher
+}
 
 __all__ = [
     "Dispatcher",
-    "PipelineDispatcher",
+    "BackendDispatcher",
+    "DISPATCHER_CLASS"
 ]

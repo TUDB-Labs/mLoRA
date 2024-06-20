@@ -41,6 +41,7 @@ adapters:
       up_proj: true
 tasks:
   - type: "train"
+    name: "task_0"
     adapter: "lora_0"
     dataset: "data"
     batch_size: 64
@@ -49,6 +50,7 @@ tasks:
     cutoff_len: 256
     save_step: 2000
   - type: "train"
+    name: "task_1"
     adapter: "lora_1"
     dataset: "data"
     batch_size: 64

@@ -29,6 +29,7 @@ dependencies = [
 ci_test = ["pytest", "flake8", "lizard"]
 test = ["peft", "setuptools"]
 debug = ["graphviz"]
+deploy = ["rich", "fastapi", "plyvel", "uvicorn", "InquirerPy"]
 
 [tool.pytest.ini_options]
 pythonpath = [".", "mlora"]
