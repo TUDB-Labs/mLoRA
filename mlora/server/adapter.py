@@ -1,9 +1,8 @@
-import json
 import uuid
 import logging
 from fastapi import APIRouter, Request
 
-from .storage import db_it, db_get, db_put
+from .storage import db_it_str, db_get_str, db_put_obj
 
 router = APIRouter()
 
@@ -11,7 +10,7 @@ router = APIRouter()
 @router.get("/adapter")
 def get_adapter():
     ret = []
-    for _, value in db_it("__adapter__"):
+    for _, value in db_it_str("__adapter__"):
         ret.append(value)
     return ret
 
@@ -20,7 +19,7 @@ def get_adapter():
 async def post_adapter(request: Request):
     req = await request.json()
 
-    if db_get(f'__adapter__{req["name"]}') is not None:
+    if db_get_str(f'__adapter__{req["name"]}') is not None:
         return {"message": "already exist"}
 
     adapter_dir = str(uuid.uuid4()).replace("-", "")[:7]
@@ -30,6 +29,6 @@ async def post_adapter(request: Request):
 
     logging.info(f"Create new adapter: {req}")
 
-    db_put(f'__adapter__{req["name"]}', json.dumps(req))
+    db_put_obj(f'__adapter__{req["name"]}', req)
 
     return {"message": "success"}

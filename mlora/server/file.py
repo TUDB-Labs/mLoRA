@@ -3,44 +3,53 @@ import uuid
 import logging
 from fastapi import APIRouter, UploadFile
 
-from .storage import root_dir_list, db_put, db_it
+from .storage import root_dir_list, db_get_str, db_put_obj, db_it_obj
 
 router = APIRouter()
 
 
 def get_local_file(file_type: str):
     ret = []
-    for key, value in db_it(file_type):
+    for key, value in db_it_obj(file_type):
         ret.append({"name": key[len(file_type):], "file": value})
 
     return ret
 
 
 def save_local_file(file_type: str, name: str, data_file: UploadFile):
-    if data_file.filename.split(".")[-1] != "json":
+    file_postfix = data_file.filename.split(".")[-1]
+    if file_postfix != "json" and file_postfix != "yaml":
         return {"message": "unsupport file type"}
 
-    filename = str(uuid.uuid4()).replace("-", "")[:7] + ".json"
+    if db_get_str(f"__{file_type}__{name}") is not None:
+        return {"message": "file already exist"}
 
-    logging.info(f"Recv and save data file: {filename}")
+    file_uuid = str(uuid.uuid4()).replace("-", "")[:7]
+    file_name = file_uuid + "." + file_postfix
 
-    file_path = os.path.join(root_dir_list()[file_type], filename)
+    logging.info(f"Recv and save data file: {file_name}")
+
+    file_path = os.path.join(root_dir_list()[file_type], file_name)
     with open(file_path, "wb+") as file_object:
         file_object.write(data_file.file.read())
 
-    db_put(f"__{file_type}__{name}", filename)
+    return file_name
+
+
+@router.get("/data")
+def get_data():
+    return get_local_file("__data__")
+
+
+@router.post("/data")
+def post_data(name: str, data_file: UploadFile):
+    file_name = save_local_file("data", name, data_file)
+
+    db_put_obj(f"__data__{name}", {
+        "file_path": file_name
+    })
 
     return {"message": "success"}
-
-
-@router.get("/train")
-def get_data():
-    return get_local_file("__train__")
-
-
-@router.post("/train")
-def post_data(name: str, data_file: UploadFile):
-    return save_local_file("train", name, data_file)
 
 
 @router.get("/prompt")
@@ -49,5 +58,12 @@ def get_prompt():
 
 
 @router.post("/prompt")
-def post_prompt(name: str, data_file: UploadFile):
-    return save_local_file("prompt", name, data_file)
+def post_prompt(name: str, prompt_type: str, data_file: UploadFile):
+    file_name = save_local_file("prompt", name, data_file)
+
+    db_put_obj(f"__prompt__{name}", {
+        "file_path": file_name,
+        "prompt_type": prompt_type,
+    })
+
+    return {"message": "success"}

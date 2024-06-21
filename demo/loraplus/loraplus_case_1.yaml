@@ -4,7 +4,8 @@ dispatcher:
 datasets:
   - name: "data"
     data: "demo/data.json"
-    prompt: "demo/template.json"
+    prompt: "demo/prompt.yaml"
+    prompt_type: "instruction"
     preprocess: "shuffle"
 adapters:
   - name: "lora_0"

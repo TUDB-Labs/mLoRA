@@ -1,6 +1,0 @@
-{
-    "description": "Default Prompt Template Provided by m-LoRA",
-    "prompt": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n{output}\n",
-    "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n{output}\n",
-    "response": "### Output:\n"
-}

@@ -40,7 +40,7 @@ class TrainTask(Task):
         data_idx_e = self.now_data_idx_ + self.config_.mini_batch_size_
 
         # get the train raw string
-        batch_str = self.prompter_.generate_prompt_batch(
+        batch_str = self.prompter_.generate_prompt(
             self.data_[data_idx_s:data_idx_e])
 
         # convert the string to tokens

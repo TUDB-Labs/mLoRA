@@ -36,16 +36,16 @@ m_task_step, s_task_step = multiprocessing.Pipe(True)
 
 
 def backend_server_set_task_state(task_name: str, state: str):
-    task_info = mlora.server.db_get(f'__task__{task_name}')
+    task_info = mlora.server.db_get_str(f'__task__{task_name}')
     task_info = json.loads(task_info)
     task_info["state"] = state
-    mlora.server.db_put(f'__task__{task_name}', json.dumps(task_info))
+    mlora.server.db_put_str(f'__task__{task_name}', json.dumps(task_info))
     # to get the adapter in the task, and to set it done
     adapter_name = task_info["adapter"]
-    adapter_info = mlora.server.db_get(f'__adapter__{adapter_name}')
+    adapter_info = mlora.server.db_get_str(f'__adapter__{adapter_name}')
     adapter_info = json.loads(adapter_info)
     adapter_info["state"] = state
-    mlora.server.db_put(f'__adapter__{adapter_name}', json.dumps(adapter_info))
+    mlora.server.db_put_str(f'__adapter__{adapter_name}', json.dumps(adapter_info))
 
 
 def backend_server_run_fn(args):
