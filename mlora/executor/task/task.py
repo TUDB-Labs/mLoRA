@@ -81,7 +81,7 @@ class Task:
         data = preprocess_func[preprocess_type](data)
         logging.info(
             f'Adapter {self.config_.adapter_.name_} data size: {
-                len(data["train"])} '
+                len(data["data_points"])} '
             f'epoch: {self.config_.num_epochs_} batch size: {self.config_.batch_size_} / {self.config_.mini_batch_size_}')
 
         for _, data_point in tqdm(enumerate(data["data_points"])):
