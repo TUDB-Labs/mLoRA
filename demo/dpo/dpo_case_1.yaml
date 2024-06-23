@@ -4,7 +4,8 @@ dispatcher:
 datasets:
   - name: "dpo_data"
     data: "demo/data.json"
-    prompt: "demo/preference_template.json"
+    prompt: "demo/preference_prompt.yaml"
+    prompt_type: "preference"
     preprocess: "default"
 adapters:
   - name: "lora_dpo"

@@ -1,10 +1,11 @@
+import json
 import plyvel
 from typing import Dict
 
 # define the root_dir
 __g_db: plyvel.DB = None
 __g_root_dir: str = ""
-__g_root_dir_list = {"train": "./trains",
+__g_root_dir_list = {"data": "./datas",
                      "prompt": "./prompts",
                      "adapter": "./adapters",
                      "db": "./db"}
@@ -15,7 +16,7 @@ def db() -> plyvel.DB:
     return __g_db
 
 
-def db_get(key: str) -> str:
+def db_get_str(key: str) -> str:
     value = db().get(key.encode())
     if value is not None:
         value = value.decode()
@@ -23,15 +24,37 @@ def db_get(key: str) -> str:
     return value
 
 
-def db_put(key: str, value: str):
+def db_put_str(key: str, value: str):
     assert isinstance(key, str)
     assert isinstance(value, str)
     db().put(key.encode(), value.encode())
 
 
-def db_it(prefix: str):
+def db_get_obj(key: str) -> Dict[str, str]:
+    ret_str = db_get_str(key)
+    if ret_str is None:
+        return None
+    return json.loads(ret_str)
+
+
+def db_put_obj(key: str, value: Dict[str, str]):
+    assert isinstance(key, str)
+    assert isinstance(value, Dict)
+    db_put_str(key, json.dumps(value))
+
+
+def db_del(key: str):
+    db().delete(key.encode())
+
+
+def db_it_str(prefix: str):
     for key, value in db().iterator(prefix=prefix.encode()):
         yield key.decode(), value.decode()
+
+
+def db_it_obj(prefix: str):
+    for key, value in db().iterator(prefix=prefix.encode()):
+        yield key.decode(), json.loads(value.decode())
 
 
 def root_dir() -> str:

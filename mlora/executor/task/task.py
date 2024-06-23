@@ -1,5 +1,5 @@
 from mlora.config import TaskConfig
-from mlora.prompter import Prompter
+from mlora.prompter import Prompter, PrompterFactory
 from mlora.model.modules import AdapterModel
 from mlora.model.args import LinearInfo, Tokens, Masks, MLoRADataConfig
 from mlora.model.tokenizer import Tokenizer
@@ -39,7 +39,7 @@ class Task:
         self.data_ = []
         self.now_data_idx_ = 0
 
-        self.prompter_ = Prompter(config.dataset_.prompt_path_)
+        self.prompter_ = PrompterFactory.create(config.dataset_)
         self.llm_name_ = llm_name
 
     @abstractmethod
@@ -71,8 +71,8 @@ class Task:
         }
 
         logging.info(f"Task load data from {self.config_.dataset_.data_path_}")
-        data = load_dataset(
-            "json", data_files=self.config_.dataset_.data_path_)
+        data = load_dataset("json",
+                            data_files={"data_points": self.config_.dataset_.data_path_})
 
         preprocess_type = self.config_.dataset_.preprocess_
         if preprocess_type not in preprocess_func:
@@ -84,7 +84,7 @@ class Task:
                 len(data["train"])} '
             f'epoch: {self.config_.num_epochs_} batch size: {self.config_.batch_size_} / {self.config_.mini_batch_size_}')
 
-        for _, data_point in tqdm(enumerate(data["train"])):
+        for _, data_point in tqdm(enumerate(data["data_points"])):
             self.data_.append(data_point)
 
     def _pre_context(self, linears_info: OrderedDict[str, LinearInfo]):

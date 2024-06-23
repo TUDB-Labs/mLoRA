@@ -1,0 +1,9 @@
+template: |
+  ### Instruction:
+  {{ data_point['instruction'] + '\n'}}
+  {% if 'input' in data_point %}
+  ### Input:
+  {{ data_point['input'] + '\n'}}
+  {% endif %}
+  ### Output:
+  {{ data_point['chosen'] + '\n'}}

@@ -8,30 +8,20 @@ class PreferenceDataPrompter(Prompter):
     def __init__(self, template: str):
         super().__init__(template)
 
-    def __generate_prompt_by_output(self, data: Dict[str, str]) -> str:
-        try:
-            ret_val = self.template_["prompt"].format(**data)
-        except:
-            ret_val = ""
-
-        if ret_val != "":
-            return ret_val
-
-        return self.template_["prompt_no_input"].format(**data)
+    def __generate_prompt(self, data_point: Dict[str, str]) -> Tuple[str, str]:
+        chosen_data = self.template_.render(
+            data_point=data_point, is_chosen=True)
+        reject_data = self.template_.render(
+            data_point=data_point, is_chosen=False)
+        return chosen_data, reject_data
 
     @override
-    def generate_prompt(self, data: Dict[str, str]) -> Tuple[str, str]:
-        chosen_data = {**data, "output": data["chosen"]}
-        reject_data = {**data, "output": data["reject"]}
-
-        return self.__generate_prompt_by_output(chosen_data), self.__generate_prompt_by_output(reject_data)
-
-    @override
-    def generate_prompt_batch(self, datas: List[Dict[str, str]]) -> List[str]:
+    def generate_prompt(self, data_points: List[Dict[str, str]]) -> List[str]:
         chosen_data = []
         reject_data = []
-        for data in datas:
-            chosen_str, reject_str = self.generate_prompt(data)
+
+        for data_point in data_points:
+            chosen_str, reject_str = self.__generate_prompt(data_point)
             chosen_data.append(chosen_str)
             reject_data.append(reject_str)
 
