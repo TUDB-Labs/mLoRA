@@ -1,5 +1,4 @@
 import os
-import shutil
 import os.path
 
 def delete_files_in_folder(folder_path):

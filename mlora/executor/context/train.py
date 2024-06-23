@@ -69,6 +69,7 @@ class TrainTaskContext(TaskContext):
             logging.info(
                 f"Adapter {self.name_}:{temp_path} optimizer weight not exist, use the default weight.")
         # load optimizer state
+
     def create_lr_scheduler(self, lr_scheduler_config: Optional[LRSchedulerConfig]):
         assert self.optimizer_ is not None
 

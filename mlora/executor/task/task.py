@@ -4,7 +4,7 @@ from mlora.model.modules import AdapterModel
 from mlora.model.args import LinearInfo, Tokens, Masks, MLoRADataConfig
 from mlora.model.tokenizer import Tokenizer
 from mlora.executor.context import TaskContext, TRAINCONTEXT_CLASS
-
+import ipdb
 import logging
 from tqdm import tqdm
 from datasets import load_dataset
@@ -73,7 +73,7 @@ class Task:
         logging.info(f"Task load data from {self.config_.dataset_.data_path_}")
         data = load_dataset("json",
                             data_files={"data_points": self.config_.dataset_.data_path_})
-
+        ipdb.set_trace()
         preprocess_type = self.config_.dataset_.preprocess_
         if preprocess_type not in preprocess_func:
             raise NotImplementedError
@@ -81,7 +81,7 @@ class Task:
         data = preprocess_func[preprocess_type](data)
         logging.info(
             f'Adapter {self.config_.adapter_.name_} data size: {
-                len(data["train"])} '
+                len(data["data_points"])} '
             f'epoch: {self.config_.num_epochs_} batch size: {self.config_.batch_size_} / {self.config_.mini_batch_size_}')
 
         for _, data_point in tqdm(enumerate(data["data_points"])):

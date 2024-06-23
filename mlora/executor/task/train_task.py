@@ -97,8 +97,8 @@ class TrainTask(Task):
         adapter_config["base_model_name_or_path"] = self.llm_name_
         adapter_config = {**adapter_config, **additional_info}
         adapter_config = {**adapter_config, **self.config_.adapter_.export()}
-        logging.info(f"save optimizer weight")
-        optimizer_state=self.context_.optimizer_.state_dict()
+        logging.info("save optimizer weight")
+        optimizer_state = self.context_.optimizer_.state_dict()
         torch.save(optimizer_state, output_dir + os.sep + "optimizer_state.bin")
 
         with open(output_dir + os.sep + "adapter_config.json", "w") as f:
@@ -110,8 +110,8 @@ class TrainTask(Task):
         if os.path.isdir(os.path.join(self.context_.path_, "adapters")):
             temp_path = os.path.join(self.context_.path_, "adapters")
             if os.path.isdir(temp_path):
-                 mlora.utils.delete_files_in_folder(temp_path)
-        #delete the temp weight save in middle process
+                mlora.utils.delete_files_in_folder(temp_path)
+        # delete the temp weight save in middle process
         # release the context
         del self.context_
 

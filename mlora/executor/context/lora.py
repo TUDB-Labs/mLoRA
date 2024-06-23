@@ -31,17 +31,15 @@ def _load_lora_weight(obj: TaskContext,
     weight_dict = None
     temp_path=obj.path_
     if os.path.isdir(os.path.join(obj.path_, "adapters")):
-        temp_path=os.path.join(obj.path_, "adapters")
+        temp_path = os.path.join(obj.path_, "adapters")
         folders = [folder for folder in os.listdir(temp_path)]
-        temp_path=os.path.join(temp_path,folders[-1])
+        temp_path = os.path.join(temp_path, folders[-1])
 
         last_cahr = temp_path[-1]
         last_digit = int(last_cahr)
-        obj.now_step_= last_digit+1
+        obj.now_step_ = last_digit + 1
         obj.last_epoch = last_digit
-        #set now_step to the recently state before fault
-
-
+        # set now_step to the recently state before fault
     if os.path.isdir(temp_path):
         logging.info(
             f"Adapter {obj.name_}:{temp_path} weight exist, load from file.")
