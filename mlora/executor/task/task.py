@@ -92,6 +92,7 @@ class Task:
         assert adapter_type in TRAINCONTEXT_CLASS
         self.context_ = TRAINCONTEXT_CLASS[adapter_type](
             self.config_.adapter_, linears_info)
+        self.now_step_ = self.context_.now_step_
 
     def _expand_batch_tokens(self,
                              batch_tokens: List[Tokens],

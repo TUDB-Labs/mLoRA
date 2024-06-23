@@ -14,6 +14,7 @@ class LRSchedulerConfig(DictConfig):
     def __init__(self, config: Dict[str, str]) -> None:
         super().__init__(config)
         self.init(self.__params_map, config)
+        self.last_epoch = -1
 
     @abstractmethod
     def to_fn_parameters(self) -> Dict[str, str]:
@@ -40,7 +41,8 @@ class CosineLRSchedulerConfig(LRSchedulerConfig):
     def to_fn_parameters(self) -> Dict[str, str]:
         return {
             "T_max": float(self.t_max_),
-            "eta_min": float(self.eta_min_)
+            "eta_min": float(self.eta_min_),
+            "last_epoch": int(self.last_epoch)
         }
 
 

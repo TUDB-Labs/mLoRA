@@ -11,16 +11,16 @@ class TaskContext(metaclass=ABCMeta):
     type_: str = ""
     name_: str = ""
     path_: str = ""
-
+    now_step_: int = 0
     device_: str = ""
-
+    last_epoch: int = -1
     adapter_model_: AdapterModel = {}
 
     def __init__(self, context_type: str, context_name: str, context_path: str) -> None:
         self.type_ = context_type
         self.name_ = context_name
         self.path_ = context_path
-
+        self.now_step_ = 1
         self.device_ = "cpu"
 
         self.adapter_model_ = {}

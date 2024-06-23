@@ -1,6 +1,7 @@
 from mlora.config import AdapterConfig, OptimizerConfig, LRSchedulerConfig
 from mlora.model.args import LinearInfo
-
+import os
+import logging
 import torch
 from abc import abstractmethod
 from typing import List, Dict, Callable, Optional
@@ -54,13 +55,26 @@ class TrainTaskContext(TaskContext):
 
         self.optimizer_ = OPTIMIZER_CLASS[optimizer_type_](
             parameters, **optim_config.to_fn_parameters())
+        temp_path = self.path_
+        if os.path.isdir(os.path.join(self.path_, "adapters")):
+            temp_path = os.path.join(self.path_, "adapters")
+            folders = [folder for folder in os.listdir(temp_path)]
+            temp_path = os.path.join(temp_path, folders[-1])
 
+        if os.path.isdir(temp_path):
+            logging.info(
+                f"Adapter {self.name_}:{temp_path} optimizer weight exist, load from file.")
+            self.optimizer_.load_state_dict(torch.load(f"{temp_path}{os.sep}optimizer_state.bin"))
+        else:
+            logging.info(
+                f"Adapter {self.name_}:{temp_path} optimizer weight not exist, use the default weight.")
+        # load optimizer state
     def create_lr_scheduler(self, lr_scheduler_config: Optional[LRSchedulerConfig]):
         assert self.optimizer_ is not None
 
         if lr_scheduler_config is None:
             return
-
+        lr_scheduler_config.last_epoch = self.last_epoch
         lr_scheduler_type_ = lr_scheduler_config.lr_scheduler_
         assert lr_scheduler_type_ in LR_SCHEDULER_CLASS
         self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](

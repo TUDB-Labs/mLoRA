@@ -1,7 +1,7 @@
 from mlora.config import TaskConfig
 from mlora.model.args import LinearInfo, Tokens, Masks, MLoRADataConfig
 from mlora.model.tokenizer import Tokenizer
-
+import mlora.utils
 import os
 import json
 import torch
@@ -29,6 +29,7 @@ class TrainTask(Task):
         # prepare the dataset and context
         self._pre_dataset()
         self._pre_context(linears_info)
+        self.now_epoch_ = self.context_.now_step_
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
@@ -96,6 +97,9 @@ class TrainTask(Task):
         adapter_config["base_model_name_or_path"] = self.llm_name_
         adapter_config = {**adapter_config, **additional_info}
         adapter_config = {**adapter_config, **self.config_.adapter_.export()}
+        logging.info(f"save optimizer weight")
+        optimizer_state=self.context_.optimizer_.state_dict()
+        torch.save(optimizer_state, output_dir + os.sep + "optimizer_state.bin")
 
         with open(output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)
@@ -103,6 +107,11 @@ class TrainTask(Task):
     @override
     def done(self):
         self._save()
+        if os.path.isdir(os.path.join(self.context_.path_, "adapters")):
+            temp_path = os.path.join(self.context_.path_, "adapters")
+            if os.path.isdir(temp_path):
+                 mlora.utils.delete_files_in_folder(temp_path)
+        #delete the temp weight save in middle process
         # release the context
         del self.context_
 

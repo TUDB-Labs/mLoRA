@@ -29,11 +29,23 @@ def _load_lora_weight(obj: TaskContext,
                                                linear_info.in_dim_, linear_info.out_dim_,
                                                config.r_, config.alpha_, config.dropout_)
     weight_dict = None
+    temp_path=obj.path_
+    if os.path.isdir(obj.path_):	    if os.path.isdir(os.path.join(obj.path_, "adapters")):
+        temp_path=os.path.join(obj.path_, "adapters")
+        folders = [folder for folder in os.listdir(temp_path)]
+        temp_path=os.path.join(temp_path,folders[-1])
 
-    if os.path.isdir(obj.path_):
+        last_cahr = temp_path[-1]
+        last_digit = int(last_cahr)
+        obj.now_step_= last_digit+1
+        obj.last_epoch = last_digit
+        #set now_step to the recently state before fault
+
+
+    if os.path.isdir(temp_path):
         logging.info(
-            f"Adapter {obj.name_}:{obj.path_} weight exist, load from file.")
-        weight_dict = torch.load(f"{obj.path_}{os.sep}adapter_model.bin")
+            f"Adapter {obj.name_}:{temp_path} weight exist, load from file.")
+        weight_dict = torch.load(f"{temp_path}{os.sep}adapter_model.bin")
         prefix_name = "base_model.model.model."
     else:
         logging.info(
