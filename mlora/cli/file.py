@@ -1,12 +1,17 @@
 import json
 import requests
-from InquirerPy import inquirer, validator
+from InquirerPy import inquirer, validator, separator
 from rich import print
 from rich.table import Table
 from rich.box import ASCII
 
 
 from .setting import url
+
+g_file_type_map = {
+    "train data": "data",
+    "prompt data": "prompt"
+}
 
 
 def list_file(obj, file_type: str):
@@ -16,29 +21,47 @@ def list_file(obj, file_type: str):
     table = Table(show_header=True, show_lines=True, box=ASCII)
     table.add_column("name", justify="center")
     table.add_column("file", justify="center")
+    if file_type == "prompt":
+        table.add_column("prompter", justify="center")
 
     for item in ret:
-        table.add_row(item["name"], item["file"])
+        row_data = [item["name"], item["file"]["file_path"]]
+        if file_type == "prompt":
+            row_data.append(item["file"]["prompt_type"])
+        table.add_row(*row_data)
 
     obj.ret_ = ret
     obj.pret_ = table
 
 
 def upload_file():
-    file_type = inquirer.select(
-        message="type:", choices=["train", "prompt"]).execute()
     name = inquirer.text(
         message="name:",
         validate=validator.EmptyInputValidator("name should not be empty")).execute()
-    path = inquirer.filepath(
-        message="file path:",
-        default="/",
-        validate=validator.PathValidator(
-            is_file=True, message="input is not a file"),
-        only_files=True).execute()
 
-    ret = requests.post(
-        url() + f"/{file_type}?name={name}", files={"data_file": open(path, "rb")})
+    file_type = inquirer.select(message="file type:",
+                                choices=[separator.Separator(),
+                                         *g_file_type_map.keys(),
+                                         separator.Separator()]).execute()
+    file_type = g_file_type_map[file_type]
+
+    post_url = url() + f"/{file_type}?name={name}"
+
+    if file_type == "prompt":
+        prompt_type = inquirer.select(message="prompter type:",
+                                      choices=[separator.Separator(),
+                                               "instruction",
+                                               "preference",
+                                               separator.Separator()]).execute()
+        post_url += f"&prompt_type={prompt_type}"
+
+    path = inquirer.filepath(message="file path:",
+                             default="/",
+                             validate=validator.PathValidator(is_file=True,
+                                                              message="input is not a file"),
+                             only_files=True).execute()
+
+    ret = requests.post(post_url, files={"data_file": open(path, "rb")})
 
     print(json.loads(ret.text))
 
@@ -57,7 +80,12 @@ def do_file(obj, args):
     if args[0] == "ls":
         # to chose file type
         file_type = inquirer.select(
-            message="type:", choices=["train", "prompt"]).execute()
+            message="type:",
+            choices=[separator.Separator(),
+                     *g_file_type_map.keys(),
+                     separator.Separator()]
+        ).execute()
+        file_type = g_file_type_map[file_type]
         list_file(obj, file_type)
         return print(obj.pret_)
     elif args[0] == "upload":

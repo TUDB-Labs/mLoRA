@@ -1,7 +1,5 @@
 from mlora.model.tokenizer import Tokenizer
 from mlora.model.modules import AdapterModel
-from mlora.config import DPOTaskConfig
-from mlora.prompter import PreferenceDataPrompter
 from mlora.model.args import Tokens, MLoRADataConfig, LinearInfo
 from mlora.executor.context import TaskContext, INFERENCECONTEXT_CLASS
 
@@ -16,11 +14,6 @@ from .train_task import TrainTask
 
 class DPOTask(TrainTask):
     ref_context_: TaskContext = None
-
-    def __init__(self, config: DPOTaskConfig, llm_name: str) -> None:
-        super().__init__(config, llm_name)
-
-        self.prompter_ = PreferenceDataPrompter(config.dataset_.prompt_path_)
 
     @override
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
@@ -88,7 +81,7 @@ class DPOTask(TrainTask):
 
         # 0...mid is chosen data
         # mid.end is reject data
-        batch_str = self.prompter_.generate_prompt_batch(
+        batch_str = self.prompter_.generate_prompt(
             self.data_[data_idx_s:data_idx_e])
 
         assert len(batch_str) % 2 == 0

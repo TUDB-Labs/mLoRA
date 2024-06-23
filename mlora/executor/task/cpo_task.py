@@ -1,7 +1,5 @@
 from mlora.model.args import LinearInfo, Tokens, MLoRADataConfig
 from mlora.model.tokenizer import Tokenizer
-from mlora.config import CPOTaskConfig
-from mlora.prompter import PreferenceDataPrompter
 
 import torch
 import logging
@@ -14,10 +12,6 @@ from .train_task import TrainTask
 
 class CPOTask(TrainTask):
     now_epoch_: int = 0
-
-    def __init__(self, config: CPOTaskConfig, llm_name: str) -> None:
-        super().__init__(config, llm_name)
-        self.prompter_ = PreferenceDataPrompter(config.dataset_.prompt_path_)
 
     @override
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
@@ -42,13 +36,14 @@ class CPOTask(TrainTask):
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
         logging.info(
-            f'Adapter {self.context_.name_} epoch: {self.now_epoch_}/{self.config_.num_epochs_}'
+            f'Adapter {self.context_.name_} epoch: {
+                self.now_epoch_}/{self.config_.num_epochs_}'
             f' iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_}')
         data_idx_s = self.now_data_idx_
         data_idx_e = self.now_data_idx_ + self.config_.mini_batch_size_
 
         # get the train raw string
-        batch_str = self.prompter_.generate_prompt_batch(
+        batch_str = self.prompter_.generate_prompt(
             self.data_[data_idx_s:data_idx_e])
 
         # convert the string to tokens

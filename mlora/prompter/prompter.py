@@ -1,32 +1,21 @@
-import json
+import yaml
+import jinja2
 from typing import Dict, List
+from jinja2.sandbox import ImmutableSandboxedEnvironment
+from abc import abstractmethod
 
 
 class Prompter:
-    template_: Dict[str, str] = None
+    template_: jinja2.Template = None
 
     def __init__(self, template: str):
         with open(template) as fp:
-            self.template_ = json.load(fp)
+            template_str = yaml.safe_load(fp)
+        jinja_env = ImmutableSandboxedEnvironment(
+            trim_blocks=True, lstrip_blocks=True)
 
-    def generate_prompt(self, data: Dict[str, str]) -> List[str]:
-        ret_val = ""
+        self.template_ = jinja_env.from_string(template_str["template"])
 
-        try:
-            ret_val = self.template_["prompt"].format(**data)
-        except:
-            ret_val = ""
-
-        if ret_val == "":
-            ret_val = self.template_["prompt_no_input"].format(**data)
-
-        return [ret_val]
-
-    def generate_prompt_batch(self, datas: List[Dict[str, str]]) -> List[str]:
-        ret_data = []
-        for data in datas:
-            ret_data.extend(self.generate_prompt(data))
-        return ret_data
-
-    def get_response(self, output: str) -> str:
-        return output.split(self.template["response"])[-1].strip()
+    @abstractmethod
+    def generate_prompt(self, data_points: List[Dict[str, str]]) -> List[str]:
+        ...

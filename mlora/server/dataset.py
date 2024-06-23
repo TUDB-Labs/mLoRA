@@ -1,8 +1,12 @@
-import json
+from mlora.prompter import PrompterFactory
+from mlora.config import DatasetConfig
+
+import os
 import logging
 from fastapi import APIRouter, Request
+from datasets import load_dataset
 
-from .storage import db_it, db_get, db_put
+from .storage import db_it_str, db_get_str, db_put_obj, db_get_obj, root_dir_list
 
 router = APIRouter()
 
@@ -10,34 +14,61 @@ router = APIRouter()
 @router.get("/dataset")
 def get_dataset():
     ret = []
-    for _, value in db_it("__dataset__"):
+    for _, value in db_it_str("__dataset__"):
         ret.append(value)
     return ret
+
+
+@router.get("/showcase")
+def showcase_dataset(name: str):
+    dataset = db_get_obj(f'__dataset__{name}')
+
+    if dataset is None:
+        return {"message": "the dataset not exist"}
+
+    dataset_config = DatasetConfig(dataset)
+
+    dataset_config.data_path_ = os.path.join(
+        root_dir_list()["data"], dataset_config.data_path_)
+    dataset_config.prompt_path_ = os.path.join(
+        root_dir_list()["prompt"], dataset_config.prompt_path_)
+
+    prompter = PrompterFactory.create(dataset_config)
+
+    # just read one item
+    data_points = load_dataset(
+        "json", data_files=dataset_config.data_path_, split="train[:1]")
+
+    ret = prompter.generate_prompt(data_points)
+
+    return {"example": ret}
 
 
 @router.post("/dataset")
 async def post_dataset(request: Request):
     req = await request.json()
 
-    train_file_name = db_get(f'__train__{req["train"]}')
-    prompt_file_name = db_get(f'__prompt__{req["prompt"]}')
-    if train_file_name is None or prompt_file_name is None:
+    data_file = db_get_obj(f'__data__{req["data_name"]}')
+    prompt_file = db_get_obj(f'__prompt__{req["prompt_name"]}')
+
+    if data_file is None or prompt_file is None:
         return {"message": "error parameters"}
 
-    if db_get(f'__dataset__{req["name"]}') is not None:
-        return {"message": "already exist"}
+    if db_get_str(f'__dataset__{req["name"]}') is not None:
+        return {"message": "dataset already exist"}
 
     dataset = {
         "name": req["name"],
-        "train": req["train"],
-        "train_path": train_file_name,
-        "prompt": req["prompt"],
-        "prompt_path": prompt_file_name,
+        "data_name": req["data_name"],
+        "prompt_name": req["prompt_name"],
+        "data": data_file["file_path"],
+        "prompt": prompt_file["file_path"],
+        "prompt_type": prompt_file["prompt_type"],
         "preprocess": req["preprocess"]
     }
 
     logging.info(f'Create new dataset: {req["name"]}')
 
-    db_put(f'__dataset__{req["name"]}', json.dumps(dataset))
+    db_put_obj(f'__dataset__{req["name"]}', dataset)
 
     return {"message": "success"}
