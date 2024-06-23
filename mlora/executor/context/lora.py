@@ -30,7 +30,7 @@ def _load_lora_weight(obj: TaskContext,
                                                config.r_, config.alpha_, config.dropout_)
     weight_dict = None
     temp_path=obj.path_
-    if os.path.isdir(obj.path_):	    if os.path.isdir(os.path.join(obj.path_, "adapters")):
+    if os.path.isdir(os.path.join(obj.path_, "adapters")):
         temp_path=os.path.join(obj.path_, "adapters")
         folders = [folder for folder in os.listdir(temp_path)]
         temp_path=os.path.join(temp_path,folders[-1])
