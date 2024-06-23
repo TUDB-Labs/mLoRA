@@ -1,6 +1,7 @@
 import os
 import os.path
 
+
 def delete_files_in_folder(folder_path):
     try:
         # Iterate through each file in the directory
