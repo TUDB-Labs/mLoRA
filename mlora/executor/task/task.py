@@ -72,7 +72,6 @@ class Task:
         logging.info(f"Task load data from {self.config_.dataset_.data_path_}")
         data = load_dataset("json",
                             data_files={"data_points": self.config_.dataset_.data_path_})
-        ipdb.set_trace()
         preprocess_type = self.config_.dataset_.preprocess_
         if preprocess_type not in preprocess_func:
             raise NotImplementedError
