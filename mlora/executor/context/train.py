@@ -23,11 +23,11 @@ class TrainTaskContext(TaskContext):
     optimizer_: torch.optim.Optimizer = None
     lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
 
-    def __init__(self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo]) -> None:
+    def __init__(self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo],checkpoint: Dict = None) -> None:
         super().__init__(config.type_, config.name_, config.path_)
 
         # load the adapter's weight
-        self.load_weight(config, linears_info)
+        self.load_weight(config, linears_info,checkpoint)
 
         for module in self.adapter_model_.values():
             module.enable_grad()
@@ -39,7 +39,8 @@ class TrainTaskContext(TaskContext):
 
         self.create_optimizer(config.optimizer_config_)
         self.create_lr_scheduler(config.lr_scheduler_config_)
-
+        if checkpoint is not None:
+            self.load_optimizer(checkpoint)
     @abstractmethod
     def weight_dict(self) -> Dict[str, torch.Tensor]:
         ...
@@ -55,7 +56,10 @@ class TrainTaskContext(TaskContext):
         self.optimizer_ = OPTIMIZER_CLASS[optimizer_type_](
             parameters, **optim_config.to_fn_parameters())
 
-    def create_lr_scheduler(self, lr_scheduler_config: Optional[LRSchedulerConfig]):
+    def load_optimizer(self,checkpoint):
+        self.optimizer_.load_state_dict(checkpoint["optimizer"])
+
+    def create_lr_scheduler(self, lr_scheduler_config: Optional[LRSchedulerConfig],checkpoint: Dict = None):
         assert self.optimizer_ is not None
 
         if lr_scheduler_config is None:
@@ -63,7 +67,11 @@ class TrainTaskContext(TaskContext):
 
         lr_scheduler_type_ = lr_scheduler_config.lr_scheduler_
         assert lr_scheduler_type_ in LR_SCHEDULER_CLASS
-        self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
+        if checkpoint is not None:
+            self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
+            self.optimizer_, **lr_scheduler_config.to_fn_parameters(checkpoint["epoch"]))
+        else:
+            self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
             self.optimizer_, **lr_scheduler_config.to_fn_parameters())
 
     def switch_device(self, device: str) -> None:

@@ -1,7 +1,7 @@
 from mlora.config import TaskConfig
 from mlora.model.args import LinearInfo, Tokens, Masks, MLoRADataConfig
 from mlora.model.tokenizer import Tokenizer
-
+import re
 import os
 import json
 import torch
@@ -14,21 +14,26 @@ from .task import Task
 
 class TrainTask(Task):
     now_epoch_: int = 0
-
+    is_restore : bool = 0
+    checkpoint = {}
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
-        self.now_epoch_ = 1
+        self.restore()
+        if self.is_restore :
+            self.now_epoch_ = self.checkpoint["epoch"]
+        else :
+            self.now_epoch_ = 1
 
     @override
     def is_done(self) -> bool:
         return self.now_epoch_ > self.config_.num_epochs_
 
     @override
-    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
+    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer,checkpoint: Dict = None):
         self.tokenizer_ = tokenizer
         # prepare the dataset and context
         self._pre_dataset()
-        self._pre_context(linears_info)
+        self._pre_context(linears_info,checkpoint)
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
@@ -88,9 +93,10 @@ class TrainTask(Task):
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-
-        torch.save(self.context_.weight_dict(),
-                   output_dir + os.sep + "adapter_model.bin")
+        # 将weight_dict和 self.context_.optimiezer.statr_dict(),int(dir_suffix) 做着字典 存储
+        self.checkpoint["epoch"] = self.now_epoch_
+        torch.save(self.context_.checkpoint(),
+                   output_dir + os.sep + "checkpoint.bin")
 
         adapter_config: Dict[str, str] = {}
         adapter_config["base_model_name_or_path"] = self.llm_name_
@@ -128,3 +134,22 @@ class TrainTask(Task):
         # task finish we also need to step
         if not stepd and self.now_epoch_ >= self.config_.num_epochs_:
             self.context_.step()
+
+    def restore(self):
+        temp_path = self.context_.path_
+        if os.path.isdir(os.path.join(temp_path, "adapters")):
+            is_restore = 1
+            temp_path = os.path.join(temp_path, "adapters")
+            folders = [folder for folder in os.listdir(temp_path)]
+            max_suffix = 0
+            max_dir = None
+            for dir_path in folders:
+                suffix = extract_dir_suffix(dir_path)
+                if suffix is not None and suffix > max_suffix:
+                    max_suffix = suffix
+                    max_dir = dir_path
+            self.checkpoint = torch.load(dir_path)
+            self.context_.path_=dir_path
+    def extract_dir_suffix(path):
+        match = re.search(r'dir_(\d+)$', os.path.basename(path))
+        return int(match.group(1)) if match else None
