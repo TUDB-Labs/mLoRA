@@ -144,7 +144,7 @@ class TrainTask(Task):
             max_suffix = 0
             max_dir = None
             for dir_path in folders:
-                suffix = extract_dir_suffix(dir_path)
+                suffix = self.extract_dir_suffix(dir_path)
                 if suffix is not None and suffix > max_suffix:
                     max_suffix = suffix
                     max_dir = dir_path
