@@ -148,8 +148,8 @@ class TrainTask(Task):
                 if suffix is not None and suffix > max_suffix:
                     max_suffix = suffix
                     max_dir = dir_path
-            self.checkpoint = torch.load(dir_path)
-            self.config_.adapter_.path_=dir_path
+            self.checkpoint = torch.load(max_dir)
+            self.config_.adapter_.path_=max_dir
     def extract_dir_suffix(self,path):
         match = re.search(r'dir_(\d+)$', os.path.basename(path))
         return int(match.group(1)) if match else None
