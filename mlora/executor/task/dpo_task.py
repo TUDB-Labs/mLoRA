@@ -89,7 +89,7 @@ class DPOTask(TrainTask):
         ret_tokens = []
         # for refrerence
         ref_model_token = list(map(lambda raw_str: self.tokenizer_.encode(
-            raw_str, bos=True, eos=True), batch_str))
+            raw_str, bos=True, eos=True, cutoff_len=self.config_.cutoff_len_), batch_str))
         policy_model_token = copy.deepcopy(ref_model_token)
 
         ret_tokens.extend(ref_model_token)
