@@ -136,7 +136,7 @@ class TrainTask(Task):
             self.context_.step()
 
     def restore(self):
-        temp_path = self.context_.path_
+        temp_path = self.config_.path_
         if os.path.isdir(os.path.join(temp_path, "adapters")):
             is_restore = 1
             temp_path = os.path.join(temp_path, "adapters")
@@ -149,7 +149,7 @@ class TrainTask(Task):
                     max_suffix = suffix
                     max_dir = dir_path
             self.checkpoint = torch.load(dir_path)
-            self.context_.path_=dir_path
+            self.config_.path_=dir_path
     def extract_dir_suffix(path):
         match = re.search(r'dir_(\d+)$', os.path.basename(path))
         return int(match.group(1)) if match else None
