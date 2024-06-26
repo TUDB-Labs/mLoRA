@@ -17,8 +17,9 @@ class Tokenizer:
         if self.pad_id_ is None and self.unk_id_ is not None:
             self.pad_id_ = self.unk_id_
 
-    def encode(self, data: str, bos=True, eos=True) -> Tokens:
+    def encode(self, data: str, bos=True, eos=True, cutoff_len=4096) -> Tokens:
         tokens = self.tokenizer_.encode(data, add_special_tokens=False)
+        tokens = tokens[:cutoff_len - int(bos) - int(eos)]
         if bos:
             tokens = [self.bos_id_] + tokens
         if eos:
