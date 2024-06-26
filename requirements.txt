@@ -1,12 +1,12 @@
-torch>=2.1.2
+torch>=2.3.0
 datasets
 evaluate
 accelerate
-transformers==4.40.0
+transformers==4.41.2
 sentencepiece
 huggingface_hub
 scikit-learn
 gradio==4.11.0
-peft==0.10.0
+peft==0.11.1
 pandas
 fire

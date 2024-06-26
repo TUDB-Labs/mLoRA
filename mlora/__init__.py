@@ -20,9 +20,9 @@ from .common import (
 from .utils import is_package_available
 
 assert is_package_available(
-    "torch", "2.1.2"), "m-LoRA requires torch>=2.1.2"
+    "torch", "2.3.0"), "m-LoRA requires torch>=2.3.0"
 assert is_package_available(
-    "transformers", "4.40.0"), "m-LoRA requires transformers>=4.40.0"
+    "transformers", "4.41.0"), "m-LoRA requires transformers>=4.41.0"
 
 
 setup_logging()

@@ -72,7 +72,7 @@ For flash attention, manual installation of the following dependencies is requir
 
 ```bash
 pip3 install ninja
-pip3 install flash-attn==2.5.6 --no-build-isolation
+pip3 install flash-attn==2.5.8 --no-build-isolation
 ```
 
 If the attention method is not specified, flash attention is used during inference and evaluation.

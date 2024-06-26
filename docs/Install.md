@@ -69,10 +69,10 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 git clone https://github.com/scukdde-llm/mlora
 cd mlora
 # Optional but recommended
-conda create -n mlora python=3.10
+conda create -n mlora python=3.11
 conda activate mlora
 # Install requirements
-pip3 install torch==2.1.2
+pip3 install torch==2.3.1
 pip3 install -r requirements.txt
 # Install extra requirements on Linux
 bash install_linux.sh
@@ -121,10 +121,10 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 git clone https://github.com/scukdde-llm/mlora
 cd mlora
 # Optional but recommended
-conda create -n mlora python=3.10
+conda create -n mlora python=3.11
 conda activate mlora
 # Install requirements (CUDA 12.1)
-pip3 install torch==2.1.2 --index-url https://download.pytorch.org/whl/cu121
+pip3 install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
 pip3 install -r requirements.txt
 ```
 
@@ -169,10 +169,10 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 git clone https://github.com/scukdde-llm/mlora
 cd mlora
 # Optional but recommended
-conda create -n mlora python=3.10
+conda create -n mlora python=3.11
 conda activate mlora
 # Install requirements
-pip3 install torch==2.2.2
+pip3 install torch==2.3.1
 pip3 install -r requirements.txt
 ```
 
