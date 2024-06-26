@@ -237,37 +237,6 @@ class WinoGrande(QuestionAnswerTask):
         return ret
 
 
-class MedicalQA(QuestionAnswerTask):
-    def __init__(self) -> None:
-        super().__init__(["Yes", "No"])
-
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "TUDB-Labs/medical-qa")["train" if is_train else "test"]
-        logging.info("Preparing data for MedicalQA")
-        ret: List[DataClass] = []
-        for idx, data_point in enumerate(data):
-            prompt = "Please provide your answer to the following question using" \
-                + " information from medical articles and your medical expertise.\n"
-            prompt += f"Information: {data_point['short_context' if is_train else 'long_context']}\n"
-            prompt += f"Question: {data_point['question']}\n"
-            prompt += "Answer:"
-            answer = data_point["raw_answer"]
-            if is_train:
-                prompt += f" {answer}"
-                labels = None
-            else:
-                labels = [self.labels2id_[answer]]
-            tokens = tokenizer.encode(data=prompt)
-            ret.append(DataClass(tokens_=tokens, labels_=labels))
-            if idx % 10000 == 0:
-                logging.info(f"Encode text data: {idx}/{len(data)}")
-
-        return ret
-
-
 def update_task_dict(task_dict):
     task_dict.update({
         "arc-e": ARC("ARC-Easy"),
@@ -278,5 +247,4 @@ def update_task_dict(task_dict):
         "siqa": SIQA(),
         "hellaswag": HellaSwag(),
         "winogrande": WinoGrande(),
-        "medical-qa": MedicalQA(),
     })

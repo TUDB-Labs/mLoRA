@@ -101,8 +101,7 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
         batch_data_config.append(LoraBatchDataConfig(adapter_name_=config.adapter_name,
                                                      batch_start_idx_=batch_start_idx, batch_end_idx_=len(batch_tokens)))
 
-    if max_tokens_len < max_seq_len:
-        max_seq_len = math.ceil(max_tokens_len / 8) * 8
+    max_seq_len = min(max_seq_len, max_tokens_len)
 
     for tokens in batch_tokens:
         sequence_lengths.append(len(tokens) - 1)

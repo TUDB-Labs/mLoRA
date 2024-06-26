@@ -71,9 +71,7 @@ def prepare_data(tokenizer: mlora.Tokenizer,
         batch_labels.append(test_data_point["answer"])
 
     if batch_padding:
-        logging.info(f"Max tokens: {max_tokens_len}/{max_seq_len}")
-        if max_tokens_len < max_seq_len:
-            max_seq_len = math.ceil(max_tokens_len / 8) * 8
+        max_seq_len = min(max_seq_len, max_tokens_len)
         logging.info(f"Max sequence length: {max_seq_len}")
 
     for tokens in batch_tokens:

@@ -308,7 +308,6 @@ class Dispatcher():
                 batch_seq_len = max(batch_seq_len, len(data.tokens_))
 
         # all prompts and tokens / config
-        batch_seq_len = math.ceil(batch_seq_len / 8) * 8
         batch_tokens: List[Tokens] = []
         attention_masks: List[Masks] = []
         batch_labels: List[List] = []

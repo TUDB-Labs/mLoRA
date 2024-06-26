@@ -12,7 +12,7 @@ m-LoRA (a.k.a Multi-Lora Fine-Tune) is an open-source framework for fine-tuning 
 
 - Multiple LoRA Adapters: Support for concurrent fine-tuning of multiple LoRA/QLoRA adapters.
 
-- LoRA-based Mix-of-Expert LLM Adapter: [MixLoRA](./docs/MixLoRA.md), which implements a Mix-of-Expert architecture based on multiple LoRA adapters for the frozen FFN layer.
+- LoRA-based Mix-of-Expert LLM Adapter: [MixLoRA](https://github.com/TUDB-Labs/MixLoRA), which implements a Mix-of-Expert architecture based on multiple LoRA adapters for the frozen FFN layer.
 
 ## Note from the maintainer of this repository
 
@@ -53,7 +53,7 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 | &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0`        |
 | &check; | [DoRA](https://arxiv.org/abs/2402.09353)                 | `use_dora: true`                 |
 | &check; | [rsLoRA](https://arxiv.org/abs/2312.03732)               | `use_rslora: true`               |
-| &check; | [MixLoRA](https://arxiv.org/abs/2404.15159)              | See [MixLoRA](./docs/MixLoRA.md) |
+| &check; | [MixLoRA](https://arxiv.org/abs/2404.15159)              | See [MixLoRA](https://github.com/TUDB-Labs/MixLoRA) |
 
 *: Arguments of configuration file
 
@@ -110,7 +110,7 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 
 ## Installation
 
-Please refer to [Install Guide](./docs/Install.md).
+Please refer to [Install Guide](./Install.md).
 
 ## Quickstart
 
@@ -166,46 +166,8 @@ You can check all available tags from: [mikecovlee/mlora/tags](https://hub.docke
 
 Please note that this container only provides a proper environment to run m-LoRA. The codes of m-LoRA are not included.
 
-## Contributing
-We welcome contributions to improve this repository! Please review the contribution guidelines before submitting pull requests or issues.
-
-Fork the repository.
-Create a new branch for your feature or fix.
-Submit a pull request with a detailed explanation of your changes.
-
-You can use the pre-commit to check your code.
-```bash
-ln -s ../../.github/workflows/pre-commit .git/hooks/pre-commit
-```
-
-## Citation
-Please cite the repo if you use the code in this repo.
-```bibtex
-@misc{m-LoRA,
-  author = {Zhengmao, Ye\textsuperscript{*} and Dengchun, Li\textsuperscript{*} and Jingqi, Tian and Tingfeng, Lan and Yanbo, Liang and Yexi, Jiang and Jie, Zuo and Hui, Lu and Lei, Duan and Mingjie, Tang},
-  title = {m-LoRA: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization},
-  year = {2023},
-  publisher = {GitHub},
-  howpublished = {\url{https://github.com/scukdde-llm/mlora}},
-  note={\textsuperscript{*}: these authors contributed equally to this work.}
-}
-```
-
 ## Copyright
-Copyright © 2023-2024 All Rights Reserved.
+Copyright © 2023-2024 Sichuan University
 
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
 
-```
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
