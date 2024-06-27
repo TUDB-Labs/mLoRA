@@ -31,11 +31,11 @@ class TrainTask(Task):
         return self.now_epoch_ > self.config_.num_epochs_
 
     @override
-    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer,checkpoint: Dict = None):
+    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
         # prepare the dataset and context
         self._pre_dataset()
-        self._pre_context(linears_info,checkpoint)
+        self._pre_context(linears_info,self.checkpoint)
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:

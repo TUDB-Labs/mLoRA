@@ -62,7 +62,7 @@ class TrainLoRAContext(TrainTaskContext):
 
         self.loss_fn_ = torch.nn.CrossEntropyLoss()
 
-    def load_weight(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo],checkpoint):
+    def load_weight(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo],checkpoint: Dict = None):
         _load_lora_weight(self, config, linears_info,checkpoint)
 
     def weight_dict(self) -> Dict[str, torch.Tensor]:
