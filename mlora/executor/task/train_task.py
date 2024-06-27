@@ -96,7 +96,7 @@ class TrainTask(Task):
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        self.checkpoint["epoch"] = self.now_epoch_
+        self.context_.checkpoint()["epoch"] = self.now_epoch_
         logging.info(f"save checkpoint in {output_dir + os.sep}checkpoint.bin")
         torch.save(self.context_.checkpoint(),
                    output_dir + os.sep + "checkpoint.bin")
