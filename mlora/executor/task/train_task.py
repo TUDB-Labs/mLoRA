@@ -5,7 +5,6 @@ import re
 import os
 import json
 import torch
-import ipdb
 import logging
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
@@ -137,7 +136,6 @@ class TrainTask(Task):
             self.context_.step()
 
     def restore(self):
-        ipdb.set_trace()
         temp_path = self.config_.adapter_.path_
         if os.path.isdir(os.path.join(temp_path, "adapters")):
             is_restore = 1
@@ -150,8 +148,8 @@ class TrainTask(Task):
                 if suffix is not None and suffix > max_suffix:
                     max_suffix = suffix
                     max_dir = dir_path
-            logging.info(f"load checkpoint in {max_dir}")
-            self.checkpoint = torch.load(max_dir)
+            logging.info(f"load checkpoint in {temp_path+os.sep+max_dir}")
+            self.checkpoint = torch.load(temp_path+os.sep+max_dir)
             self.config_.adapter_.path_=max_dir
     def extract_dir_suffix(self,path):
         match = re.search(r'dir_(\d+)$', os.path.basename(path))
