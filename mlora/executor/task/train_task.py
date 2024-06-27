@@ -53,7 +53,7 @@ class TrainTask(Task):
 
         # convert the string to tokens
         ret_tokens = list(map(lambda raw_str: self.tokenizer_.encode(
-            raw_str, bos=True, eos=True), batch_str))
+            raw_str, bos=True, eos=True, cutoff_len=self.config_.cutoff_len_), batch_str))
         end_idx = start_idx + len(ret_tokens)
 
         def loss_fn(input: torch.Tensor, target: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
