@@ -15,7 +15,7 @@ from .task import Task
 
 class TrainTask(Task):
     now_epoch_: int = 0
-    is_restore : bool = 0
+    is_restore : bool = False
     checkpoint = {}
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
@@ -140,7 +140,7 @@ class TrainTask(Task):
     def restore(self):
         temp_path = self.config_.adapter_.path_
         if os.path.isdir(os.path.join(temp_path, "adapters")):
-            is_restore = 1
+            is_restore = True
             temp_path = os.path.join(temp_path, "adapters")
             folders = [folder for folder in os.listdir(temp_path)]
             max_suffix = 0
