@@ -16,7 +16,7 @@ from .task import Task
 class TrainTask(Task):
     now_epoch_: int = 0
     is_restore : bool = False
-    checkpoint = {}
+    checkpoint = None
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
         self.restore()
