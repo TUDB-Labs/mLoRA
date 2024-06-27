@@ -94,8 +94,8 @@ class TrainTask(Task):
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        # 将weight_dict和 self.context_.optimiezer.statr_dict(),int(dir_suffix) 做着字典 存储
         self.checkpoint["epoch"] = self.now_epoch_
+        logging.info(f"save checkpoint in {output_dir + os.sep}checkpoint.bin")
         torch.save(self.context_.checkpoint(),
                    output_dir + os.sep + "checkpoint.bin")
 
