@@ -154,5 +154,5 @@ class TrainTask(Task):
             self.checkpoint = torch.load(temp_path+os.sep+max_dir)
             self.config_.adapter_.path_=max_dir
     def extract_dir_suffix(self,path):
-        match = re.search(r'dir_(\d+)$', os.path.basename(path))
+        match = re.search(r'_(\d+)$', path)
         return int(match.group(1)) if match else None
