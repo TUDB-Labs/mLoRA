@@ -21,6 +21,7 @@ class TrainTask(Task):
         super().__init__(config, llm_name)
         self.restore()
         if self.is_restore :
+            ipdb.set_trace()
             self.now_epoch_ = self.checkpoint["epoch"]
         else :
             self.now_epoch_ = 1
