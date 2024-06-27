@@ -4,7 +4,6 @@ from mlora.model.tokenizer import Tokenizer
 import re
 import os
 import json
-import ipdb
 import torch
 import logging
 from collections import OrderedDict
@@ -20,7 +19,6 @@ class TrainTask(Task):
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
         self.restore()
-        ipdb.set_trace()
         if self.is_restore :
 
             self.now_epoch_ = self.checkpoint["epoch"]+1

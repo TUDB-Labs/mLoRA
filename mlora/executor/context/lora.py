@@ -2,7 +2,6 @@ from mlora.config import LoRAConfig
 from mlora.config.adapter import AdapterConfig
 from mlora.model.modules import LoRA
 from mlora.model.args import LinearInfo
-import ipdb
 import os
 import torch
 import logging
@@ -30,7 +29,6 @@ def _load_lora_weight(obj: TaskContext,
                                                linear_info.in_dim_, linear_info.out_dim_,
                                                config.r_, config.alpha_, config.dropout_)
     weight_dict = None
-    ipdb.set_trace()
     if checkpoint is not None:
         logging.info(
             f"Adapter {obj.name_}:{obj.path_} weight exist, load from file.")
