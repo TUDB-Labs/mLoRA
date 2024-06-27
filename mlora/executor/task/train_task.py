@@ -23,7 +23,7 @@ class TrainTask(Task):
         ipdb.set_trace()
         if self.is_restore :
 
-            self.now_epoch_ = self.checkpoint["epoch"]
+            self.now_epoch_ = self.checkpoint["epoch"]+1
         else :
             self.now_epoch_ = 1
 
@@ -112,7 +112,7 @@ class TrainTask(Task):
 
     @override
     def done(self):
-        self._save()
+        self._save(self.now_epoch_)
         # release the context
         del self.context_
 
@@ -126,7 +126,7 @@ class TrainTask(Task):
 
         # to save the model
         if self.now_step_ % self.config_.save_step_ == 0:
-            self._save(f"{self.now_step_}")
+            self._save(f"{self.now_epoch_}")
 
         self.now_step_ += 1
         self.now_data_idx_ += self.config_.mini_batch_size_
