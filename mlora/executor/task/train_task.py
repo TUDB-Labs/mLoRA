@@ -96,9 +96,10 @@ class TrainTask(Task):
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        self.context_.checkpoint()["epoch"] = self.now_epoch_
+        temp_dic = self.context_.checkpoint()
+        temp_dic["epoch"] = self.now_epoch_
         logging.info(f"save checkpoint in {output_dir + os.sep}checkpoint.bin")
-        torch.save(self.context_.checkpoint(),
+        torch.save(temp_dic,
                    output_dir + os.sep + "checkpoint.bin")
 
         adapter_config: Dict[str, str] = {}
