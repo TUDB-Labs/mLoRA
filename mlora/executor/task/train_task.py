@@ -112,7 +112,7 @@ class TrainTask(Task):
 
     @override
     def done(self):
-        self._save(f"{self.config.num_epochs_}")
+        self._save(f"{self.config_.num_epochs_}")
         # release the context
         del self.context_
 
