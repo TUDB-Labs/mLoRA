@@ -14,17 +14,18 @@ from .task import Task
 
 class TrainTask(Task):
     now_epoch_: int = 0
-    is_restore : bool = False
+    is_restore: bool = False
     checkpoint = None
+
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
         self.restore()
-        if self.is_restore :
-            if self.checkpoint["epoch"]>=int(config.num_epochs_):
+        if self.is_restore:
+            if self.checkpoint["epoch"] >= int(config.num_epochs_):
                 logging.info("train is already done")
                 exit(0)
-            self.now_epoch_ = self.checkpoint["epoch"]+1
-        else :
+            self.now_epoch_ = self.checkpoint["epoch"] + 1
+        else:
             self.now_epoch_ = 1
 
     @override
@@ -36,7 +37,7 @@ class TrainTask(Task):
         self.tokenizer_ = tokenizer
         # prepare the dataset and context
         self._pre_dataset()
-        self._pre_context(linears_info,self.checkpoint)
+        self._pre_context(linears_info, self.checkpoint)
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
@@ -152,9 +153,10 @@ class TrainTask(Task):
                 if suffix is not None and suffix > max_suffix:
                     max_suffix = suffix
                     max_dir = dir_path
-            temp_path=temp_path+os.sep+max_dir
-            logging.info(f"load checkpoint in {temp_path+os.sep}checkpoint.bin")
-            self.checkpoint = torch.load(temp_path+os.sep+"checkpoint.bin")
+            temp_path=temp_path + os.sep + max_dir
+            logging.info(f"load checkpoint in {temp_path + os.sep}checkpoint.bin")
+            self.checkpoint = torch.load(temp_path + os.sep + "checkpoint.bin")
+
     def extract_dir_suffix(self,path):
         match = re.search(r'_(\d+)$', path)
         return int(match.group(1)) if match else None

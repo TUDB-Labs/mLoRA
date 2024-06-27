@@ -2,7 +2,6 @@ from mlora.config import LoRAConfig
 from mlora.config.adapter import AdapterConfig
 from mlora.model.modules import LoRA
 from mlora.model.args import LinearInfo
-import os
 import torch
 import logging
 from typing import Dict
@@ -55,13 +54,13 @@ class InferenceLoRAContext(InferenceTaskContext):
 
 
 class TrainLoRAContext(TrainTaskContext):
-    def __init__(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo],checkpoint: Dict = None) -> None:
-        super().__init__(config, linears_info,checkpoint)
+    def __init__(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo], checkpoint: Dict = None) -> None:
+        super().__init__(config, linears_info, checkpoint)
 
         self.loss_fn_ = torch.nn.CrossEntropyLoss()
 
-    def load_weight(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo],checkpoint: Dict = None):
-        _load_lora_weight(self, config, linears_info,checkpoint)
+    def load_weight(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo], checkpoint: Dict = None):
+        _load_lora_weight(self, config, linears_info, checkpoint)
 
     def weight_dict(self) -> Dict[str, torch.Tensor]:
         # base_model.model.model.layers.{0}.self_attn.{q_proj}.{lora_A}.weight
@@ -73,9 +72,10 @@ class TrainLoRAContext(TrainTaskContext):
             ret_val[prefix_name + ".lora_B.weight"] = adapter.lora_b_
 
         return ret_val
+
     def checkpoint(self):
         checkpoint = {
             "lora_weight": self.weight_dict(),
             'optimizer': self.optimizer_.state_dict(),
         }
-        return  checkpoint
+        return checkpoint
