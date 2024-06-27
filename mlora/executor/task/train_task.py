@@ -141,7 +141,7 @@ class TrainTask(Task):
     def restore(self):
         temp_path = self.config_.adapter_.path_
         if os.path.isdir(os.path.join(temp_path, "adapters")):
-            is_restore = True
+            self.is_restore = True
             temp_path = os.path.join(temp_path, "adapters")
             folders = [folder for folder in os.listdir(temp_path)]
             max_suffix = 0
