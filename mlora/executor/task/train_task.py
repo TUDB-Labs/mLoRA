@@ -152,7 +152,7 @@ class TrainTask(Task):
                     max_dir = dir_path
             temp_path=temp_path+os.sep+max_dir
         logging.info(f"load checkpoint in {temp_path+os.sep}checkpoint.bin")
-        self.checkpoint = torch.load(temp_path+"checkpoint.bin")
+        self.checkpoint = torch.load(temp_path+os.sep+"checkpoint.bin")
     def extract_dir_suffix(self,path):
         match = re.search(r'_(\d+)$', path)
         return int(match.group(1)) if match else None
