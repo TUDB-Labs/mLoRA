@@ -4,6 +4,7 @@ from mlora.model.tokenizer import Tokenizer
 import re
 import os
 import json
+import ipdb
 import torch
 import logging
 from collections import OrderedDict
@@ -143,6 +144,7 @@ class TrainTask(Task):
             folders = [folder for folder in os.listdir(temp_path)]
             max_suffix = 0
             max_dir = None
+            ipdb.set_trac()
             for dir_path in folders:
                 suffix = self.extract_dir_suffix(dir_path)
                 if suffix is not None and suffix > max_suffix:
