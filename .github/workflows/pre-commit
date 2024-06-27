@@ -2,6 +2,12 @@
 
 lizard -l python ./mlora -C 12
 
-flake8 . --count --show-source --statistics --max-line-length=127 --max-complexity 15 --ignore=E722,W504
+black --check ./mlora
+
+isort ./mlora --check --profile black
+
+flake8 ./mlora --count --show-source --statistics --max-line-length=88 --max-complexity 15 --ignore=E203,W503,E704
+
+mypy ./mlora --ignore-missing-imports --non-interactive --install-types --check-untyped-defs
 
 pytest

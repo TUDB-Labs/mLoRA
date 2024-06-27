@@ -1,18 +1,18 @@
-from mlora.config import DatasetConfig, TASKCONFIG_CLASS, ADAPTERCONFIG_CLASS
-
-import os
 import logging
+import os
+
 from fastapi import APIRouter, Request
 
-from .storage import root_dir_list, db_get_str, db_put_obj, db_it_str, db_get_obj
+from mlora.config import ADAPTERCONFIG_CLASS, TASKCONFIG_CLASS, DatasetConfig
+
 from .pipe import g_s_create_task
+from .storage import db_get_obj, db_get_str, db_it_str, db_put_obj, root_dir_list
 
 router = APIRouter()
 
 
 def complete_path(obj, dir_type: str, file_name: str):
-    obj[file_name] = os.path.join(
-        root_dir_list()[dir_type], "./" + obj[file_name])
+    obj[file_name] = os.path.join(root_dir_list()[dir_type], "./" + obj[file_name])
     return obj
 
 
@@ -55,8 +55,7 @@ async def post_task(request: Request):
         if adapter is None:
             return {"message": "can not found the reference adapter"}
         adapter = complete_path(adapter, "adapter", "path")
-        adapters[adapter["name"]
-                 ] = ADAPTERCONFIG_CLASS[adapter["type"]](adapter)
+        adapters[adapter["name"]] = ADAPTERCONFIG_CLASS[adapter["type"]](adapter)
 
     task_conf = TASKCONFIG_CLASS[req["type"]](req, adapters, datasets)
 

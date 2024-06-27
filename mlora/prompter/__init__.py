@@ -1,13 +1,12 @@
 from mlora.config import DatasetConfig
 
-from .prompter import Prompter
-from .preference_data_prompter import PreferenceDataPrompter
 from .instruction_data_prompter import InstructionDataPrompter
-
+from .preference_data_prompter import PreferenceDataPrompter
+from .prompter import Prompter
 
 _PROMPTER_CLASS = {
     "instruction": InstructionDataPrompter,
-    "preference": PreferenceDataPrompter
+    "preference": PreferenceDataPrompter,
 }
 
 

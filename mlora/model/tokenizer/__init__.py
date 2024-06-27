@@ -1,5 +1,3 @@
 from .tokenizer import Tokenizer
 
-__all__ = [
-    "Tokenizer"
-]
+__all__ = ["Tokenizer"]

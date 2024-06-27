@@ -1,17 +1,18 @@
 import json
+
 import requests
 from InquirerPy import inquirer, separator
 from rich import print
-from rich.table import Table
 from rich.box import ASCII
+from rich.table import Table
 
-from .setting import url
 from .file import list_file
+from .setting import url
 
 
 def list_dataset(obj):
     ret = requests.get(url() + "/dataset")
-    ret = json.loads(ret.text)
+    ret_items = json.loads(ret.text)
 
     table = Table(show_header=True, show_lines=True, box=ASCII)
     table.add_column("name", justify="center")
@@ -22,21 +23,22 @@ def list_dataset(obj):
 
     obj.ret_ = []
 
-    for item in ret:
-        item = json.loads(item)
-        table.add_row(item["name"],
-                      item["data_name"],
-                      item["prompt_name"],
-                      item["prompt_type"],
-                      item["preprocess"])
+    for ret_item in ret_items:
+        item = json.loads(ret_item)
+        table.add_row(
+            item["name"],
+            item["data_name"],
+            item["prompt_name"],
+            item["prompt_type"],
+            item["preprocess"],
+        )
         obj.ret_.append(item["name"])
 
     obj.pret_ = table
 
 
 def create_dataset(obj):
-    name = inquirer.text(
-        message="name:").execute()
+    name = inquirer.text(message="name:").execute()
 
     list_file(obj, "data")
     all_train_data = [item["name"] for item in obj.ret_]
@@ -51,26 +53,33 @@ def create_dataset(obj):
         return
 
     use_train = inquirer.select(
-        message="train data file:", choices=[separator.Separator(),
-                                             *all_train_data,
-                                             separator.Separator()]).execute()
+        message="train data file:",
+        choices=[separator.Separator(), *all_train_data, separator.Separator()],
+    ).execute()
     use_prompt = inquirer.select(
-        message="prompt template file:", choices=[separator.Separator(),
-                                                  *all_prompt,
-                                                  separator.Separator()]).execute()
+        message="prompt template file:",
+        choices=[separator.Separator(), *all_prompt, separator.Separator()],
+    ).execute()
     use_preprocess = inquirer.select(
-        message="data preprocessing:", choices=[separator.Separator(),
-                                                "default",
-                                                "shuffle",
-                                                "sort",
-                                                separator.Separator()]).execute()
+        message="data preprocessing:",
+        choices=[
+            separator.Separator(),
+            "default",
+            "shuffle",
+            "sort",
+            separator.Separator(),
+        ],
+    ).execute()
 
-    ret = requests.post(url() + "/dataset", json={
-        "name": name,
-        "data_name": use_train,
-        "prompt_name": use_prompt,
-        "preprocess": use_preprocess
-    })
+    ret = requests.post(
+        url() + "/dataset",
+        json={
+            "name": name,
+            "data_name": use_train,
+            "prompt_name": use_prompt,
+            "preprocess": use_preprocess,
+        },
+    )
 
     print(json.loads(ret.text))
 
@@ -84,9 +93,9 @@ def showcase_dataset(obj):
         return
 
     use_dataset = inquirer.select(
-        message="dataset name:", choices=[separator.Separator(),
-                                          *all_dataset,
-                                          separator.Separator()]).execute()
+        message="dataset name:",
+        choices=[separator.Separator(), *all_dataset, separator.Separator()],
+    ).execute()
 
     ret = requests.get(url() + f"/showcase?name={use_dataset}")
     ret = json.loads(ret.text)

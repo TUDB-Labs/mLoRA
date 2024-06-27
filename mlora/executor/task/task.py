@@ -1,40 +1,38 @@
-from mlora.config import TaskConfig
-from mlora.prompter import Prompter, PrompterFactory
-from mlora.model.modules import AdapterModel
-from mlora.model.args import LinearInfo, Tokens, Masks, MLoRADataConfig
-from mlora.model.tokenizer import Tokenizer
-from mlora.executor.context import TaskContext, TRAINCONTEXT_CLASS
-
 import logging
-from tqdm import tqdm
-from datasets import load_dataset
-from collections import OrderedDict
-from typing import Dict, Callable, List, Optional, Tuple
 from abc import abstractmethod
+from collections import OrderedDict
+from typing import Callable, Dict, List, Optional, Tuple
+
+from datasets import load_dataset
+from tqdm import tqdm
+
+from mlora.config import TaskConfig
+from mlora.executor.context import TRAINCONTEXT_CLASS, TaskContext
+from mlora.model.args import LinearInfo, Masks, MLoRADataConfig, Tokens
+from mlora.model.modules import AdapterModel
+from mlora.model.tokenizer import Tokenizer
+from mlora.prompter import Prompter, PrompterFactory
 
 
 class Task:
     config_: TaskConfig
 
-    now_step_: int = 0
+    now_step_: int
 
-    tokenizer_: Tokenizer = None
-    context_: TaskContext = None
+    tokenizer_: Tokenizer
+    context_: TaskContext
 
-    data_: List[Dict[str, str]] = None
-    now_data_idx_: int = 0
+    data_: List[Dict[str, str]]
+    now_data_idx_: int
 
-    prompter_: Prompter = None
+    prompter_: Prompter
 
-    llm_name_: str = ""
+    llm_name_: str
 
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         self.config_ = config
 
         self.now_step_ = 1
-
-        self.tokenizer_ = None
-        self.context_ = None
 
         self.data_ = []
         self.now_data_idx_ = 0
@@ -48,31 +46,31 @@ class Task:
         ...
 
     @abstractmethod
-    def done(self):
-        ...
+    def done(self): ...
 
     @abstractmethod
-    def step(self):
-        ...
+    def step(self): ...
 
     @abstractmethod
-    def is_done(self) -> bool:
-        ...
+    def is_done(self) -> bool: ...
 
     @abstractmethod
-    def data(self) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
-        ...
+    def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]: ...
+
+    @abstractmethod
+    def task_progress(self) -> int: ...
 
     def _pre_dataset(self):
         preprocess_func: Dict[str, Callable] = {
             "default": lambda data: data,
             "shuffle": lambda data: data.shuffle(),
-            "sort": lambda data: data.sort()
+            "sort": lambda data: data.sort(),
         }
 
         logging.info(f"Task load data from {self.config_.dataset_.data_path_}")
-        data = load_dataset("json",
-                            data_files={"data_points": self.config_.dataset_.data_path_})
+        data = load_dataset(
+            "json", data_files={"data_points": self.config_.dataset_.data_path_}
+        )
 
         preprocess_type = self.config_.dataset_.preprocess_
         if preprocess_type not in preprocess_func:
@@ -80,9 +78,9 @@ class Task:
 
         data = preprocess_func[preprocess_type](data)
         logging.info(
-            f'Adapter {self.config_.adapter_.name_} data size: {
-                len(data["data_points"])} '
-            f'epoch: {self.config_.num_epochs_} batch size: {self.config_.batch_size_} / {self.config_.mini_batch_size_}')
+            f"Adapter {self.config_.adapter_.name_} "
+            f"data size: {len(data["data_points"])}"
+        )
 
         for _, data_point in tqdm(enumerate(data["data_points"])):
             self.data_.append(data_point)
@@ -91,11 +89,12 @@ class Task:
         adapter_type = self.config_.adapter_.type_
         assert adapter_type in TRAINCONTEXT_CLASS
         self.context_ = TRAINCONTEXT_CLASS[adapter_type](
-            self.config_.adapter_, linears_info)
+            self.config_.adapter_, linears_info
+        )
 
-    def _expand_batch_tokens(self,
-                             batch_tokens: List[Tokens],
-                             align_len: Optional[int] = None) -> Tuple[List[Tokens], List[Masks]]:
+    def _expand_batch_tokens(
+        self, batch_tokens: List[Tokens], align_len: Optional[int] = None
+    ) -> Tuple[List[Tokens], List[Masks]]:
         if align_len is None:
             align_len = max(map(lambda x: len(x), batch_tokens))
 
@@ -119,11 +118,6 @@ class Task:
 
     def task_name(self) -> str:
         return self.config_.name_
-
-    def task_progress(self) -> int:
-        total_step = len(self.data_) // self.config_.mini_batch_size_
-        total_step = total_step * self.config_.num_epochs_
-        return int((self.now_step_ / total_step) * 100)
 
     def switch_device(self, device: str):
         self.context_.switch_device(device)

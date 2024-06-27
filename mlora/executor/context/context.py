@@ -1,41 +1,43 @@
-from mlora.model.modules import AdapterModel
-from mlora.model.args import LinearInfo
-from mlora.config import AdapterConfig
+from abc import ABCMeta, abstractmethod
+from typing import Dict, List, OrderedDict
 
 import torch.optim
-from typing import Dict, List, OrderedDict
-from abc import ABCMeta, abstractmethod
+
+from mlora.config import AdapterConfig
+from mlora.model.args import LinearInfo
+from mlora.model.modules import AdapterModel
 
 
 class TaskContext(metaclass=ABCMeta):
-    type_: str = ""
-    name_: str = ""
-    path_: str = ""
+    type_: str
+    name_: str
+    path_: str
 
-    device_: str = ""
+    config_: AdapterConfig
 
-    adapter_model_: AdapterModel = {}
+    device_: str
 
-    def __init__(self, context_type: str, context_name: str, context_path: str) -> None:
-        self.type_ = context_type
-        self.name_ = context_name
-        self.path_ = context_path
+    adapter_model_: AdapterModel
+
+    def __init__(self, config: AdapterConfig) -> None:
+        self.type_ = config.type_
+        self.name_ = config.name_
+        self.path_ = config.path_
+
+        self.config_ = config
 
         self.device_ = "cpu"
 
         self.adapter_model_ = {}
 
     @abstractmethod
-    def switch_device(self, device: str) -> None:
-        ...
+    def switch_device(self, device: str) -> None: ...
 
     @abstractmethod
-    def step(self) -> None:
-        ...
+    def step(self) -> None: ...
 
     @abstractmethod
-    def load_weight(self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo]):
-        ...
+    def load_weight(self, linears_info: OrderedDict[str, LinearInfo]): ...
 
     def adapter_model(self) -> AdapterModel:
         return self.adapter_model_

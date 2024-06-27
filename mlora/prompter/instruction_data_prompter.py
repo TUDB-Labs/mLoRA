@@ -1,7 +1,6 @@
-from .prompter import Prompter
-
-
 from typing import Dict, List, override
+
+from .prompter import Prompter
 
 
 class InstructionDataPrompter(Prompter):

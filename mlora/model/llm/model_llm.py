@@ -1,29 +1,35 @@
+from abc import ABCMeta, abstractmethod
+from collections import OrderedDict
+from typing import List, Optional
+
 from mlora.model.args import LinearInfo, ModelData
 from mlora.model.modules import AdapterModel
 
-from collections import OrderedDict
-from abc import ABCMeta, abstractmethod
-
 
 class LLMModel(metaclass=ABCMeta):
-    name_or_path_: str = ""
-    device_: str = ""
-    vocab_size_: int = -1
-    n_heads_: int = -1
-    dim_: int = -1
+    name_or_path_: str
+    device_: str
+    vocab_size_: int
+    n_heads_: int
+    dim_: int
 
     @abstractmethod
-    def forward(self, input: ModelData):
-        pass
+    def forward(self, input: ModelData): ...
+
+    @staticmethod
+    @abstractmethod
+    def from_pretrained(
+        path: str,
+        device: str,
+        precision: str,
+        partial_model_to_device: Optional[List[int]] = None,
+    ) -> "LLMModel": ...
 
     @abstractmethod
-    def load_adapter(self, adapter_model: AdapterModel):
-        pass
+    def load_adapter(self, adapter_model: AdapterModel): ...
 
     @abstractmethod
-    def offload_adapter(self, adapter_name: str):
-        pass
+    def offload_adapter(self, adapter_name: str): ...
 
     @abstractmethod
-    def linears_info(self) -> OrderedDict[str, LinearInfo]:
-        pass
+    def linears_info(self) -> OrderedDict[str, LinearInfo]: ...

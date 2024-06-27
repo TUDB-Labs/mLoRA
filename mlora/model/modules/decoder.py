@@ -1,9 +1,10 @@
-from mlora.model.modules import AdapterModel
-from mlora.model.args import LLMModelArgs, LinearInfo, ModelData
-from mlora.profiler import nvtx_range, set_backward_tracepoint
+from collections import OrderedDict
 
 import torch
-from collections import OrderedDict
+
+from mlora.model.args import LinearInfo, LLMModelArgs, ModelData
+from mlora.model.modules import AdapterModel
+from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 from .attention import Attention
 from .mlp import MLP
@@ -11,26 +12,24 @@ from .rms_norm import RMSNorm
 
 
 class Decoder(torch.nn.Module):
+    attn_norm_: RMSNorm
+    mlp_norm_: RMSNorm
+
     def __init__(self, layer_id: int, args: LLMModelArgs):
         super().__init__()
 
         self.layer_id_ = layer_id
 
-        self.attn_norm_: RMSNorm = None
-        self.mlp_norm_: RMSNorm = None
-
         self.attn_: Attention = Attention(layer_id, args)
         self.mlp_: MLP = MLP(layer_id)
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                mask: torch.Tensor,
-                input_args: ModelData):
+    def forward(
+        self, hidden_states: torch.Tensor, mask: torch.Tensor, input_args: ModelData
+    ):
         # Attention
         with nvtx_range("f_attention_norm"):
             attn_norm_output = self.attn_norm_.forward(hidden_states)
-        set_backward_tracepoint(
-            attn_norm_output.grad_fn, "b_attention_norm")
+        set_backward_tracepoint(attn_norm_output.grad_fn, "b_attention_norm")
 
         attn_output = self.attn_.forward(attn_norm_output, mask, input_args)
 
@@ -50,13 +49,13 @@ class Decoder(torch.nn.Module):
 
         return hidden_states
 
-    def from_pretrained(self,
-                        transformer_layer: torch.nn.Module,
-                        norm_eps: float) -> None:
+    def from_pretrained(
+        self, transformer_layer: torch.nn.Module, norm_eps: float
+    ) -> None:
         self.mlp_norm_ = RMSNorm(
-            transformer_layer.post_attention_layernorm.weight, norm_eps)
-        self.attn_norm_ = RMSNorm(
-            transformer_layer.input_layernorm.weight, norm_eps)
+            transformer_layer.post_attention_layernorm.weight, norm_eps
+        )
+        self.attn_norm_ = RMSNorm(transformer_layer.input_layernorm.weight, norm_eps)
 
         self.attn_.from_pretrained(transformer_layer.self_attn)
         self.mlp_.from_pretrained(transformer_layer.mlp)
@@ -70,7 +69,7 @@ class Decoder(torch.nn.Module):
         self.mlp_.offload_adapter(adapter_name)
 
     def linears_info(self) -> OrderedDict[str, LinearInfo]:
-        ret_val = OrderedDict()
+        ret_val: OrderedDict[str, LinearInfo] = OrderedDict()
         ret_val.update(self.attn_.linears_info())
         ret_val.update(self.mlp_.linears_info())
         return ret_val

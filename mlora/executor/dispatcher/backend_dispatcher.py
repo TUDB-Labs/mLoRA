@@ -1,16 +1,15 @@
-from mlora.config.dispatcher import DispatcherConfig
-from mlora.config.task import TaskConfig
-
 import logging
 import threading
 from typing import override
 
+from mlora.config.dispatcher import DispatcherConfig
+from mlora.config.task import TaskConfig
 
 from .dispatcher import Dispatcher
 
 
 class BackendDispatcher(Dispatcher):
-    sem_: threading.Semaphore = None
+    sem_: threading.Semaphore
 
     def __init__(self, config: DispatcherConfig) -> None:
         super().__init__(config)

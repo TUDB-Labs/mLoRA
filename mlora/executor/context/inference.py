@@ -1,18 +1,19 @@
+from collections import OrderedDict
 
 from mlora.config import AdapterConfig
 from mlora.model.args import LinearInfo
-
-from collections import OrderedDict
 
 from .context import TaskContext
 
 
 class InferenceTaskContext(TaskContext):
-    def __init__(self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo]) -> None:
-        super().__init__(config.type_, config.name_, config.path_)
+    def __init__(
+        self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo]
+    ) -> None:
+        super().__init__(config)
 
         # load the adapter's weight
-        self.load_weight(config, linears_info)
+        self.load_weight(linears_info)
 
         # disable all the weights' grad
         for module in self.adapter_model_.values():
@@ -27,5 +28,4 @@ class InferenceTaskContext(TaskContext):
 
         self.device_ = device
 
-    def step(self) -> None:
-        ...
+    def step(self) -> None: ...
