@@ -20,8 +20,10 @@ class TrainTask(Task):
         super().__init__(config, llm_name)
         self.restore()
         if self.is_restore :
-
-            self.now_epoch_ = self.checkpoint["epoch"]+1
+            if self.checkpoint["epoch"]>=int(config.num_epochs_):
+                logging.info("train is already done")
+                exit(0)
+            self.now_epoch_ = self.checkpoint["epoch"]
         else :
             self.now_epoch_ = 1
 
