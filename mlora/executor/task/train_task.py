@@ -23,7 +23,7 @@ class TrainTask(Task):
             if self.checkpoint["epoch"]>=int(config.num_epochs_):
                 logging.info("train is already done")
                 exit(0)
-            self.now_epoch_ = self.checkpoint["epoch"]
+            self.now_epoch_ = self.checkpoint["epoch"]+1
         else :
             self.now_epoch_ = 1
 
