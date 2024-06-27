@@ -5,6 +5,7 @@ import re
 import os
 import json
 import torch
+import ipdb
 import logging
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
@@ -136,6 +137,7 @@ class TrainTask(Task):
             self.context_.step()
 
     def restore(self):
+        ipdb.set_trace()
         temp_path = self.config_.adapter_.path_
         if os.path.isdir(os.path.join(temp_path, "adapters")):
             is_restore = 1
