@@ -1,9 +1,10 @@
 import json
 import logging
 import os
+import re
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
-import re
+
 import torch
 
 from mlora.config import TaskConfig, TrainTaskConfig
@@ -15,22 +16,14 @@ from .task import Task
 
 
 class TrainTask(Task):
-    now_epoch_: int = 0
-    is_restore: bool = False
-    checkpoint = None
+    now_epoch_: int
     context_: TrainTaskContext
     config_: TrainTaskConfig
 
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
-        self.restore()
-        if self.is_restore:
-            if self.checkpoint["epoch"] >= int(config.num_epochs_):
-                logging.info("train is already done")
-                exit(0)
-            self.now_epoch_ = self.checkpoint["epoch"] + 1
-        else:
-            self.now_epoch_ = 1
+        # init the default state
+        # try recover the state
 
     @override
     def is_done(self) -> bool:
@@ -40,8 +33,19 @@ class TrainTask(Task):
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
         # prepare the context and the dataset
+        # NOTE: how to recover the sort of dataset
         self._pre_dataset()
-        self._pre_context(linears_info, self.checkpoint)
+        self._pre_context(linears_info)
+        self._pre_recover_state()
+        self._pre_recover_context()
+
+
+    def _pre_recover_state(self): ...
+        
+    def _pre_recover_context(self):
+        # get the optimizer read the file from now_epoch 
+        self.context_.recover_weight()
+        self.context_.recover_optimizer()
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
@@ -115,15 +119,19 @@ class TrainTask(Task):
     def _save(self, dir_suffix: str = "", additional_info: Dict[str, str] = {}):
         output_dir = self.context_.path_
         if dir_suffix != "":
-            output_dir += os.sep + self.context_.path_ + "_" + dir_suffix
+            output_dir = self.context_.path_ + "_".join(
+                [str(self.now_epoch_), str(self.now_data_idx_), dir_suffix]
+            )
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        temp_dic = self.context_.checkpoint()
-        temp_dic["epoch"] = self.now_epoch_
-        logging.info(f"save checkpoint in {output_dir + os.sep}checkpoint.bin")
-        torch.save(temp_dic,
-                   output_dir + os.sep + "checkpoint.bin")
+
+        weight_dict = self.context_.weight_dict()
+
+        state_dict = self.context_.state_dict()
+
+        # save to disk
+
 
         adapter_config: Dict[str, str] = {}
         adapter_config["base_model_name_or_path"] = self.llm_name_
@@ -162,26 +170,6 @@ class TrainTask(Task):
         if not stepd and self.now_epoch_ >= self.config_.num_epochs_:
             self.context_.step()
 
-    def restore(self):
-        temp_path = self.config_.adapter_.path_
-        if os.path.isdir(os.path.join(temp_path, "adapters")):
-            self.is_restore = True
-            temp_path = os.path.join(temp_path, "adapters")
-            folders = [folder for folder in os.listdir(temp_path)]
-            max_suffix = 0
-            max_dir = None
-            for dir_path in folders:
-                suffix = self.extract_dir_suffix(dir_path)
-                if suffix is not None and suffix > max_suffix:
-                    max_suffix = suffix
-                    max_dir = dir_path
-            temp_path = temp_path + os.sep + max_dir
-            logging.info(f"load checkpoint in {temp_path + os.sep}checkpoint.bin")
-            self.checkpoint = torch.load(temp_path + os.sep + "checkpoint.bin")
-
-    def extract_dir_suffix(self, path):
-        match = re.search(r'_(\d+)$', path)
-        return int(match.group(1)) if match else None
 
     @override
     def task_progress(self) -> int:

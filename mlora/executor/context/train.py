@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from collections import OrderedDict
 from typing import Callable, Dict, List, Type
+
 import Optional
 import torch
 
@@ -25,22 +26,30 @@ class TrainTaskContext(TaskContext):
         self,
         config: AdapterConfig,
         linears_info: OrderedDict[str, LinearInfo],
-        checkpoint: Dict = None,
     ) -> None:
         super().__init__(config)
 
         # load the adapter's weight
-        self.load_weight(linears_info, checkpoint)
+        self.load_weight(linears_info)
         for module in self.adapter_model_.values():
             module.enable_grad()
 
         self.create_optimizer(config.optimizer_config_)
         self.create_lr_scheduler(config.lr_scheduler_config_)
-        if checkpoint is not None:
-            self.load_optimizer(checkpoint)
 
     @abstractmethod
     def weight_dict(self) -> Dict[str, torch.Tensor]: ...
+
+    @abstractmethod
+    def state_dict(self) -> Dict[str, torch.Tensor]: ...
+
+    # recover_optimizer
+    @abstractmethod
+    def recover_optimizer(self, state_dict: Dict[str, torch.Tensor]): ...
+
+    # self.optimizer_.load_state_dict(checkpoint["optimizer"])
+    @abstractmethod
+    def recover_weight(self, weight_dict: Dict[str, torch.Tensor]): ...
 
     def create_optimizer(self, optim_config: OptimizerConfig | None):
         assert optim_config is not None
@@ -55,9 +64,6 @@ class TrainTaskContext(TaskContext):
         self.optimizer_ = OPTIMIZER_CLASS[optimizer_type_](
             parameters, **optim_config.to_fn_parameters()
         )
-
-    def load_optimizer(self, checkpoint):
-        self.optimizer_.load_state_dict(checkpoint["optimizer"])
 
     def create_lr_scheduler(
         self,

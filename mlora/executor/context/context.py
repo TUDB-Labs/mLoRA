@@ -37,6 +37,7 @@ class TaskContext(metaclass=ABCMeta):
     def step(self) -> None: ...
 
     @abstractmethod
+    # rename the function
     def load_weight(self, linears_info: OrderedDict[str, LinearInfo]): ...
 
     def adapter_model(self) -> AdapterModel:
