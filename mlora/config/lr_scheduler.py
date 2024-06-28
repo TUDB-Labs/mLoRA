@@ -33,15 +33,12 @@ class CosineLRSchedulerConfig(LRSchedulerConfig):
     @override
     def to_fn_parameters(self, now_epoch: int = None) -> Dict[str, str]:
         if now_epoch is None:
-            return {
-                "T_max": float(self.t_max_),
-                "eta_min": float(self.eta_min_)
-            }
+            return {"T_max": float(self.t_max_), "eta_min": float(self.eta_min_)}
         else:
             return {
                 "T_max": float(self.t_max_),
                 "eta_min": float(self.eta_min_),
-                "last_epoch": int(self.last_epoch)
+                "last_epoch": int(self.last_epoch),
             }
 
 

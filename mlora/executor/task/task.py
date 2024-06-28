@@ -79,7 +79,7 @@ class Task:
         data = preprocess_func[preprocess_type](data)
         logging.info(
             f"Adapter {self.config_.adapter_.name_} "
-            f"data size: {len(data["data_points"])}"
+            f"data size: {len(data["data_points"])} "
         )
 
         for _, data_point in tqdm(enumerate(data["data_points"])):

@@ -11,10 +11,12 @@ from .inference import InferenceTaskContext
 from .train import TrainTaskContext
 
 
-def _load_lora_weight(obj: TaskContext,
-                      config: LoRAConfig,
-                      linears_info: OrderedDict[str, LinearInfo],
-                      checkpoint: Dict = None):
+def _load_lora_weight(
+    obj: TaskContext,
+    config: LoRAConfig,
+    linears_info: OrderedDict[str, LinearInfo],
+    checkpoint: Dict = None,
+):
     # init the weight
     for linear_name, linear_info in linears_info.items():
         target_name = linear_name.split(".")[3]
@@ -33,8 +35,7 @@ def _load_lora_weight(obj: TaskContext,
         )
     weight_dict = None
     if checkpoint is not None:
-        logging.info(
-            f"Adapter {obj.name_}:{obj.path_} weight exist, load from file.")
+        logging.info(f"Adapter {obj.name_}:{obj.path_} weight exist, load from file.")
         weight_dict = checkpoint["lora_weight"]
         prefix_name = "base_model.model.model."
     else:
@@ -70,20 +71,20 @@ class InferenceLoRAContext(InferenceTaskContext):
 
 
 class TrainLoRAContext(TrainTaskContext):
-    def __init__(self, config: LoRAConfig,
-                 linears_info: OrderedDict[str, LinearInfo],
-                 checkpoint: Dict = None) -> None:
+    def __init__(
+        self,
+        config: LoRAConfig,
+        linears_info: OrderedDict[str, LinearInfo],
+        checkpoint: Dict = None,
+    ) -> None:
         super().__init__(config, linears_info, checkpoint)
 
         self.loss_fn_ = torch.nn.CrossEntropyLoss()
 
-    def load_weight(self,
-                    linears_info: OrderedDict[str, LinearInfo],
-                    checkpoint: Dict = None):
-        _load_lora_weight(self,
-                          self.config_,
-                          linears_info,
-                          checkpoint)
+    def load_weight(
+        self, linears_info: OrderedDict[str, LinearInfo], checkpoint: Dict = None
+    ):
+        _load_lora_weight(self, self.config_, linears_info, checkpoint)
 
     def weight_dict(self) -> Dict[str, torch.Tensor]:
         # base_model.model.model.layers.{0}.self_attn.{q_proj}.{lora_A}.weight
@@ -99,6 +100,6 @@ class TrainLoRAContext(TrainTaskContext):
     def checkpoint(self):
         checkpoint = {
             "lora_weight": self.weight_dict(),
-            'optimizer': self.optimizer_.state_dict(),
+            "optimizer": self.optimizer_.state_dict(),
         }
         return checkpoint
