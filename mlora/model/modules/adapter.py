@@ -1,12 +1,12 @@
-import torch
-
-from typing import Dict, List
 from abc import abstractmethod
+from typing import Dict, List
+
+import torch
 
 
 class Adapter(torch.nn.Module):
-    adapter_type_: str = ""
-    adapter_name_: str = ""
+    adapter_type_: str
+    adapter_name_: str
 
     def __init__(self, adapter_type: str, adapter_name: str):
         super().__init__()
@@ -15,8 +15,7 @@ class Adapter(torch.nn.Module):
         self.adapter_name_ = adapter_name
 
     @abstractmethod
-    def get_tensors(self) -> List[torch.Tensor]:
-        ...
+    def get_tensors(self) -> List[torch.Tensor]: ...
 
     def disable_grad(self):
         for tensor in self.get_tensors():

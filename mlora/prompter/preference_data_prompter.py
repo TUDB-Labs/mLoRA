@@ -1,7 +1,6 @@
-from .prompter import Prompter
-
-
 from typing import Dict, List, Tuple, override
+
+from .prompter import Prompter
 
 
 class PreferenceDataPrompter(Prompter):
@@ -9,10 +8,8 @@ class PreferenceDataPrompter(Prompter):
         super().__init__(template)
 
     def __generate_prompt(self, data_point: Dict[str, str]) -> Tuple[str, str]:
-        chosen_data = self.template_.render(
-            data_point=data_point, is_chosen=True)
-        reject_data = self.template_.render(
-            data_point=data_point, is_chosen=False)
+        chosen_data = self.template_.render(data_point=data_point, is_chosen=True)
+        reject_data = self.template_.render(data_point=data_point, is_chosen=False)
         return chosen_data, reject_data
 
     @override

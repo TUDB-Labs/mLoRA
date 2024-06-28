@@ -1,14 +1,17 @@
 import json
-import plyvel
 from typing import Dict
+
+import plyvel
 
 # define the root_dir
 __g_db: plyvel.DB = None
 __g_root_dir: str = ""
-__g_root_dir_list = {"data": "./datas",
-                     "prompt": "./prompts",
-                     "adapter": "./adapters",
-                     "db": "./db"}
+__g_root_dir_list = {
+    "data": "./datas",
+    "prompt": "./prompts",
+    "adapter": "./adapters",
+    "db": "./db",
+}
 
 
 def db() -> plyvel.DB:

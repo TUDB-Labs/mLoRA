@@ -1,10 +1,10 @@
+from typing import Dict, List, Optional, Tuple
+
+import bitsandbytes
+import torch
+
 from mlora.model.args import ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
-
-import torch
-import bitsandbytes
-
-from typing import Dict, Tuple, List
 
 from .adapter import Adapter
 from .lora import LoRA, LoRAFunction
@@ -18,7 +18,8 @@ class Linear(torch.nn.Module):
 
         if not isinstance(weight, torch.nn.Linear):
             assert isinstance(weight, bitsandbytes.nn.Linear8bitLt) or isinstance(
-                weight, bitsandbytes.nn.Linear4bit), f"error type - {type(weight)}."
+                weight, bitsandbytes.nn.Linear4bit
+            ), f"error type - {type(weight)}."
         else:
             weight.requires_grad_(False)
 
@@ -38,32 +39,36 @@ class Linear(torch.nn.Module):
 
         return self.__lora_forward(data, input_args, result)
 
-    def __lora_forward(self,
-                       data: torch.Tensor,
-                       input_args: ModelData,
-                       result: torch.Tensor) -> torch.Tensor:
+    def __lora_forward(
+        self, data: torch.Tensor, input_args: ModelData, result: torch.Tensor
+    ) -> torch.Tensor:
         # split the data and result
-        dropouts: List[float] = []
-        scalings: List[float] = []
-        loras: Tuple[torch.Tensor] = ()
+        dropouts: List[Optional[float]] = []
+        scalings: List[Optional[float]] = []
+        loras: Tuple[torch.Tensor | None, ...] = ()
 
         for lora_config in input_args.data_config_:
             adapter_name = lora_config.adapter_name_
 
-            if adapter_name not in self.adapters_ or not isinstance(self.adapters_[adapter_name], LoRA):
+            if adapter_name not in self.adapters_ or not isinstance(
+                self.adapters_[adapter_name], LoRA
+            ):
                 loras += (None, None)
                 dropouts.append(None)
                 scalings.append(None)
                 continue
 
-            loras += (self.adapters_[adapter_name].lora_a_,
-                      self.adapters_[adapter_name].lora_b_)
+            loras += (
+                self.adapters_[adapter_name].lora_a_,
+                self.adapters_[adapter_name].lora_b_,
+            )
             dropouts.append(self.adapters_[adapter_name].dropout_)
             scalings.append(self.adapters_[adapter_name].scaling_)
 
         with nvtx_range("f_lora"):
             result = LoRAFunction.apply(
-                result, data, input_args, dropouts, scalings, *loras)
+                result, data, input_args, dropouts, scalings, *loras
+            )
         set_backward_tracepoint(result.grad_fn, "b_lora")
 
         return result

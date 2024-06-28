@@ -4,11 +4,11 @@ from .config import DictConfig
 
 
 class DatasetConfig(DictConfig):
-    name_: str = ""
-    data_path_: str = ""
-    prompt_path_: str = ""
-    prompt_type_: str = ""
-    preprocess_: str = "shuffle"
+    name_: str
+    data_path_: str
+    prompt_path_: str
+    prompt_type_: str
+    preprocess_: str
 
     __params_map: Dict[str, str] = {
         "name_": "name",

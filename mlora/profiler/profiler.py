@@ -1,8 +1,8 @@
-import torch
 import logging
-
 from contextlib import contextmanager
-from typing import Callable, Tuple, Set, List
+from typing import Callable, List, Set, Tuple
+
+import torch
 
 TRACEPOINT_KEY = "__tp_name"
 
@@ -22,25 +22,26 @@ def is_trace_model() -> bool:
 
 
 def __get_scope_name(grad_fn: torch.autograd.graph.Node):
-    if TRACEPOINT_KEY in grad_fn.metadata:
-        return grad_fn.metadata[TRACEPOINT_KEY]
+    if TRACEPOINT_KEY in grad_fn.metadata():
+        return grad_fn.metadata()[TRACEPOINT_KEY]
     return grad_fn.name()
 
 
-def nvtx_range_wrapper(func: Callable,
-                       msg: str):
+def nvtx_range_wrapper(func: Callable, msg: str):
     if not is_trace_model():
         return func
 
     def wrap(*args, **kwargs):
         with torch.cuda.nvtx.range(msg=msg):
             return func(*args, **kwargs)
+
     return wrap
 
 
 def nvtx_wrapper(msg: str):
     def func_decorator(func):
         return nvtx_range_wrapper(func, msg)
+
     return func_decorator
 
 
@@ -57,8 +58,7 @@ def nvtx_range(msg, *args, **kwargs):
 g_scope_stack: List[str] = []
 
 
-def __nvtx_pre_hook_wrapper(func: Callable,
-                            grad_fn: torch.autograd.graph.Node):
+def __nvtx_pre_hook_wrapper(func: Callable, grad_fn: torch.autograd.graph.Node):
     global g_scope_stack
 
     scope_name = __get_scope_name(grad_fn)
@@ -78,16 +78,17 @@ def __nvtx_pre_hook_wrapper(func: Callable,
             pass
 
         return func(*args, **kwargs)
+
     return wrap
 
 
-def __nvtx_hook_wrapper(func: Callable,
-                        grad_fn: torch.autograd.graph.Node):
+def __nvtx_hook_wrapper(func: Callable, grad_fn: torch.autograd.graph.Node):
     global g_scope_stack
 
     # do not capture the func object, will cost memory to hold it
-    is_last_node = not hasattr(grad_fn, "next_functions") or len(
-        grad_fn.next_functions) == 0
+    is_last_node = (
+        not hasattr(grad_fn, "next_functions") or len(grad_fn.next_functions) == 0
+    )
 
     def wrap(*args, **kwargs):
 
@@ -96,6 +97,7 @@ def __nvtx_hook_wrapper(func: Callable,
             torch.cuda.nvtx.range_pop()
 
         return func(*args, **kwargs)
+
     return wrap
 
 
@@ -103,7 +105,9 @@ def __grad_fn_pre_hook_dummy(grad_outputs: Tuple[torch.Tensor]) -> None:
     return None
 
 
-def __grad_fn_hook_dummy(grad_inputs: Tuple[torch.Tensor], grad_outputs: Tuple[torch.Tensor]) -> None:
+def __grad_fn_hook_dummy(
+    grad_inputs: Tuple[torch.Tensor], grad_outputs: Tuple[torch.Tensor]
+) -> None:
     return None
 
 
@@ -112,16 +116,16 @@ def __grad_fn_nvtx_wrapper(grad_fn: torch.autograd.graph.Node):
         return
 
     assert isinstance(
-        grad_fn, torch.autograd.graph.Node), f"error type: {type(grad_fn)}"
+        grad_fn, torch.autograd.graph.Node
+    ), f"error type: {type(grad_fn)}"
 
-    grad_fn.register_prehook(
-        __nvtx_pre_hook_wrapper(__grad_fn_pre_hook_dummy, grad_fn))
+    grad_fn.register_prehook(__nvtx_pre_hook_wrapper(__grad_fn_pre_hook_dummy, grad_fn))
     grad_fn.register_hook(__nvtx_hook_wrapper(__grad_fn_hook_dummy, grad_fn))
 
 
-def set_backward_tracepoint(grad_fn: torch.autograd.graph.Node,
-                            tp_name: str,
-                            recursion: bool = True):
+def set_backward_tracepoint(
+    grad_fn: torch.autograd.graph.Node | None, tp_name: str, recursion: bool = True
+):
     if not is_trace_model():
         return
     # tp - tracepoint
@@ -129,13 +133,14 @@ def set_backward_tracepoint(grad_fn: torch.autograd.graph.Node,
         return
 
     assert isinstance(
-        grad_fn, torch.autograd.graph.Node), f"error type: {type(grad_fn)}"
+        grad_fn, torch.autograd.graph.Node
+    ), f"error type: {type(grad_fn)}"
 
-    if TRACEPOINT_KEY in grad_fn.metadata:
+    if TRACEPOINT_KEY in grad_fn.metadata():
         return
 
     if not recursion:
-        grad_fn.metadata[TRACEPOINT_KEY] = tp_name
+        grad_fn.metadata()[TRACEPOINT_KEY] = tp_name
         return
 
     visited: Set[torch.autograd.graph.Node] = set()
@@ -145,7 +150,7 @@ def set_backward_tracepoint(grad_fn: torch.autograd.graph.Node,
 
     while len(to_visited_stack) > 0:
         to_visit = to_visited_stack.pop()
-        to_visit.metadata[TRACEPOINT_KEY] = tp_name
+        to_visit.metadata()[TRACEPOINT_KEY] = tp_name
 
         visited.add(to_visit)
 
@@ -157,7 +162,7 @@ def set_backward_tracepoint(grad_fn: torch.autograd.graph.Node,
                 continue
             if next_fn[0] in visited:
                 continue
-            if TRACEPOINT_KEY in next_fn[0].metadata:
+            if TRACEPOINT_KEY in next_fn[0].metadata():
                 continue
             to_visited_stack.append(next_fn[0])
 
@@ -189,11 +194,3 @@ def grad_fn_nvtx_wrapper_by_tracepoint(grad_fn: torch.autograd.graph.Node):
             to_visited_stack.append(next_fn[0])
 
     visited.clear()
-
-
-def tensors_nvtx_wrapper_by_tracepoint(tensors: Tuple[torch.Tensor]):
-    if not is_trace_model():
-        return
-
-    for tensor in tensors:
-        grad_fn_nvtx_wrapper_by_tracepoint(tensor.grad_fn)

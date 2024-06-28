@@ -1,19 +1,19 @@
 import json
+from typing import Any, Dict
+
 import requests
-from InquirerPy import inquirer
-from InquirerPy import validator
+from InquirerPy import inquirer, validator
 from InquirerPy.base import Choice
 from rich import print
-from rich.table import Table
 from rich.box import ASCII
-from typing import Dict
+from rich.table import Table
 
 from .setting import url
 
 
 def list_adapter(obj):
     ret = requests.get(url() + "/adapter")
-    ret = json.loads(ret.text)
+    ret_items = json.loads(ret.text)
 
     table = Table(show_header=True, show_lines=True, box=ASCII)
     table.add_column("name", justify="center")
@@ -23,63 +23,58 @@ def list_adapter(obj):
 
     obj.ret_ = []
 
-    for item in ret:
-        item = json.loads(item)
+    for ret_item in ret_items:
+        item = json.loads(ret_item)
         table.add_row(item["name"], item["type"], item["path"], item["state"])
         obj.ret_.append(item["name"])
 
     obj.pret_ = table
 
 
-def adapter_type_set(adapter_conf: Dict[str, any]):
+def adapter_type_set(adapter_conf: Dict[str, Any]):
     adapter_type = inquirer.select(
-        message="type:", choices=["lora", "loraplus"]).execute()
+        message="type:", choices=["lora", "loraplus"]
+    ).execute()
     adapter_conf["type"] = adapter_type
 
     if adapter_type == "loraplus":
         lr_ratio = inquirer.number(
-            message="lr_ratio:",
-            float_allowed=True,
-            default=8.0,
-            replace_mode=True
+            message="lr_ratio:", float_allowed=True, default=8.0, replace_mode=True
         ).execute()
         adapter_conf["lr_ratio"] = lr_ratio
 
     return adapter_conf
 
 
-def adapter_optimizer_set(adapter_conf: Dict[str, any]):
+def adapter_optimizer_set(adapter_conf: Dict[str, Any]):
     optimizer = inquirer.select(
-        message="optimizer:", choices=["adamw", "sgd"]).execute()
+        message="optimizer:", choices=["adamw", "sgd"]
+    ).execute()
     adapter_conf["optimizer"] = optimizer
 
     lr = inquirer.number(
-        message="learning rate:",
-        float_allowed=True,
-        default=3e-4,
-        replace_mode=True
+        message="learning rate:", float_allowed=True, default=3e-4, replace_mode=True
     ).execute()
     adapter_conf["lr"] = lr
 
     if optimizer == "sgd":
         momentum = inquirer.number(
-            message="momentum:",
-            float_allowed=True,
-            default=0.0,
-            replace_mode=True
+            message="momentum:", float_allowed=True, default=0.0, replace_mode=True
         ).execute()
         adapter_conf["momentum"] = momentum
     return adapter_conf
 
 
-def adapter_lr_scheduler_set(adapter_conf: Dict[str, any]):
+def adapter_lr_scheduler_set(adapter_conf: Dict[str, Any]):
     need_lr_scheduler = inquirer.confirm(
-        message="Need learning rate scheduler:", default=False).execute()
+        message="Need learning rate scheduler:", default=False
+    ).execute()
     if not need_lr_scheduler:
         return adapter_conf
 
     lr_scheduler_type = inquirer.select(
-        message="optimizer:", choices=["cosine"]).execute()
+        message="optimizer:", choices=["cosine"]
+    ).execute()
     adapter_conf["lrscheduler"] = lr_scheduler_type
 
     if lr_scheduler_type == "cosine":
@@ -101,24 +96,15 @@ def adapter_lr_scheduler_set(adapter_conf: Dict[str, any]):
     return adapter_conf
 
 
-def adapter_set(adapter_conf: Dict[str, any]):
-    r = inquirer.number(
-        message="rank:",
-        default=32
-    ).execute()
+def adapter_set(adapter_conf: Dict[str, Any]):
+    r = inquirer.number(message="rank:", default=32).execute()
     adapter_conf["r"] = r
 
-    alpha = inquirer.number(
-        message="alpha:",
-        default=64
-    ).execute()
+    alpha = inquirer.number(message="alpha:", default=64).execute()
     adapter_conf["alpha"] = alpha
 
     dropout = inquirer.number(
-        message="dropout:",
-        float_allowed=True,
-        replace_mode=True,
-        default=0.05
+        message="dropout:", float_allowed=True, replace_mode=True, default=0.05
     ).execute()
     adapter_conf["dropout"] = dropout
 
@@ -133,13 +119,15 @@ def adapter_set(adapter_conf: Dict[str, any]):
     }
     target_modules = inquirer.checkbox(
         message="target_modules:",
-        choices=[Choice("q_proj", enabled=True),
-                 Choice("k_proj", enabled=True),
-                 Choice("v_proj", enabled=True),
-                 Choice("o_proj", enabled=True),
-                 Choice("gate_proj", enabled=False),
-                 Choice("down_proj", enabled=False),
-                 Choice("up_proj", enabled=False)]
+        choices=[
+            Choice("q_proj", enabled=True),
+            Choice("k_proj", enabled=True),
+            Choice("v_proj", enabled=True),
+            Choice("o_proj", enabled=True),
+            Choice("gate_proj", enabled=False),
+            Choice("down_proj", enabled=False),
+            Choice("up_proj", enabled=False),
+        ],
     ).execute()
     for target in target_modules:
         adapter_conf["target_modules"][target] = True
@@ -152,7 +140,8 @@ def create_adapter():
 
     name = inquirer.text(
         message="name:",
-        validate=validator.EmptyInputValidator("Input should not be empty")).execute()
+        validate=validator.EmptyInputValidator("Input should not be empty"),
+    ).execute()
     adapter_conf["name"] = name
 
     adapter_conf = adapter_type_set(adapter_conf)

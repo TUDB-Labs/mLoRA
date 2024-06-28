@@ -1,11 +1,10 @@
-from mlora.model.llm import LLMModel, LlamaModel
+import logging
+from typing import Tuple
+
+from mlora.model.llm import LlamaModel, LLMModel
 from mlora.model.tokenizer import Tokenizer
 
-import logging
-
-from typing import Tuple, Dict
-
-MODEL_TYPE_DICT: Dict[str, LLMModel] = {
+MODEL_TYPE_DICT = {
     "llama": LlamaModel,
 }
 
@@ -16,22 +15,29 @@ def load_partial_model(args) -> LLMModel:
     assert len(args.balance) >= args.rank
 
     logging.info(
-        f"Pipeline parallelism, rank is {args.rank} and balance is {args.balance}.")
+        f"Pipeline parallelism, rank is {args.rank} and balance is {args.balance}."
+    )
 
     partial_model_to_device = [
-        index + sum(args.balance[:args.rank])for index in range(0, args.balance[args.rank])]
+        index + sum(args.balance[: args.rank])
+        for index in range(0, args.balance[args.rank])
+    ]
 
-    return MODEL_TYPE_DICT[args.model_type].from_pretrained(path=args.base_model,
-                                                            device=args.device,
-                                                            precision=args.precision,
-                                                            partial_model_to_device=partial_model_to_device)
+    return MODEL_TYPE_DICT[args.model_type].from_pretrained(
+        path=args.base_model,
+        device=args.device,
+        precision=args.precision,
+        partial_model_to_device=partial_model_to_device,
+    )
 
 
 def load_full_model(args) -> LLMModel:
-    return MODEL_TYPE_DICT[args.model_type].from_pretrained(path=args.base_model,
-                                                            device=args.device,
-                                                            precision=args.precision,
-                                                            partial_model_to_device=None)
+    return MODEL_TYPE_DICT[args.model_type].from_pretrained(
+        path=args.base_model,
+        device=args.device,
+        precision=args.precision,
+        partial_model_to_device=None,
+    )
 
 
 def load_model(args) -> Tuple[Tokenizer, LLMModel]:

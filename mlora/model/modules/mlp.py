@@ -1,25 +1,26 @@
-from mlora.model.modules import AdapterModel
-from mlora.model.args import LinearInfo, ModelData
-from mlora.profiler import nvtx_range, set_backward_tracepoint
+from collections import OrderedDict
+from typing import Dict
 
 import torch
 import torch.nn.functional as F
-from collections import OrderedDict
-from typing import Dict
+
+from mlora.model.args import LinearInfo, ModelData
+from mlora.model.modules import AdapterModel
+from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 from .linear import Linear
 
 
 class MLP(torch.nn.Module):
+    gate_: Linear  # also gate FNN * dim
+    down_: Linear  # also down dim * FNN
+    up_: Linear  # also up   FNN * dim
+
     def __init__(self, layer_id: int):
         super().__init__()
 
         # use layer id to local the adapter
         self.layer_id_ = layer_id
-
-        self.gate_: Linear = None  # also gate FNN * dim
-        self.down_: Linear = None  # also down dim * FNN
-        self.up_: Linear = None  # also up   FNN * dim
 
     def forward(self, data: torch.Tensor, input_args: ModelData) -> torch.Tensor:
         # feed forward fully connected
@@ -44,7 +45,7 @@ class MLP(torch.nn.Module):
         return {
             f"layers.{self.layer_id_}.mlp.gate_proj": self.gate_,
             f"layers.{self.layer_id_}.mlp.down_proj": self.down_,
-            f"layers.{self.layer_id_}.mlp.up_proj": self.up_
+            f"layers.{self.layer_id_}.mlp.up_proj": self.up_,
         }
 
     def load_adapter(self, adapter_model: AdapterModel):
@@ -62,8 +63,10 @@ class MLP(torch.nn.Module):
 
         for name, module in self.linear_dict.items():
             assert isinstance(module, Linear)
-            ret_val[name] = LinearInfo(name_=name,
-                                       in_dim_=module.weight_.in_features,
-                                       out_dim_=module.weight_.out_features)
+            ret_val[name] = LinearInfo(
+                name_=name,
+                in_dim_=module.weight_.in_features,
+                out_dim_=module.weight_.out_features,
+            )
 
         return ret_val
