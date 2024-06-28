@@ -85,7 +85,9 @@ class Task:
         for _, data_point in tqdm(enumerate(data["data_points"])):
             self.data_.append(data_point)
 
-    def _pre_context(self, linears_info: OrderedDict[str, LinearInfo], checkpoint: Dict = None):
+    def _pre_context(self,
+                     linears_info: OrderedDict[str, LinearInfo],
+                     checkpoint: Dict = None):
         adapter_type = self.config_.adapter_.type_
         assert adapter_type in TRAINCONTEXT_CLASS
         self.context_ = TRAINCONTEXT_CLASS[adapter_type](
