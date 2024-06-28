@@ -5,22 +5,17 @@ import re
 import os
 import json
 import logging
-import os
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
 
 import torch
 
 from mlora.config import TaskConfig, TrainTaskConfig
-from mlora.executor.context import TrainTaskContext
-from mlora.model.args import LinearInfo, Masks, MLoRADataConfig, Tokens
-from mlora.model.tokenizer import Tokenizer
-
 from .task import Task
 
 
 class TrainTask(Task):
-    now_epoch_: int 
+    now_epoch_: int = 0
     is_restore: bool = False
     checkpoint = None
     context_: TrainTaskContext
@@ -187,6 +182,7 @@ class TrainTask(Task):
     def extract_dir_suffix(self, path):
         match = re.search(r'_(\d+)$', path)
         return int(match.group(1)) if match else None
+
     @override
     def task_progress(self) -> int:
         total_step = len(self.data_) // self.config_.mini_batch_size_
