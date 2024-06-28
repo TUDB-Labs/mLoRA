@@ -1,8 +1,9 @@
-import uuid
 import logging
+import uuid
+
 from fastapi import APIRouter, Request
 
-from .storage import db_it_str, db_get_str, db_put_obj
+from .storage import db_get_str, db_it_str, db_put_obj
 
 router = APIRouter()
 

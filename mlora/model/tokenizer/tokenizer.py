@@ -1,13 +1,15 @@
-from mlora.model.args import Tokens, Masks
+from typing import Tuple
 
 from transformers import AutoTokenizer
-from typing import Tuple
+
+from mlora.model.args import Masks, Tokens
 
 
 class Tokenizer:
     def __init__(self, model_path: str):
         self.tokenizer_ = AutoTokenizer.from_pretrained(
-            model_path, trust_remote_code=True)
+            model_path, trust_remote_code=True
+        )
         self.n_words_ = self.tokenizer_.vocab_size
         self.bos_id_ = self.tokenizer_.bos_token_id
         self.eos_id_ = self.tokenizer_.eos_token_id
@@ -19,7 +21,7 @@ class Tokenizer:
 
     def encode(self, data: str, bos=True, eos=True, cutoff_len=4096) -> Tokens:
         tokens = self.tokenizer_.encode(data, add_special_tokens=False)
-        tokens = tokens[:cutoff_len - int(bos) - int(eos)]
+        tokens = tokens[: cutoff_len - int(bos) - int(eos)]
         if bos:
             tokens = [self.bos_id_] + tokens
         if eos:

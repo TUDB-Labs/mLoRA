@@ -4,18 +4,27 @@ from mlora.model.tokenizer import Tokenizer
 import re
 import os
 import json
-import torch
 import logging
+import os
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
+
+import torch
+
+from mlora.config import TaskConfig, TrainTaskConfig
+from mlora.executor.context import TrainTaskContext
+from mlora.model.args import LinearInfo, Masks, MLoRADataConfig, Tokens
+from mlora.model.tokenizer import Tokenizer
 
 from .task import Task
 
 
 class TrainTask(Task):
-    now_epoch_: int = 0
+    now_epoch_: int 
     is_restore: bool = False
     checkpoint = None
+    context_: TrainTaskContext
+    config_: TrainTaskConfig
 
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
@@ -35,49 +44,67 @@ class TrainTask(Task):
     @override
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
-        # prepare the dataset and context
+        # prepare the context and the dataset
         self._pre_dataset()
         self._pre_context(linears_info, self.checkpoint)
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
         logging.info(
-            f'Adapter {self.context_.name_} epoch: {
-                self.now_epoch_}/{self.config_.num_epochs_}'
-            f' iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_}')
+            f"Adapter {self.context_.name_} epoch: {
+                self.now_epoch_}/{self.config_.num_epochs_}"
+            f" iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_}"
+        )
         data_idx_s = self.now_data_idx_
         data_idx_e = self.now_data_idx_ + self.config_.mini_batch_size_
 
         # get the train raw string
-        batch_str = self.prompter_.generate_prompt(
-            self.data_[data_idx_s:data_idx_e])
+        batch_str = self.prompter_.generate_prompt(self.data_[data_idx_s:data_idx_e])
 
         # convert the string to tokens
-        ret_tokens = list(map(lambda raw_str: self.tokenizer_.encode(
-            raw_str, bos=True, eos=True, cutoff_len=self.config_.cutoff_len_), batch_str))
+        ret_tokens = list(
+            map(
+                lambda raw_str: self.tokenizer_.encode(
+                    raw_str, bos=True, eos=True, cutoff_len=self.config_.cutoff_len_
+                ),
+                batch_str,
+            )
+        )
         end_idx = start_idx + len(ret_tokens)
 
-        def loss_fn(input: torch.Tensor, target: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
+        def loss_fn(
+            input: torch.Tensor, target: torch.Tensor, _: torch.Tensor
+        ) -> torch.Tensor:
             vacab_size = input.shape[-1]
-            loss_input = input[start_idx:end_idx, :-1,
-                               :].contiguous().view(-1, vacab_size)
-            loss_target = target[start_idx:end_idx,
-                                 1:].contiguous().view(-1).to(loss_input.device)
+            loss_input = (
+                input[start_idx:end_idx, :-1, :].contiguous().view(-1, vacab_size)
+            )
+            loss_target = (
+                target[start_idx:end_idx, 1:]
+                .contiguous()
+                .view(-1)
+                .to(loss_input.device)
+            )
             loss = self.context_.loss_fn_(loss_input, loss_target)
 
             logging.info(f"Adapter {self.context_.name_} loss: {loss}")
 
             return loss
 
-        data_config = MLoRADataConfig(self.context_.name_, self.context_.type_,
-                                      start_idx, end_idx,
-                                      self._expand_batch_tokens, loss_fn)
+        data_config = MLoRADataConfig(
+            self.context_.name_,
+            self.context_.type_,
+            start_idx,
+            end_idx,
+            self._expand_batch_tokens,
+            loss_fn,
+        )
 
         return ret_tokens, [data_config]
 
-    def _expand_batch_tokens(self,
-                             batch_tokens: List[Tokens],
-                             align_len: Optional[int] = None) -> Tuple[List[Tokens], List[Masks]]:
+    def _expand_batch_tokens(
+        self, batch_tokens: List[Tokens], align_len: Optional[int] = None
+    ) -> Tuple[List[Tokens], List[Masks]]:
         if align_len is None:
             align_len = max(map(lambda x: len(x), batch_tokens))
 
@@ -160,3 +187,8 @@ class TrainTask(Task):
     def extract_dir_suffix(self, path):
         match = re.search(r'_(\d+)$', path)
         return int(match.group(1)) if match else None
+    @override
+    def task_progress(self) -> int:
+        total_step = len(self.data_) // self.config_.mini_batch_size_
+        total_step = total_step * self.config_.num_epochs_
+        return int((self.now_step_ / total_step) * 100)

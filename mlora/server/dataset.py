@@ -1,12 +1,13 @@
-from mlora.prompter import PrompterFactory
-from mlora.config import DatasetConfig
-
-import os
 import logging
-from fastapi import APIRouter, Request
-from datasets import load_dataset
+import os
 
-from .storage import db_it_str, db_get_str, db_put_obj, db_get_obj, root_dir_list
+from datasets import load_dataset
+from fastapi import APIRouter, Request
+
+from mlora.config import DatasetConfig
+from mlora.prompter import PrompterFactory
+
+from .storage import db_get_obj, db_get_str, db_it_str, db_put_obj, root_dir_list
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def get_dataset():
 
 @router.get("/showcase")
 def showcase_dataset(name: str):
-    dataset = db_get_obj(f'__dataset__{name}')
+    dataset = db_get_obj(f"__dataset__{name}")
 
     if dataset is None:
         return {"message": "the dataset not exist"}
@@ -29,15 +30,18 @@ def showcase_dataset(name: str):
     dataset_config = DatasetConfig(dataset)
 
     dataset_config.data_path_ = os.path.join(
-        root_dir_list()["data"], dataset_config.data_path_)
+        root_dir_list()["data"], dataset_config.data_path_
+    )
     dataset_config.prompt_path_ = os.path.join(
-        root_dir_list()["prompt"], dataset_config.prompt_path_)
+        root_dir_list()["prompt"], dataset_config.prompt_path_
+    )
 
     prompter = PrompterFactory.create(dataset_config)
 
     # just read one item
     data_points = load_dataset(
-        "json", data_files=dataset_config.data_path_, split="train[:1]")
+        "json", data_files=dataset_config.data_path_, split="train[:1]"
+    )
 
     ret = prompter.generate_prompt(data_points)
 
@@ -64,7 +68,7 @@ async def post_dataset(request: Request):
         "data": data_file["file_path"],
         "prompt": prompt_file["file_path"],
         "prompt_type": prompt_file["prompt_type"],
-        "preprocess": req["preprocess"]
+        "preprocess": req["preprocess"],
     }
 
     logging.info(f'Create new dataset: {req["name"]}')

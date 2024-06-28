@@ -1,42 +1,42 @@
-from mlora.config import AdapterConfig, OptimizerConfig, LRSchedulerConfig
-from mlora.model.args import LinearInfo
+from abc import abstractmethod
+from collections import OrderedDict
+from typing import Callable, Dict, List, Type
 
 import torch
-from abc import abstractmethod
-from typing import List, Dict, Callable, Optional
-from collections import OrderedDict
+
+from mlora.config import AdapterConfig, LRSchedulerConfig, OptimizerConfig
+from mlora.model.args import LinearInfo
 
 from .context import TaskContext
 
-OPTIMIZER_CLASS = {
-    "sgd": torch.optim.SGD,
-    "adamw": torch.optim.AdamW
-}
+OPTIMIZER_CLASS = {"sgd": torch.optim.SGD, "adamw": torch.optim.AdamW}
 
-LR_SCHEDULER_CLASS = {
+LR_SCHEDULER_CLASS: Dict[str, Type[torch.optim.lr_scheduler.LRScheduler]] = {
     "cosine": torch.optim.lr_scheduler.CosineAnnealingLR,
 }
 
 
 class TrainTaskContext(TaskContext):
-    loss_fn_: Callable = None
-    optimizer_: torch.optim.Optimizer = None
-    lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
+    loss_fn_: Callable
+    optimizer_: torch.optim.Optimizer
+    lr_scheduler_: torch.optim.lr_scheduler.LRScheduler | None
 
     def __init__(self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo],
                  checkpoint: Dict = None) -> None:
-        super().__init__(config.type_, config.name_, config.path_)
+        super().__init__(config)
 
         # load the adapter's weight
-        self.load_weight(config, linears_info, checkpoint)
+        self.load_weight(linears_info, checkpoint)
+    def __init__(
+        self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo]
+    ) -> None:
+        super().__init__(config)
+
+        # load the adapter's weight
+        self.load_weight(linears_info)
 
         for module in self.adapter_model_.values():
             module.enable_grad()
-
-        # init the optimizer
-        self.loss_fn_ = None
-        self.optimizer_ = None
-        self.lr_scheduler_ = None
 
         self.create_optimizer(config.optimizer_config_)
         self.create_lr_scheduler(config.lr_scheduler_config_)
@@ -44,10 +44,11 @@ class TrainTaskContext(TaskContext):
             self.load_optimizer(checkpoint)
 
     @abstractmethod
-    def weight_dict(self) -> Dict[str, torch.Tensor]:
-        ...
+    def weight_dict(self) -> Dict[str, torch.Tensor]: ...
 
-    def create_optimizer(self, optim_config: OptimizerConfig):
+    def create_optimizer(self, optim_config: OptimizerConfig | None):
+        assert optim_config is not None
+
         optimizer_type_ = optim_config.optimizer_
         assert optimizer_type_ in OPTIMIZER_CLASS
 
@@ -56,25 +57,27 @@ class TrainTaskContext(TaskContext):
             parameters.extend(adapter.get_tensors())
 
         self.optimizer_ = OPTIMIZER_CLASS[optimizer_type_](
-            parameters, **optim_config.to_fn_parameters())
+            parameters, **optim_config.to_fn_parameters()
+        )
 
     def load_optimizer(self, checkpoint):
         self.optimizer_.load_state_dict(checkpoint["optimizer"])
 
-    def create_lr_scheduler(self, lr_scheduler_config: Optional[LRSchedulerConfig], checkpoint: Dict = None):
+    def create_lr_scheduler(self, lr_scheduler_config: Optional[LRSchedulerConfig] | None, checkpoint: Dict = None):
         assert self.optimizer_ is not None
 
         if lr_scheduler_config is None:
+            self.lr_scheduler_ = None
             return
 
         lr_scheduler_type_ = lr_scheduler_config.lr_scheduler_
         assert lr_scheduler_type_ in LR_SCHEDULER_CLASS
         if checkpoint is not None:
             self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
-                self.optimizer_, **lr_scheduler_config.to_fn_parameters(checkpoint["epoch"]))
+                self.optimizer_, **lr_scheduler_config.to_fn_parameters(checkpoint["epoch"])) 
         else:
             self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
-                self.optimizer_, **lr_scheduler_config.to_fn_parameters())
+                self.optimizer_, **lr_scheduler_config.to_fn_parameters())  # type: ignore
 
     def switch_device(self, device: str) -> None:
         if self.device_ == device:

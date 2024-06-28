@@ -33,7 +33,7 @@ Firstly, you should clone this repository and install dependencies:
 # Clone Repository
 git clone https://github.com/TUDB-Labs/mLoRA
 cd mLoRA
-# Install requirements
+# Install requirements need the Python >= 3.12
 pip install .
 ```
 
@@ -123,7 +123,13 @@ Submit a pull request with a detailed explanation of your changes.
 
 You can use the pre-commit to check your code.
 ```bash
+# Install requirements
+pip install .[ci_test]
 ln -s ../../.github/workflows/pre-commit .git/hooks/pre-commit
+```
+Or just call the script to check your code
+```bash
+.github/workflows/pre-commit
 ```
 
 ## Citation

@@ -39,10 +39,15 @@ class TestLoraFunction(unittest.TestCase):
     def lora_mlora(self):
         lora_a, lora_b, in_data, weight = self.set_test_tensor()
         input_args = ModelData(
-            data_config_=[ModelDataConfig("", "", 0, 2)])
+            batch_tokens_=[],
+            batch_mask_=[],
+            data_config_=[ModelDataConfig("", "", 0, 2)],
+            enable_checkpoint_=False,
+        )
 
-        weight = LoRAFunction.apply(weight, in_data, input_args, [
-            1e-4], [2.0], lora_a, lora_b)
+        weight = LoRAFunction.apply(
+            weight, in_data, input_args, [1e-4], [2.0], lora_a, lora_b
+        )
 
         loss = weight.sum()
         self.mlora_loss = loss.item()
@@ -61,5 +66,5 @@ class TestLoraFunction(unittest.TestCase):
         assert torch.allclose(self.py_grad_a, self.mlora_grad_a, 1e-4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
