@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from collections import OrderedDict
 from typing import Callable, Dict, List, Type
-
+import Optional
 import torch
 
 from mlora.config import AdapterConfig, LRSchedulerConfig, OptimizerConfig
@@ -21,20 +21,13 @@ class TrainTaskContext(TaskContext):
     optimizer_: torch.optim.Optimizer
     lr_scheduler_: torch.optim.lr_scheduler.LRScheduler | None
 
-    def __init__(self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo],
+    def __init__(self, config: AdapterConfig,
+                 linears_info: OrderedDict[str, LinearInfo],
                  checkpoint: Dict = None) -> None:
         super().__init__(config)
 
         # load the adapter's weight
         self.load_weight(linears_info, checkpoint)
-    def __init__(
-        self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo]
-    ) -> None:
-        super().__init__(config)
-
-        # load the adapter's weight
-        self.load_weight(linears_info)
-
         for module in self.adapter_model_.values():
             module.enable_grad()
 
@@ -63,7 +56,9 @@ class TrainTaskContext(TaskContext):
     def load_optimizer(self, checkpoint):
         self.optimizer_.load_state_dict(checkpoint["optimizer"])
 
-    def create_lr_scheduler(self, lr_scheduler_config: Optional[LRSchedulerConfig] | None, checkpoint: Dict = None):
+    def create_lr_scheduler(self,
+                            lr_scheduler_config: Optional[LRSchedulerConfig] | None,
+                            checkpoint: Dict = None):
         assert self.optimizer_ is not None
 
         if lr_scheduler_config is None:
@@ -74,10 +69,12 @@ class TrainTaskContext(TaskContext):
         assert lr_scheduler_type_ in LR_SCHEDULER_CLASS
         if checkpoint is not None:
             self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
-                self.optimizer_, **lr_scheduler_config.to_fn_parameters(checkpoint["epoch"])) 
+                self.optimizer_,
+                **lr_scheduler_config.to_fn_parameters(checkpoint["epoch"]))
         else:
             self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
-                self.optimizer_, **lr_scheduler_config.to_fn_parameters())  # type: ignore
+                self.optimizer_, **lr_scheduler_config.to_fn_parameters())
+            # type: ignore
 
     def switch_device(self, device: str) -> None:
         if self.device_ == device:

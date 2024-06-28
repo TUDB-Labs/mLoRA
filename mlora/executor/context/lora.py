@@ -1,18 +1,10 @@
 from mlora.config import LoRAConfig
-from mlora.config.adapter import AdapterConfig
 from mlora.model.modules import LoRA
 from mlora.model.args import LinearInfo
 import torch
 import logging
-import os
 from collections import OrderedDict
 from typing import Dict, override
-
-import torch
-
-from mlora.config import LoRAConfig
-from mlora.model.args import LinearInfo
-from mlora.model.modules import LoRA
 
 from .context import TaskContext
 from .inference import InferenceTaskContext
@@ -78,13 +70,20 @@ class InferenceLoRAContext(InferenceTaskContext):
 
 
 class TrainLoRAContext(TrainTaskContext):
-    def __init__(self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo], checkpoint: Dict = None) -> None:
+    def __init__(self, config: LoRAConfig,
+                 linears_info: OrderedDict[str, LinearInfo],
+                 checkpoint: Dict = None) -> None:
         super().__init__(config, linears_info, checkpoint)
 
         self.loss_fn_ = torch.nn.CrossEntropyLoss()
 
-    def load_weight(self, linears_info: OrderedDict[str, LinearInfo], checkpoint: Dict = None):
-        _load_lora_weight(self, self.config_, linears_info, checkpoint)
+    def load_weight(self,
+                    linears_info: OrderedDict[str, LinearInfo],
+                    checkpoint: Dict = None):
+        _load_lora_weight(self,
+                          self.config_,
+                          linears_info,
+                          checkpoint)
 
     def weight_dict(self) -> Dict[str, torch.Tensor]:
         # base_model.model.model.layers.{0}.self_attn.{q_proj}.{lora_A}.weight
