@@ -1,7 +1,7 @@
 import json
 
 import requests
-from InquirerPy import inquirer, separator
+from InquirerPy import inquirer, separator, validator
 from rich import print
 from rich.box import ASCII
 from rich.table import Table
@@ -38,7 +38,10 @@ def list_dataset(obj):
 
 
 def create_dataset(obj):
-    name = inquirer.text(message="name:").execute()
+    name = inquirer.text(
+        message="name:",
+        validate=validator.EmptyInputValidator("name should not be empty"),
+    ).execute()
 
     list_file(obj, "data")
     all_train_data = [item["name"] for item in obj.ret_]
@@ -56,10 +59,22 @@ def create_dataset(obj):
         message="train data file:",
         choices=[separator.Separator(), *all_train_data, separator.Separator()],
     ).execute()
+
     use_prompt = inquirer.select(
         message="prompt template file:",
         choices=[separator.Separator(), *all_prompt, separator.Separator()],
     ).execute()
+
+    use_prompter = inquirer.select(
+        message="prompter:",
+        choices=[
+            separator.Separator(),
+            "instruction",
+            "preference",
+            separator.Separator(),
+        ],
+    ).execute()
+
     use_preprocess = inquirer.select(
         message="data preprocessing:",
         choices=[
@@ -77,11 +92,31 @@ def create_dataset(obj):
             "name": name,
             "data_name": use_train,
             "prompt_name": use_prompt,
+            "prompt_type": use_prompter,
             "preprocess": use_preprocess,
         },
     )
 
     print(json.loads(ret.text))
+
+
+def delete_dataset(obj):
+    list_dataset(obj)
+    all_dataset = obj.ret_
+
+    if len(all_dataset) == 0:
+        print("no dataset, please create one")
+        return
+
+    dataset_name = inquirer.select(
+        message="dataset name:",
+        choices=[separator.Separator(), *all_dataset, separator.Separator()],
+    ).execute()
+
+    ret = requests.delete(url() + f"/dataset?name={dataset_name}")
+    ret = json.loads(ret.text)
+
+    print(ret)
 
 
 def showcase_dataset(obj):
@@ -109,6 +144,8 @@ def help_dataset(_):
     print("    list all the dataset.")
     print("  create")
     print("    create a new dataset.")
+    print("  delete")
+    print("    delete a dataset.")
     print("  showcase")
     print("    display training data composed of prompt and dataset.")
 
@@ -121,6 +158,8 @@ def do_dataset(obj, args):
         return print(obj.pret_)
     elif args[0] == "create":
         return create_dataset(obj)
+    elif args[0] == "delete":
+        return delete_dataset(obj)
     elif args[0] == "showcase":
         return showcase_dataset(obj)
 

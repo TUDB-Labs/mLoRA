@@ -26,13 +26,13 @@ class Dispatcher:
 
     ready_: List[Task]
     running_: List[Task]
-    done_: List[Task]
 
     init_event_: DispatcherEvent
     running_event_: DispatcherEvent
     ready_event_: DispatcherEvent
     done_event_: DispatcherEvent
     step_event_: DispatcherEvent
+    terminate_event_: DispatcherEvent
 
     concurrency_num_: int = 2
 
@@ -42,13 +42,13 @@ class Dispatcher:
 
         self.ready_ = []
         self.running_ = []
-        self.done_ = []
 
         self.init_event_ = DispatcherEvent()
         self.running_event_ = DispatcherEvent()
         self.ready_event_ = DispatcherEvent()
         self.done_event_ = DispatcherEvent()
         self.step_event_ = DispatcherEvent()
+        self.terminate_event_ = DispatcherEvent()
 
     def info(self) -> Dict[str, Any]:
         return {"name": self.name_, "concurrency_num": self.concurrency_num_}
@@ -60,6 +60,7 @@ class Dispatcher:
             "ready": self.ready_event_,
             "done": self.done_event_,
             "step": self.step_event_,
+            "terminate": self.terminate_event_,
         }
 
         assert name in event_map
@@ -72,10 +73,23 @@ class Dispatcher:
         self.init_event_.notify(task)
         self.ready_.append(task)
 
+    def notify_terminate_task(self, task_name: str):
+        for task in [*self.running_, *self.ready_]:
+            if task.task_name() != task_name:
+                continue
+            task.notify_terminate()
+
     def is_done(self) -> bool:
         return len(self.running_) == 0 and len(self.ready_) == 0
 
     def _dispatch_task_in(self):
+        # ready task to terminate
+        terminate_task = [task for task in self.ready_ if task.is_terminate()]
+        self.ready_ = [task for task in self.ready_ if not task.is_terminate()]
+
+        for task in terminate_task:
+            self.terminate_event_.notify(task)
+
         # ready task to running task
         assert len(self.running_) <= self.concurrency_num_
         if len(self.running_) == self.concurrency_num_:
@@ -87,10 +101,15 @@ class Dispatcher:
             self.running_event_.notify(task)
 
     def _dispatch_task_out(self):
-        # running task to ready task or done task
+        # running task to terminate
+        terminate_task = [task for task in self.running_ if task.is_terminate()]
+        self.running_ = [task for task in self.running_ if not task.is_terminate()]
+        for task in terminate_task:
+            self.terminate_event_.notify(task)
+
+        # running task to ready
         done_task = [task for task in self.running_ if task.is_done()]
         self.running_ = [task for task in self.running_ if not task.is_done()]
-        self.done_.extend(done_task)
         for task in done_task:
             self.done_event_.notify(task)
 

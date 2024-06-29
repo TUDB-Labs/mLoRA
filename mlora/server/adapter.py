@@ -3,7 +3,7 @@ import uuid
 
 from fastapi import APIRouter, Request
 
-from .storage import db_get_str, db_it_str, db_put_obj
+from .storage import db_del, db_get_obj, db_get_str, db_it_str, db_put_obj
 
 router = APIRouter()
 
@@ -27,9 +27,26 @@ async def post_adapter(request: Request):
 
     req["path"] = adapter_dir
     req["state"] = "UNK"
+    req["task"] = "NO"
 
     logging.info(f"Create new adapter: {req}")
 
     db_put_obj(f'__adapter__{req["name"]}', req)
 
     return {"message": "success"}
+
+
+@router.delete("/adapter")
+def delete_adapter(name: str):
+    adapter = db_get_obj(f"__adapter__{name}")
+
+    if adapter is None:
+        return {"message": "the adapter not exist"}
+
+    # only adapter no task will train it can be delete
+    if adapter["task"] != "NO" and adapter["state"] != "DONE":
+        return {"message": "adapter with a task, cannot be delete."}
+
+    db_del(f"__adapter__{name}")
+
+    return {"message": "delete the adapter"}
