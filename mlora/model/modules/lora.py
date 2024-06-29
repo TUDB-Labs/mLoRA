@@ -185,6 +185,8 @@ class LoRA(Adapter):
     def init_weight(
         self, lora_a: torch.Tensor | None = None, lora_b: torch.Tensor | None = None
     ):
+        del self.lora_a_
+        del self.lora_b_
         if lora_a is None:
             torch.nn.init.kaiming_normal_(self.lora_a_, a=math.sqrt(5))
         else:

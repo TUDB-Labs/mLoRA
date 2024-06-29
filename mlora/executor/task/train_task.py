@@ -14,11 +14,46 @@ from mlora.model.tokenizer import Tokenizer
 
 from .task import Task
 
+def parse_output_dir(output_dir, context_path):
+    if output_dir == context_path:
+        return {
+            'is_suffixed': False,
+            'epoch': None,
+            'data_idx': None,
+            'dir_suffix': None
+        }
+
+    suffix_pattern = re.compile(r'_(?P<epoch>\d+)_(?P<data_idx>\d+)_(?P<dir_suffix>[^_]+)$')
+    match = suffix_pattern.search(output_dir)
+
+    if not match:
+        raise ValueError("output_dir does not match the expected format.")
+
+    epoch = int(match.group('epoch'))
+    data_idx = int(match.group('data_idx'))
+    dir_suffix = match.group('dir_suffix')
+
+    return {
+        'is_suffixed': True,
+        'epoch': epoch,
+        'data_idx': data_idx,
+        'dir_suffix': dir_suffix
+    }
+
+def list_folders_in_dir(directory):
+    folders = []
+    for name in os.listdir(directory):
+        path = os.path.join(directory, name)
+        if os.path.isdir(path):
+            folders.append(name)
+    return folders
+
 
 class TrainTask(Task):
     now_epoch_: int
     context_: TrainTaskContext
     config_: TrainTaskConfig
+    recover_folder : str
 
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
@@ -37,15 +72,46 @@ class TrainTask(Task):
         self._pre_dataset()
         self._pre_context(linears_info)
         self._pre_recover_state()
-        self._pre_recover_context()
+        if self.now_step_ > 1:
+            self._pre_recover_context()
 
 
-    def _pre_recover_state(self): ...
+    def _pre_recover_state(self):
+        parts = self.config_.adapter_.path_.split("/")
+        first_part = parts[0]
+        second_part = parts[1]
+        folders = list_folders_in_dir(first_part)
+        if folders:
+            maxstep = 0
+            for folder in folders:
+                folderinfo = parse_output_dir(first_part + os.sep + folder, self.config_.adapter_.path_)
+                # folderinfo: {'is_suffixed': , 'epoch': , 'data_idx': , 'dir_suffix': }
+                if folderinfo["is_suffixed"] == False:
+                    logging.info("train is finished")
+                    exit()
+                else:
+                    if int(folderinfo["dir_suffix"]) > maxstep:
+                        maxstep = int(folderinfo["dir_suffix"])
+                        self.recover_folder = first_part + os.sep + folder
+            recover_folder_info = parse_output_dir(self.recover_folder, self.config_.adapter_.path_)
+            self.recover_folder = self.config_.adapter_.path_ + "_" + "_".join(
+                [str(recover_folder_info["epoch"]),
+                str(recover_folder_info["data_idx"]),
+                str(recover_folder_info["dir_suffix"])]
+            )
+            self.now_epoch_ = int(recover_folder_info["epoch"]) + 1
+            self.now_data_idx_ = int(recover_folder_info["data_idx"])
+            self.now_step_ = int(recover_folder_info["dir_suffix"]) + 1
+        else:
+            self.now_epoch_ = 1
         
     def _pre_recover_context(self):
-        # get the optimizer read the file from now_epoch 
-        self.context_.recover_weight()
-        self.context_.recover_optimizer()
+        # get the optimizer read the file from now_epoch
+        checkpoint = torch.load(self.recover_folder + os.sep + "checkpoint.bin")
+
+        self.context_.recover_weight(checkpoint["weight_dict"])
+        self.context_.recover_optimizer(checkpoint["state_dict"])
+        self.context_.recover_lr(self.now_epoch_)
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
@@ -119,18 +185,20 @@ class TrainTask(Task):
     def _save(self, dir_suffix: str = "", additional_info: Dict[str, str] = {}):
         output_dir = self.context_.path_
         if dir_suffix != "":
-            output_dir = self.context_.path_ + "_".join(
+            output_dir = self.context_.path_ + "_" + "_".join(
                 [str(self.now_epoch_), str(self.now_data_idx_), dir_suffix]
             )
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-
         weight_dict = self.context_.weight_dict()
-
         state_dict = self.context_.state_dict()
-
         # save to disk
+        checkpoint = {
+            "weight_dict" : weight_dict,
+            "state_dict" : state_dict
+        }
+        torch.save(checkpoint, output_dir + os.sep + "checkpoint.bin")
 
 
         adapter_config: Dict[str, str] = {}
@@ -143,7 +211,7 @@ class TrainTask(Task):
 
     @override
     def done(self):
-        self._save(f"{self.config_.num_epochs_}")
+        self._save()
         # release the context
         del self.context_
 

@@ -38,7 +38,7 @@ class CosineLRSchedulerConfig(LRSchedulerConfig):
             return {
                 "T_max": float(self.t_max_),
                 "eta_min": float(self.eta_min_),
-                "last_epoch": int(self.last_epoch),
+                "last_epoch": int(now_epoch),
             }
 
 

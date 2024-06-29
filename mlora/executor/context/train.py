@@ -1,8 +1,7 @@
 from abc import abstractmethod
 from collections import OrderedDict
-from typing import Callable, Dict, List, Type
+from typing import Callable, Dict, List, Type, Optional
 
-import Optional
 import torch
 
 from mlora.config import AdapterConfig, LRSchedulerConfig, OptimizerConfig
@@ -47,7 +46,9 @@ class TrainTaskContext(TaskContext):
     @abstractmethod
     def recover_optimizer(self, state_dict: Dict[str, torch.Tensor]): ...
 
-    # self.optimizer_.load_state_dict(checkpoint["optimizer"])
+    @abstractmethod
+    def recover_lr(self,now_epoch: int): ...
+
     @abstractmethod
     def recover_weight(self, weight_dict: Dict[str, torch.Tensor]): ...
 
@@ -68,7 +69,7 @@ class TrainTaskContext(TaskContext):
     def create_lr_scheduler(
         self,
         lr_scheduler_config: Optional[LRSchedulerConfig] | None,
-        checkpoint: Dict = None,
+        now_epoch: int = None
     ):
         assert self.optimizer_ is not None
 
@@ -78,10 +79,10 @@ class TrainTaskContext(TaskContext):
 
         lr_scheduler_type_ = lr_scheduler_config.lr_scheduler_
         assert lr_scheduler_type_ in LR_SCHEDULER_CLASS
-        if checkpoint is not None:
+        if now_epoch is not None:
             self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
                 self.optimizer_,
-                **lr_scheduler_config.to_fn_parameters(checkpoint["epoch"]),
+                **lr_scheduler_config.to_fn_parameters(now_epoch),
             )
         else:
             self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
