@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict
 
 import requests
-from InquirerPy import inquirer, validator
+from InquirerPy import inquirer, separator, validator
 from InquirerPy.base import Choice
 from rich import print
 from rich.box import ASCII
@@ -20,20 +20,24 @@ def list_adapter(obj):
     table.add_column("type", justify="center")
     table.add_column("dir", justify="center")
     table.add_column("state", justify="center")
+    table.add_column("task", justify="center")
 
     obj.ret_ = []
 
     for ret_item in ret_items:
         item = json.loads(ret_item)
-        table.add_row(item["name"], item["type"], item["path"], item["state"])
-        obj.ret_.append(item["name"])
+        table.add_row(
+            item["name"], item["type"], item["path"], item["state"], item["task"]
+        )
+        obj.ret_.append((item["name"], item["state"], item["task"]))
 
     obj.pret_ = table
 
 
 def adapter_type_set(adapter_conf: Dict[str, Any]):
     adapter_type = inquirer.select(
-        message="type:", choices=["lora", "loraplus"]
+        message="type:",
+        choices=[separator.Separator(), "lora", "loraplus", separator.Separator()],
     ).execute()
     adapter_conf["type"] = adapter_type
 
@@ -48,7 +52,8 @@ def adapter_type_set(adapter_conf: Dict[str, Any]):
 
 def adapter_optimizer_set(adapter_conf: Dict[str, Any]):
     optimizer = inquirer.select(
-        message="optimizer:", choices=["adamw", "sgd"]
+        message="optimizer:",
+        choices=[separator.Separator(), "adamw", "sgd", separator.Separator()],
     ).execute()
     adapter_conf["optimizer"] = optimizer
 
@@ -73,7 +78,8 @@ def adapter_lr_scheduler_set(adapter_conf: Dict[str, Any]):
         return adapter_conf
 
     lr_scheduler_type = inquirer.select(
-        message="optimizer:", choices=["cosine"]
+        message="optimizer:",
+        choices=[separator.Separator(), "cosine", separator.Separator()],
     ).execute()
     adapter_conf["lrscheduler"] = lr_scheduler_type
 
@@ -120,6 +126,7 @@ def adapter_set(adapter_conf: Dict[str, Any]):
     target_modules = inquirer.checkbox(
         message="target_modules:",
         choices=[
+            separator.Separator(),
             Choice("q_proj", enabled=True),
             Choice("k_proj", enabled=True),
             Choice("v_proj", enabled=True),
@@ -127,6 +134,7 @@ def adapter_set(adapter_conf: Dict[str, Any]):
             Choice("gate_proj", enabled=False),
             Choice("down_proj", enabled=False),
             Choice("up_proj", enabled=False),
+            separator.Separator(),
         ],
     ).execute()
     for target in target_modules:
@@ -154,12 +162,36 @@ def create_adapter():
     print(json.loads(ret.text))
 
 
+def delete_adapter(obj):
+    list_adapter(obj)
+    all_adapters = obj.ret_
+    all_adapters = [
+        item for item in all_adapters if item[2] == "NO" or item[1] == "DONE"
+    ]
+
+    if len(all_adapters) == 0:
+        print("no adapter, please create one")
+        return
+
+    adapter_name = inquirer.select(
+        message="adapter name:",
+        choices=[separator.Separator(), *all_adapters, separator.Separator()],
+    ).execute()
+
+    ret = requests.delete(url() + f"/adapter?name={adapter_name[0]}")
+    ret = json.loads(ret.text)
+
+    print(ret)
+
+
 def help_adapter(_):
     print("Usage of adapter:")
     print("  ls")
     print("    list all the adapter.")
     print("  create")
     print("    create a new adapter.")
+    print("  delete")
+    print("    delete a adapter.")
 
 
 def do_adapter(obj, args):
@@ -170,5 +202,7 @@ def do_adapter(obj, args):
         return print(obj.pret_)
     elif args[0] == "create":
         return create_adapter()
+    elif args[0] == "delete":
+        return delete_adapter(obj)
 
     help_adapter(None)

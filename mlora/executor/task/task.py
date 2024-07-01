@@ -17,27 +17,30 @@ from mlora.prompter import Prompter, PrompterFactory
 class Task:
     config_: TaskConfig
 
-    now_step_: int
-
+    prompter_: Prompter
     tokenizer_: Tokenizer
+
     context_: TaskContext
 
     data_: List[Dict[str, str]]
     now_data_idx_: int
+    now_step_: int
 
-    prompter_: Prompter
-
+    terminate_: bool
+    # need_terminal_ the llm name just for export the config file
     llm_name_: str
 
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         self.config_ = config
 
-        self.now_step_ = 1
+        self.prompter_ = PrompterFactory.create(config.dataset_)
 
         self.data_ = []
         self.now_data_idx_ = 0
+        self.now_step_ = 1
 
-        self.prompter_ = PrompterFactory.create(config.dataset_)
+        self.terminate_ = False
+
         self.llm_name_ = llm_name
 
     @abstractmethod
@@ -47,6 +50,9 @@ class Task:
 
     @abstractmethod
     def done(self): ...
+
+    @abstractmethod
+    def terminate(self): ...
 
     @abstractmethod
     def step(self): ...
@@ -59,6 +65,12 @@ class Task:
 
     @abstractmethod
     def task_progress(self) -> int: ...
+
+    def notify_terminate(self):
+        self.terminate_ = True
+
+    def is_terminate(self) -> bool:
+        return self.terminate_
 
     def _pre_dataset(self):
         preprocess_func: Dict[str, Callable] = {

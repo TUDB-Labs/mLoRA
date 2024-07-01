@@ -2,8 +2,9 @@ from .adapter import router as adapter_router
 from .dataset import router as dataset_router
 from .dispatcher import router as dispatcher_router
 from .file import router as file_router
-from .pipe import m_create_task, m_dispatcher
+from .pipe import m_create_task, m_dispatcher, m_notify_terminate_task
 from .storage import (
+    db_del,
     db_get_obj,
     db_get_str,
     db_it_obj,
@@ -26,12 +27,14 @@ __all__ = [
     "task_router",
     "m_dispatcher",
     "m_create_task",
+    "m_notify_terminate_task",
     "db_get_str",
     "db_put_str",
     "db_get_obj",
     "db_put_obj",
     "db_it_str",
     "db_it_obj",
+    "db_del",
     "set_db",
     "root_dir",
     "set_root_dir",

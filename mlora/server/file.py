@@ -4,14 +4,14 @@ import uuid
 
 from fastapi import APIRouter, UploadFile
 
-from .storage import db_get_str, db_it_obj, db_put_obj, root_dir_list
+from .storage import db_del, db_get_str, db_it_str, db_put_str, root_dir_list
 
 router = APIRouter()
 
 
 def get_local_file(file_type: str):
     ret = []
-    for key, value in db_it_obj(file_type):
+    for key, value in db_it_str(file_type):
         ret.append({"name": key[len(file_type) :], "file": value})
 
     return ret
@@ -22,7 +22,8 @@ def save_local_file(file_type: str, name: str, data_file: UploadFile):
         return {"message": "error file name"}
 
     file_postfix = data_file.filename.split(".")[-1]
-    if file_postfix != "json" and file_postfix != "yaml":
+    check_postfix = ["json", "yaml"]
+    if file_postfix not in check_postfix:
         return {"message": "unsupport file type"}
 
     if db_get_str(f"__{file_type}__{name}") is not None:
@@ -49,9 +50,21 @@ def get_data():
 def post_data(name: str, data_file: UploadFile):
     file_name = save_local_file("data", name, data_file)
 
-    db_put_obj(f"__data__{name}", {"file_path": file_name})
+    db_put_str(f"__data__{name}", file_name)
 
     return {"message": "success"}
+
+
+@router.delete("/data")
+def delete_data(name: str):
+    file_name: str | None = db_get_str(f"__data__{name}")
+
+    if file_name is None:
+        return {"message": "file not exist"}
+
+    db_del(f"__data__{name}")
+
+    return {"message": "delete success"}
 
 
 @router.get("/prompt")
@@ -60,15 +73,21 @@ def get_prompt():
 
 
 @router.post("/prompt")
-def post_prompt(name: str, prompt_type: str, data_file: UploadFile):
+def post_prompt(name: str, data_file: UploadFile):
     file_name = save_local_file("prompt", name, data_file)
 
-    db_put_obj(
-        f"__prompt__{name}",
-        {
-            "file_path": file_name,
-            "prompt_type": prompt_type,
-        },
-    )
+    db_put_str(f"__prompt__{name}", file_name)
 
     return {"message": "success"}
+
+
+@router.delete("/prompt")
+def delete_prompt(name: str):
+    file_name: str | None = db_get_str(f"__prompt__{name}")
+
+    if file_name is None:
+        return {"message": "file not exist"}
+
+    db_del(f"__prompt__{name}")
+
+    return {"message": "delete success"}

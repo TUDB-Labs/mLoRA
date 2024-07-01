@@ -23,7 +23,6 @@ import mlora.config
 import mlora.server
 
 import os
-import json
 import plyvel
 import logging
 import uvicorn
@@ -33,27 +32,49 @@ from fastapi import FastAPI
 
 m_task_done, s_task_done = multiprocessing.Pipe(True)
 m_task_step, s_task_step = multiprocessing.Pipe(True)
+m_task_terminate, s_task_terminate = multiprocessing.Pipe(True)
 
 
 def backend_server_set_task_state(task_name: str, state: str):
-    task_info = mlora.server.db_get_str(f'__task__{task_name}')
-    task_info = json.loads(task_info)
+    # to get the task, and set it's state
+    task_info = mlora.server.db_get_obj(f"__task__{task_name}")
+    if task_info is None:
+        logging.info(f"the task {task_name} maybe be terminated.")
+        return
+
     task_info["state"] = state
-    mlora.server.db_put_str(f'__task__{task_name}', json.dumps(task_info))
-    # to get the adapter in the task, and to set it done
+    mlora.server.db_put_obj(f"__task__{task_name}", task_info)
+
+    # to get the adapter in the task, and to set it's state
     adapter_name = task_info["adapter"]
-    adapter_info = mlora.server.db_get_str(f'__adapter__{adapter_name}')
-    adapter_info = json.loads(adapter_info)
+    adapter_info = mlora.server.db_get_obj(f"__adapter__{adapter_name}")
     adapter_info["state"] = state
-    mlora.server.db_put_str(f'__adapter__{adapter_name}', json.dumps(adapter_info))
+    mlora.server.db_put_obj(f"__adapter__{adapter_name}", adapter_info)
+
+
+def backend_server_delete_task(task_name: str):
+    # to get the task, and set the adapters' state
+    task_info = mlora.server.db_get_obj(f"__task__{task_name}")
+    if task_info is None:
+        logging.info(f"the task {task_name} maybe be terminated.")
+        return
+
+    # to get the adapter in the task, and to set it's state
+    adapter_name = task_info["adapter"]
+    adapter_info = mlora.server.db_get_obj(f"__adapter__{adapter_name}")
+    adapter_info["task"] = "NO"
+    mlora.server.db_put_obj(f"__adapter__{adapter_name}", adapter_info)
+
+    mlora.server.db_del(f"__task__{task_name}")
 
 
 def backend_server_run_fn(args):
     mlora.server.set_root_dir(args.root)
 
     root_dir_list = mlora.server.root_dir_list()
-    root_dir_list = dict(map(lambda kv: (kv[0], os.path.join(
-        args.root, kv[1])), root_dir_list.items()))
+    root_dir_list = dict(
+        map(lambda kv: (kv[0], os.path.join(args.root, kv[1])), root_dir_list.items())
+    )
 
     mlora.server.set_root_dir_list(root_dir_list)
 
@@ -72,7 +93,7 @@ def backend_server_run_fn(args):
     mLoRAServer.include_router(mlora.server.adapter_router)
     mLoRAServer.include_router(mlora.server.task_router)
 
-    web_thread = threading.Thread(target=uvicorn.run, args=(mLoRAServer, ))
+    web_thread = threading.Thread(target=uvicorn.run, args=(mLoRAServer,))
 
     logging.info("Start the backend web server run thread")
     web_thread.start()
@@ -84,12 +105,19 @@ def backend_server_run_fn(args):
             backend_server_set_task_state(task_name, "DONE")
         if s_task_step.poll(timeout=0.1):
             task_name, progress = s_task_step.recv()
+            # the step maybe after the done
+            if progress >= 100:
+                continue
             backend_server_set_task_state(task_name, str(progress) + "%")
+        if s_task_terminate.poll(timeout=0.1):
+            task_name = s_task_terminate.recv()
+            backend_server_delete_task(task_name)
 
 
 def backend_model_run_fn(executor: mlora.executor.Executor):
     m_dispatcher = mlora.server.m_dispatcher()
     m_create_task = mlora.server.m_create_task()
+    m_ternimate_task = mlora.server.m_notify_terminate_task()
 
     while True:
         if m_dispatcher.poll(timeout=0.1):
@@ -98,6 +126,9 @@ def backend_model_run_fn(executor: mlora.executor.Executor):
         if m_create_task.poll(timeout=0.1):
             task_conf = m_create_task.recv()
             executor.add_task(task_conf)
+        if m_ternimate_task.poll(timeout=0.1):
+            task_name = m_ternimate_task.recv()
+            executor.notify_terminate_task(task_name)
 
 
 def task_done_callback_fn(task: mlora.executor.task.Task):
@@ -111,6 +142,11 @@ def task_step_callback_fn(task: mlora.executor.task.Task):
     m_task_step.send((task_name, task.task_progress()))
 
 
+def task_terminate_callback_fn(task: mlora.executor.task.Task):
+    task_name = task.task_name()
+    m_task_terminate.send(task_name)
+
+
 if __name__ == "__main__":
     args = mlora.utils.get_server_cmd_args()
 
@@ -119,18 +155,19 @@ if __name__ == "__main__":
     mlora.utils.setup_cuda_check()
 
     backend_server_run_process = multiprocessing.Process(
-        target=backend_server_run_fn, args=(args,))
+        target=backend_server_run_fn, args=(args,)
+    )
     backend_server_run_process.start()
 
     logging.info("Start the backend model run process")
     tokenizer, model = mlora.utils.load_model(args)
-    config = mlora.config.MLoRAServerConfig({
-        "name": "backend",
-        "concurrency_num": args.concurrency_num
-    })
+    config = mlora.config.MLoRAServerConfig(
+        {"name": "backend", "concurrency_num": args.concurrency_num}
+    )
     executor = mlora.executor.Executor(model, tokenizer, config)
     executor.register_hook("done", task_done_callback_fn)
     executor.register_hook("step", task_step_callback_fn)
+    executor.register_hook("terminate", task_terminate_callback_fn)
 
     # model to execute the task
     execute_thread = threading.Thread(target=executor.execute, args=())

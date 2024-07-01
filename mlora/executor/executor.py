@@ -33,6 +33,7 @@ class Executor:
             "running": self.__task_to_running_hook,
             "ready": self.__task_to_ready_hook,
             "done": self.__task_to_done_hook,
+            "terminate": self.__task_to_terminate_hook,
         }
 
         for hook, cb in hook_func.items():
@@ -77,11 +78,21 @@ class Executor:
         task.switch_device("cpu")
         task.done()
 
+    def __task_to_terminate_hook(self, task: Task):
+        logging.info(f"Task - {task.task_name()} terminate.")
+        for adapter_name in task.adapter_name():
+            self.model_.offload_adapter(adapter_name)
+        task.switch_device("cpu")
+        task.terminate()
+
     def dispatcher_info(self) -> Dict[str, str]:
         return self.dispatcher_.info()
 
     def add_task(self, config: TaskConfig):
         self.dispatcher_.add_task(config, self.model_.name_or_path_)
+
+    def notify_terminate_task(self, task_name: str):
+        self.dispatcher_.notify_terminate_task(task_name)
 
     def execute(self) -> None:
         while not self.dispatcher_.is_done():
