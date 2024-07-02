@@ -59,11 +59,11 @@ python mlora.py --help
 ```
 
 ## Quickstart with Docker
-mLoRA offers an official Docker image for quick start and development, The image is available on GitHub Packages registry.
+mLoRA offers an official Docker image for quick start and development, The image is available on Dockerhub Packages registry.
 
 First, you should pull the latest image (the image also use for development):
 ```bash
-docker pull ghcr.io/tudb-labs/mlora:latest
+docker pull yezhengmaolove/mlora:latest
 ```
 Deploy and enter a container to run mLoRA:
 ```bash
@@ -72,7 +72,7 @@ docker run -itd --runtime nvidia --gpus all \
     -v ~/your_model_dir:/model \
     -p <host_port>:22 \
     --name mlora \
-    ghcr.io/tudb-labs/mlora:latest
+    yezhengmaolove/mlora:latest
 # when the container started, use the ssh to login
 # the default password is mlora@123
 ssh root@localhost -p <host_port>
