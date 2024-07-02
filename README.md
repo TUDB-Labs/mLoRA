@@ -63,7 +63,7 @@ mLoRA offers an official Docker image for quick start and development, The image
 
 First, you should pull the latest image (the image also use for development):
 ```bash
-docker pull ghcr.io/mLoRA:latest
+docker pull ghcr.io/tudb-labs/mlora:latest
 ```
 Deploy and enter a container to run mLoRA:
 ```bash
@@ -72,7 +72,7 @@ docker run -itd --runtime nvidia --gpus all \
     -v ~/your_model_dir:/model \
     -p <host_port>:22 \
     --name mlora \
-    ghcr.io/mLoRA:latest
+    ghcr.io/tudb-labs/mlora:latest
 # when the container started, use the ssh to login
 # the default password is mlora@123
 ssh root@localhost -p <host_port>
