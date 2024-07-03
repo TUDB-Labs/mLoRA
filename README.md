@@ -80,7 +80,7 @@ ssh root@localhost -p <host_port>
 cd /mLoRA
 git pull
 python mlora.py \
-  --base_model /model/TinyLlama-1.1B-Chat-v0.4 \
+  --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
   --config demo/lora/lora_case_1.yaml
 ```
 
