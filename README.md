@@ -87,10 +87,10 @@ python mlora_train.py \
 ## Deploy as service with Docker
 We can deploy mLoAR as a service to continuously receive user requests and perform fine-tuning task.
 
-First, you should pull the latest image (for deploy):
+First, you should pull the latest image (use same image for deploy):
 
 ```bash
-docker pull yezhengmaolove/mlora:deploy_latest
+docker pull yezhengmaolove/mlora:latest
 ```
 
 Deploy our mLoRA server:
@@ -102,7 +102,7 @@ docker run -itd --runtime nvidia --gpus all \
     --name mlora_server \
     -e "BASE_MODEL=TinyLlama/TinyLlama-1.1B-Chat-v0.4" \
     -e "STORAGE_DIR=/cache" \
-    yezhengmaolove/mlora:deploy_latest
+    yezhengmaolove/mlora:latest /bin/bash /opt/deploy.sh
 ```
 
 Once the service is deployed, install and use `mlora_cli.py` to interact with the server.
@@ -110,6 +110,11 @@ Once the service is deployed, install and use `mlora_cli.py` to interact with th
 ```bash
 # install the client tools
 pip install mlora-cli
+# use the mlora cli tool to connect to mlora server
+mlora_cli
+(mLoRA) set port <host_port>
+(mLoRA) set host http://<host_ip>
+# and enjoy it!!
 ```
 
 ## Why you should use mLoRA
