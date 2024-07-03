@@ -123,10 +123,7 @@ class LlamaSequentialWrapper(torch.nn.Module):
         }
 
         module_name = self.name()
-        assert (
-            module_name in forward_func_dict
-        ), f"error module name {
-            module_name}"
+        assert module_name in forward_func_dict, f"error module name {module_name}"
 
         return forward_func_dict[module_name]()
 
@@ -238,8 +235,10 @@ class LlamaModel(LLMModel):
         llama_model = AutoModelForCausalLM.from_pretrained(path, **additional_load_args)
 
         if llama_model.config.model_type not in LlamaCompatibleModelTypes:
-            assert f"unsupported model type {
-                llama_model.config.model_type}, loading with llama compatible mode."
+            assert (
+                f"unsupported model type {llama_model.config.model_type},"
+                f" loading with llama compatible mode."
+            )
 
         logging.info(
             f"loading llama compatible model - {llama_model.config.model_type}"

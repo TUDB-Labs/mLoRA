@@ -69,7 +69,7 @@ async def post_task(request: Request):
 
     task_conf = TASKCONFIG_CLASS[req["type"]](req, adapters, datasets)
 
-    logging.info(f"Create new task: {req["name"]} with adapter")
+    logging.info(f"Create new task: {req['name']} with adapter")
 
     # set the task's state
     req["state"] = "UNK"

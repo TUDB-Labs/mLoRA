@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from collections import OrderedDict
-from typing import Callable, Dict, List, Type, Optional
+from typing import Callable, Dict, List, Optional, Type
 
 import torch
 
