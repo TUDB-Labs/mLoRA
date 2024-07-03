@@ -26,9 +26,16 @@ mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for effi
 
 - Support for multiple reinforcement learning preference alignment algorithms.
 
+The end-to-end architecture of the mLoRA is shown in the figure:
+
+<div align="center">
+<img src="./docs/assets/architecture.jpg" width=70%">
+</div>
+
+
 ## Quickstart
 
-Firstly, you should clone this repository and install dependencies:
+Firstly, you should clone this repository and install dependencies (or use our image):
 ```bash
 # Clone Repository
 git clone https://github.com/TUDB-Labs/mLoRA
@@ -49,6 +56,32 @@ You can check the adapters' configuration in [demo](./demo/) folder, there are s
 For further detailed usage information, please use `--help` option:
 ```bash
 python mlora.py --help
+```
+
+## Quickstart with Docker
+mLoRA offers an official Docker image for quick start and development, The image is available on Dockerhub Packages registry.
+
+First, you should pull the latest image (the image also use for development):
+```bash
+docker pull yezhengmaolove/mlora:latest
+```
+Deploy and enter a container to run mLoRA:
+```bash
+docker run -itd --runtime nvidia --gpus all \
+    -v ~/your_dataset_dir:/dataset \
+    -v ~/your_model_dir:/model \
+    -p <host_port>:22 \
+    --name mlora \
+    yezhengmaolove/mlora:latest
+# when the container started, use the ssh to login
+# the default password is mlora@123
+ssh root@localhost -p <host_port>
+# pull the latest code and run the mlora
+cd /mLoRA
+git pull
+python mlora.py \
+  --base_model /model/TinyLlama-1.1B-Chat-v0.4 \
+  --config demo/lora/lora_case_1.yaml
 ```
 
 ## Deploy as service

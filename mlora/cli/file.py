@@ -8,7 +8,7 @@ from rich.table import Table
 
 from .setting import url
 
-g_file_type_map = {"train data": "data", "prompt data": "prompt"}
+g_file_type_map = {"train data": "data", "prompt template": "prompt"}
 
 
 def list_file(obj, file_type: str):
@@ -18,13 +18,9 @@ def list_file(obj, file_type: str):
     table = Table(show_header=True, show_lines=True, box=ASCII)
     table.add_column("name", justify="center")
     table.add_column("file", justify="center")
-    if file_type == "prompt":
-        table.add_column("prompter", justify="center")
 
     for item in ret_items:
-        row_data = [item["name"], item["file"]["file_path"]]
-        if file_type == "prompt":
-            row_data.append(item["file"]["prompt_type"])
+        row_data = [item["name"], item["file"]]
         table.add_row(*row_data)
 
     obj.ret_ = ret_items
@@ -32,30 +28,18 @@ def list_file(obj, file_type: str):
 
 
 def upload_file():
-    name = inquirer.text(
-        message="name:",
-        validate=validator.EmptyInputValidator("name should not be empty"),
-    ).execute()
-
     file_type = inquirer.select(
         message="file type:",
         choices=[separator.Separator(), *g_file_type_map.keys(), separator.Separator()],
     ).execute()
     file_type = g_file_type_map[file_type]
 
-    post_url = url() + f"/{file_type}?name={name}"
+    name = inquirer.text(
+        message="name:",
+        validate=validator.EmptyInputValidator("name should not be empty"),
+    ).execute()
 
-    if file_type == "prompt":
-        prompt_type = inquirer.select(
-            message="prompter type:",
-            choices=[
-                separator.Separator(),
-                "instruction",
-                "preference",
-                separator.Separator(),
-            ],
-        ).execute()
-        post_url += f"&prompt_type={prompt_type}"
+    post_url = url() + f"/{file_type}?name={name}"
 
     path = inquirer.filepath(
         message="file path:",
@@ -69,12 +53,38 @@ def upload_file():
     print(json.loads(ret.text))
 
 
+def delete_file(obj):
+    list_file(obj, "data")
+    data_file_list = [("data", item["name"]) for item in obj.ret_]
+
+    list_file(obj, "prompt")
+    prompt_file_list = [("prompt", item["name"]) for item in obj.ret_]
+
+    chose_item = inquirer.select(
+        message="file name:",
+        choices=[
+            separator.Separator(),
+            *data_file_list,
+            *prompt_file_list,
+            separator.Separator(),
+        ],
+    ).execute()
+
+    delete_url = url() + f"/{chose_item[0]}?name={chose_item[1]}"
+
+    ret = requests.delete(delete_url)
+
+    print(json.loads(ret.text))
+
+
 def help_file(_):
     print("Usage of file:")
     print("  ls")
-    print("    list the usable data or prompt data.")
+    print("    list the train or prompt data.")
     print("  upload")
-    print("    upload a training data or prompt data.")
+    print("    upload a train or prompt data.")
+    print("  delete")
+    print("    delete a train or prompt data.")
 
 
 def do_file(obj, args):
@@ -82,18 +92,16 @@ def do_file(obj, args):
 
     if args[0] == "ls":
         # to chose file type
-        file_type = inquirer.select(
-            message="type:",
-            choices=[
-                separator.Separator(),
-                *g_file_type_map.keys(),
-                separator.Separator(),
-            ],
-        ).execute()
-        file_type = g_file_type_map[file_type]
-        list_file(obj, file_type)
+        list_file(obj, "data")
+        print("Data files:")
+        print(obj.pret_)
+
+        list_file(obj, "prompt")
+        print("Prompt files:")
         return print(obj.pret_)
     elif args[0] == "upload":
         return upload_file()
+    elif args[0] == "delete":
+        return delete_file(obj)
 
     help_file(None)

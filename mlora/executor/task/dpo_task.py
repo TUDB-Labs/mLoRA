@@ -190,3 +190,10 @@ class DPOTask(TrainTask):
         del self.context_
         if self.ref_context_ is not None:
             del self.ref_context_
+
+    @override
+    def terminate(self):
+        # release the context
+        del self.context_
+        if self.ref_context_ is not None:
+            del self.ref_context_

@@ -116,9 +116,9 @@ class TrainTask(Task):
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
         logging.info(
-            f"Adapter {self.context_.name_} epoch: {
-                self.now_epoch_}/{self.config_.num_epochs_}"
-            f" iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_}"
+            f"Adapter {self.context_.name_} "
+            f"epoch: {self.now_epoch_}/{self.config_.num_epochs_} "
+            f"iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_}"
         )
         data_idx_s = self.now_data_idx_
         data_idx_e = self.now_data_idx_ + self.config_.mini_batch_size_
@@ -213,6 +213,10 @@ class TrainTask(Task):
     def done(self):
         self._save()
         # release the context
+        del self.context_
+
+    @override
+    def terminate(self):
         del self.context_
 
     @override

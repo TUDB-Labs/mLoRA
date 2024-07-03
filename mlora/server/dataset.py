@@ -7,7 +7,14 @@ from fastapi import APIRouter, Request
 from mlora.config import DatasetConfig
 from mlora.prompter import PrompterFactory
 
-from .storage import db_get_obj, db_get_str, db_it_str, db_put_obj, root_dir_list
+from .storage import (
+    db_del,
+    db_get_obj,
+    db_get_str,
+    db_it_str,
+    db_put_obj,
+    root_dir_list,
+)
 
 router = APIRouter()
 
@@ -52,8 +59,8 @@ def showcase_dataset(name: str):
 async def post_dataset(request: Request):
     req = await request.json()
 
-    data_file = db_get_obj(f'__data__{req["data_name"]}')
-    prompt_file = db_get_obj(f'__prompt__{req["prompt_name"]}')
+    data_file = db_get_str(f'__data__{req["data_name"]}')
+    prompt_file = db_get_str(f'__prompt__{req["prompt_name"]}')
 
     if data_file is None or prompt_file is None:
         return {"message": "error parameters"}
@@ -65,9 +72,9 @@ async def post_dataset(request: Request):
         "name": req["name"],
         "data_name": req["data_name"],
         "prompt_name": req["prompt_name"],
-        "data": data_file["file_path"],
-        "prompt": prompt_file["file_path"],
-        "prompt_type": prompt_file["prompt_type"],
+        "data": data_file,
+        "prompt": prompt_file,
+        "prompt_type": req["prompt_type"],
         "preprocess": req["preprocess"],
     }
 
@@ -76,3 +83,15 @@ async def post_dataset(request: Request):
     db_put_obj(f'__dataset__{req["name"]}', dataset)
 
     return {"message": "success"}
+
+
+@router.delete("/dataset")
+def delete_dataset(name: str):
+    dataset = db_get_obj(f"__dataset__{name}")
+
+    if dataset is None:
+        return {"message": "the dataset not exist"}
+
+    db_del(f"__dataset__{name}")
+
+    return {"message": "delete the dataset"}
