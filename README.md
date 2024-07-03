@@ -29,7 +29,7 @@ mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for effi
 The end-to-end architecture of the mLoRA is shown in the figure:
 
 <div align="center">
-<img src="./docs/assets/architecture.jpg" width=70%">
+<img src="./docs/assets/architecture.jpg" width=50%">
 </div>
 
 
