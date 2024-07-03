@@ -181,31 +181,22 @@ class LoRA(Adapter):
         self.alpha_: int = alpha
         self.dropout_: float = dropout
         self.scaling_: float = alpha / r
+        self.out_dim: int = out_dim
 
     def init_weight(
         self, lora_a: torch.Tensor | None = None, lora_b: torch.Tensor | None = None
     ):
-        del self.lora_a_
-        del self.lora_b_
         if lora_a is None:
             torch.nn.init.kaiming_normal_(self.lora_a_, a=math.sqrt(5))
         else:
-            self.lora_a_ = (
-                lora_a.to("cpu")
-                .detach()
-                .clone()
-                .to(dtype=torch.float32)
-                .requires_grad_(True)
-            )
-
+            with torch.no_grad():
+                self.lora_a_.copy_(lora_a)
         if lora_b is not None:
-            self.lora_b_ = (
-                lora_b.to("cpu")
-                .detach()
-                .clone()
-                .to(dtype=torch.float32)
-                .requires_grad_(True)
-            )
+            with torch.no_grad():
+                self.lora_b_.copy_(lora_b)
+            
+
+        
 
     @override
     def get_tensors(self) -> List[torch.Tensor]:
