@@ -29,7 +29,7 @@ mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for effi
 The end-to-end architecture of the mLoRA is shown in the figure:
 
 <div align="center">
-<img src="./docs/assets/architecture.jpg" width=50%">
+<img src="./docs/assets/architecture.jpg" width=70%">
 </div>
 
 
@@ -44,9 +44,9 @@ cd mLoRA
 pip install .
 ```
 
-The `mlora.py` code is a starting point for batch fine-tuning LoRA adapters.
+The `mlora_train.py` code is a starting point for batch fine-tuning LoRA adapters.
 ```bash
-python mlora.py \
+python mlora_train.py \
   --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
   --config demo/lora/lora_case_1.yaml
 ```
@@ -55,7 +55,7 @@ You can check the adapters' configuration in [demo](./demo/) folder, there are s
 
 For further detailed usage information, please use `--help` option:
 ```bash
-python mlora.py --help
+python mlora_train.py --help
 ```
 
 ## Quickstart with Docker
@@ -79,34 +79,37 @@ ssh root@localhost -p <host_port>
 # pull the latest code and run the mlora
 cd /mLoRA
 git pull
-python mlora.py \
+python mlora_train.py \
   --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
   --config demo/lora/lora_case_1.yaml
 ```
 
-## Deploy as service
+## Deploy as service with Docker
 We can deploy mLoAR as a service to continuously receive user requests and perform fine-tuning task.
 
-[![asciicast](https://asciinema.org/a/IifqdtBoJAVP4r8wg1lrcm9LI.svg)](https://asciinema.org/a/IifqdtBoJAVP4r8wg1lrcm9LI)
+First, you should pull the latest image (for deploy):
 
 ```bash
-# Install requirements for deploy
-pip install .[deploy]
-# Start the server
-python mlora_server.py \
-  --base_model /data/TinyLlama-1.1B-Chat-v1.0/ \
-  --root /tmp/mlora
-```
-For further detailed usage information, please use `--help` option:
-
-```bash
-python mlora_server.py --help
+docker pull yezhengmaolove/mlora:deploy_latest
 ```
 
-Once the service is deployed, use `mlora_cli.py` to interact with the server.
+Deploy our mLoRA server:
+```bash
+docker run -itd --runtime nvidia --gpus all \
+    -v ~/your_dataset_cache_dir:/cache \
+    -v ~/your_model_dir:/model \
+    -p <host_port>:8000 \
+    --name mlora_server \
+    -e "BASE_MODEL=TinyLlama/TinyLlama-1.1B-Chat-v0.4" \
+    -e "STORAGE_DIR=/cache" \
+    yezhengmaolove/mlora:deploy_latest
+```
+
+Once the service is deployed, install and use `mlora_cli.py` to interact with the server.
 
 ```bash
-python mlora_cli.py
+# install the client tools
+pip install mlora-cli
 ```
 
 ## Why you should use mLoRA

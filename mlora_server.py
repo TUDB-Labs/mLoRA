@@ -93,7 +93,11 @@ def backend_server_run_fn(args):
     mLoRAServer.include_router(mlora.server.adapter_router)
     mLoRAServer.include_router(mlora.server.task_router)
 
-    web_thread = threading.Thread(target=uvicorn.run, args=(mLoRAServer,))
+    web_thread = threading.Thread(
+        target=uvicorn.run,
+        args=(mLoRAServer,),
+        kwargs={"host": "0.0.0.0", "port": 8000},
+    )
 
     logging.info("Start the backend web server run thread")
     web_thread.start()

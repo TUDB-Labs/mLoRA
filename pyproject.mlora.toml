@@ -1,0 +1,42 @@
+[project]
+name = "mlora"
+version = "0.2"
+description = "A system for fine-tuning multiple large language models (LLMs) using the LoRA and its variants more efficiently."
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "torch==2.2.1",
+    "einops==0.6.1",
+    "datasets==2.14.5",
+    "accelerate==0.24.1",
+    "transformers==4.38.2",
+    "bitsandbytes==0.41.1",
+    "sentencepiece==0.1.99",
+    "protobuf==3.20.2",
+    "scipy==1.11.4",
+]
+
+[project.optional-dependencies]
+ci_test = ["pytest", "flake8", "lizard", "black", "isort", "mypy"]
+test = ["peft", "setuptools"]
+debug = ["graphviz"]
+deploy = ["fastapi", "plyvel", "uvicorn"]
+
+[project.urls]
+"Homepage" = "https://github.com/TUDB-Labs/mLoRA"
+"Bug Tracker" = "https://github.com/TUDB-Labs/mLoRA/issues"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "mlora"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mlora", "mlora.*"]

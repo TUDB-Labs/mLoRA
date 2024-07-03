@@ -26,22 +26,27 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[ci_test]
+          pip install lizard flake8 black isort mypy
       - name: CCN with Lizard
         run: |
           lizard -l python ./mlora -C 12
+          lizard -l python ./mlora_cli -C 12
       - name: Lint with flake8
         run: |
           flake8 ./mlora --count --show-source --statistics --max-line-length=88 --max-complexity 15 --ignore=E203,W503,E704
+          flake8 ./mlora_cli --count --show-source --statistics --max-line-length=88 --max-complexity 15 --ignore=E203,W503,E704
       - name: Lint with black
         run: |
           black --check ./mlora
+          black --check ./mlora_cli
       - name: Lint with isort
         run: |
           isort ./mlora --check --profile black
+          isort ./mlora_cli --check --profile black
       - name: Static code check with mypy
         run: |
           mypy ./mlora --ignore-missing-imports --non-interactive --install-types --check-untyped-defs
+          mypy ./mlora_cli --ignore-missing-imports --non-interactive --install-types --check-untyped-defs
       - name: Test with pytest
         run: |
           pytest

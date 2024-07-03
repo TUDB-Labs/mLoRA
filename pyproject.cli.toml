@@ -1,0 +1,26 @@
+[project]
+name = "mlora_cli"
+version = "0.2.1"
+description = "The cli tools for mLoRA system."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = ["requests", "rich", "InquirerPy"]
+
+[project.urls]
+"Homepage" = "https://github.com/TUDB-Labs/mLoRA"
+"Bug Tracker" = "https://github.com/TUDB-Labs/mLoRA/issues"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mlora_cli", "mlora_cli.*"]
+
+[project.scripts]
+mlora_cli = "mlora_cli.shell:cmd_loop"
