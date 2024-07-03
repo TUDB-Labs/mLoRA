@@ -1,4 +1,3 @@
-import logging
 from collections import OrderedDict
 from typing import Dict, override
 
@@ -14,9 +13,9 @@ from .train import TrainTaskContext
 
 
 def _load_lora_weight(
-        context: TaskContext,
-        config: LoRAConfig,
-        linears_info: OrderedDict[str, LinearInfo],
+    context: TaskContext,
+    config: LoRAConfig,
+    linears_info: OrderedDict[str, LinearInfo],
 ):
     # init the weight
     for linear_name, linear_info in linears_info.items():
@@ -34,18 +33,17 @@ def _load_lora_weight(
             config.alpha_,
             config.dropout_,
         )
-    weight_dict = None
-    prefix_name = "base_model.model.model."
     for name, module in context.adapter_model_.items():
         lora_a = None
         lora_b = None
         module.init_weight(lora_a, lora_b)
 
+
 class InferenceLoRAContext(InferenceTaskContext):
     config_: LoRAConfig
 
     def __init__(
-            self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo]
+        self, config: LoRAConfig, linears_info: OrderedDict[str, LinearInfo]
     ) -> None:
         super().__init__(config, linears_info)
 
@@ -58,9 +56,9 @@ class TrainLoRAContext(TrainTaskContext):
     config_: LoRAConfig
 
     def __init__(
-            self,
-            config: LoRAConfig,
-            linears_info: OrderedDict[str, LinearInfo],
+        self,
+        config: LoRAConfig,
+        linears_info: OrderedDict[str, LinearInfo],
     ) -> None:
         super().__init__(config, linears_info)
 
@@ -93,7 +91,7 @@ class TrainLoRAContext(TrainTaskContext):
 
     @override
     def recover_lr(self, now_epoch: int):
-        self.create_lr_scheduler(self.config_.lr_scheduler_config_, now_epoch )
+        self.create_lr_scheduler(self.config_.lr_scheduler_config_, now_epoch)
 
     @override
     def recover_weight(self, weight_dict: Dict[str, torch.Tensor]):

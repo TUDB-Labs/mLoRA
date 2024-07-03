@@ -47,7 +47,7 @@ class TrainTaskContext(TaskContext):
     def recover_optimizer(self, state_dict: Dict[str, torch.Tensor]): ...
 
     @abstractmethod
-    def recover_lr(self,now_epoch: int): ...
+    def recover_lr(self, now_epoch: int): ...
 
     @abstractmethod
     def recover_weight(self, weight_dict: Dict[str, torch.Tensor]): ...
@@ -69,7 +69,7 @@ class TrainTaskContext(TaskContext):
     def create_lr_scheduler(
         self,
         lr_scheduler_config: Optional[LRSchedulerConfig] | None,
-        now_epoch: int = None
+        now_epoch: int = None,
     ):
         assert self.optimizer_ is not None
 

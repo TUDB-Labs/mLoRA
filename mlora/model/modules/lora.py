@@ -189,14 +189,13 @@ class LoRA(Adapter):
         if lora_a is None:
             torch.nn.init.kaiming_normal_(self.lora_a_, a=math.sqrt(5))
         else:
+            # Gradient calculations are temporarily disabled
             with torch.no_grad():
+                # In-place assignment
                 self.lora_a_.copy_(lora_a)
         if lora_b is not None:
             with torch.no_grad():
                 self.lora_b_.copy_(lora_b)
-            
-
-        
 
     @override
     def get_tensors(self) -> List[torch.Tensor]:
