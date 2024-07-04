@@ -6,14 +6,8 @@ from fastapi import APIRouter, Request
 from mlora.config import ADAPTERCONFIG_CLASS, TASKCONFIG_CLASS, DatasetConfig
 
 from .pipe import g_s_create_task, g_s_notify_terminate_task
-from .storage import (
-    db_del,
-    db_get_obj,
-    db_get_str,
-    db_it_str,
-    db_put_obj,
-    root_dir_list,
-)
+from .storage import (db_del, db_get_obj, db_get_str, db_it_str, db_put_obj,
+                      root_dir_list)
 
 router = APIRouter()
 

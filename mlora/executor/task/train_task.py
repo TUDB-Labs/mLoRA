@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import re
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
 
@@ -15,42 +14,24 @@ from mlora.model.tokenizer import Tokenizer
 from .task import Task
 
 
-def parse_output_dir(output_dir, context_path):
-    if output_dir == context_path:
-        return {
-            "is_suffixed": False,
-            "epoch": None,
-            "data_idx": None,
-            "dir_suffix": None,
-        }
+def _parse_dir_name(dir_name: str) -> Tuple[int, int, int]:
+    split_group = dir_name.split("_")
 
-    suffix_pattern = re.compile(
-        r"_(?P<epoch>\d+)_(?P<data_idx>\d+)_(?P<dir_suffix>[^_]+)$"
+    epoch = int(split_group[1]) if len(split_group) >= 2 else None
+    data_idx = int(split_group[2]) if len(split_group) >= 3 else None
+    step = int(split_group[3]) if len(split_group) >= 4 else None
+
+    return epoch, data_idx, step
+
+
+def _list_folders_in_dir(directory: str) -> List[str]:
+    ret_folders = list(
+        filter(
+            lambda name: os.path.isdir(os.path.join(directory, name)),
+            os.listdir(directory),
+        )
     )
-    match = suffix_pattern.search(output_dir)
-
-    if not match:
-        raise ValueError("output_dir does not match the expected format.")
-
-    epoch = int(match.group("epoch"))
-    data_idx = int(match.group("data_idx"))
-    dir_suffix = match.group("dir_suffix")
-
-    return {
-        "is_suffixed": True,
-        "epoch": epoch,
-        "data_idx": data_idx,
-        "dir_suffix": dir_suffix,
-    }
-
-
-def list_folders_in_dir(directory):
-    folders = []
-    for name in os.listdir(directory):
-        path = os.path.join(directory, name)
-        if os.path.isdir(path):
-            folders.append(name)
-    return folders
+    return [os.path.join(directory, folder) for folder in ret_folders]
 
 
 class TrainTask(Task):
@@ -61,8 +42,6 @@ class TrainTask(Task):
 
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
-        # init the default state
-        # try recover the state
 
     @override
     def is_done(self) -> bool:
@@ -76,48 +55,35 @@ class TrainTask(Task):
         self._pre_dataset()
         self._pre_context(linears_info)
         self._pre_recover_state()
-        if self.now_step_ > 1:
-            self._pre_recover_context()
+        self._pre_recover_context()
 
     def _pre_recover_state(self):
-        parts = self.config_.adapter_.path_.split("/")
-        first_part = parts[0]
-        folders = list_folders_in_dir(first_part)
-        if folders:
-            maxstep = 0
-            for folder in folders:
-                folderinfo = parse_output_dir(
-                    first_part + os.sep + folder, self.config_.adapter_.path_
-                )
-                # folderinfo: {'is_suffixed': , 'epoch': , 'data_idx': , 'dir_suffix': }
-                if folderinfo["is_suffixed"] is False:
-                    logging.info("train is finished")
-                    exit()
-                else:
-                    if int(folderinfo["dir_suffix"]) > maxstep:
-                        maxstep = int(folderinfo["dir_suffix"])
-                        self.recover_folder = first_part + os.sep + folder
-            recover_folder_info = parse_output_dir(
-                self.recover_folder, self.config_.adapter_.path_
+        recover_folders = _list_folders_in_dir(
+            os.path.dirname(self.config_.adapter_.path_)
+        )
+        recover_folders = list(
+            filter(
+                lambda folder: self.config_.adapter_.path_ in folder, recover_folders
             )
-            self.recover_folder = (
-                self.config_.adapter_.path_
-                + "_"
-                + "_".join(
-                    [
-                        str(recover_folder_info["epoch"]),
-                        str(recover_folder_info["data_idx"]),
-                        str(recover_folder_info["dir_suffix"]),
-                    ]
-                )
-            )
-            self.now_epoch_ = int(recover_folder_info["epoch"]) + 1
-            self.now_data_idx_ = int(recover_folder_info["data_idx"])
-            self.now_step_ = int(recover_folder_info["dir_suffix"]) + 1
-        else:
+        )
+        if recover_folders is None or len(recover_folders) <= 0:
             self.now_epoch_ = 1
+            return
+
+        max_step = -1
+        for folder in recover_folders:
+            base_folder = os.path.basename(os.path.normpath(folder))
+            epoch, data_idx, step = _parse_dir_name(base_folder)
+            if step is not None and step > max_step:
+                max_step = max(max_step, step)
+                self.now_epoch_ = epoch + 1
+                self.now_data_idx_ = data_idx + 1
+                self.now_step_ = step + 1
 
     def _pre_recover_context(self):
+        if self.now_step_ <= 1:
+            return
+
         # get the optimizer read the file from now_epoch
         checkpoint = torch.load(self.recover_folder + os.sep + "checkpoint.bin")
 

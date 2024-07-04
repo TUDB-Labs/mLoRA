@@ -1,6 +1,7 @@
 from .cmd import get_cmd_args, get_server_cmd_args
 from .loader import load_model
-from .setup import setup_cuda_check, setup_logging, setup_seed, setup_trace_mode
+from .setup import (setup_cuda_check, setup_logging, setup_seed,
+                    setup_trace_mode)
 
 __all__ = [
     "get_cmd_args",

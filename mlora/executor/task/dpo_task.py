@@ -6,7 +6,8 @@ import torch
 import torch.nn.functional as F
 
 from mlora.config import DPOTaskConfig
-from mlora.executor.context import INFERENCECONTEXT_CLASS, TaskContext, TrainTaskContext
+from mlora.executor.context import (INFERENCECONTEXT_CLASS, TaskContext,
+                                    TrainTaskContext)
 from mlora.model.args import LinearInfo, MLoRADataConfig, Tokens
 from mlora.model.modules import AdapterModel
 from mlora.model.tokenizer import Tokenizer

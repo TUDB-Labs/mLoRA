@@ -7,14 +7,8 @@ from fastapi import APIRouter, Request
 from mlora.config import DatasetConfig
 from mlora.prompter import PrompterFactory
 
-from .storage import (
-    db_del,
-    db_get_obj,
-    db_get_str,
-    db_it_str,
-    db_put_obj,
-    root_dir_list,
-)
+from .storage import (db_del, db_get_obj, db_get_str, db_it_str, db_put_obj,
+                      root_dir_list)
 
 router = APIRouter()
 

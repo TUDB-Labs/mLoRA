@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, override
+from typing import Any, Dict, override
 
 from .config import DictConfig
 
@@ -14,7 +14,7 @@ class LRSchedulerConfig(DictConfig):
         self.init(self.__params_map, config)
 
     @abstractmethod
-    def to_fn_parameters(self) -> Dict[str, str]: ...
+    def to_fn_parameters(self, now_epoch: int | None = None) -> Dict[str, str]: ...
 
 
 class CosineLRSchedulerConfig(LRSchedulerConfig):
@@ -31,15 +31,16 @@ class CosineLRSchedulerConfig(LRSchedulerConfig):
         self.eta_min_ = int(self.eta_min_)
 
     @override
-    def to_fn_parameters(self, now_epoch: int = None) -> Dict[str, str]:
-        if now_epoch is None:
-            return {"T_max": float(self.t_max_), "eta_min": float(self.eta_min_)}
-        else:
-            return {
-                "T_max": float(self.t_max_),
-                "eta_min": float(self.eta_min_),
-                "last_epoch": int(now_epoch),
-            }
+    def to_fn_parameters(self, now_epoch: int | None = None) -> Dict[str, str]:
+        ret_parameters: Dict[str, Any] = {
+            "T_max": float(self.t_max_),
+            "eta_min": float(self.eta_min_),
+        }
+
+        if now_epoch is not None:
+            ret_parameters["last_epoch"] = int(now_epoch)
+
+        return ret_parameters
 
 
 LRSCHEDULERCONFIG_CLASS = {

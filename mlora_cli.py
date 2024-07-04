@@ -1,6 +1,6 @@
-import mlora.cli
-
 import cmd
+
+import mlora.cli
 
 
 def help_quit(_):

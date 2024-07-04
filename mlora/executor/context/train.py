@@ -69,7 +69,7 @@ class TrainTaskContext(TaskContext):
     def create_lr_scheduler(
         self,
         lr_scheduler_config: Optional[LRSchedulerConfig] | None,
-        now_epoch: int = None,
+        now_epoch: int | None = None,
     ):
         assert self.optimizer_ is not None
 
@@ -79,16 +79,10 @@ class TrainTaskContext(TaskContext):
 
         lr_scheduler_type_ = lr_scheduler_config.lr_scheduler_
         assert lr_scheduler_type_ in LR_SCHEDULER_CLASS
-        if now_epoch is not None:
-            self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
-                self.optimizer_,
-                **lr_scheduler_config.to_fn_parameters(now_epoch),
-            )
-        else:
-            self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
-                self.optimizer_, **lr_scheduler_config.to_fn_parameters()
-            )
-            # type: ignore
+        self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
+            self.optimizer_,
+            **lr_scheduler_config.to_fn_parameters(now_epoch),  # type: ignore
+        )
 
     def switch_device(self, device: str) -> None:
         if self.device_ == device:
