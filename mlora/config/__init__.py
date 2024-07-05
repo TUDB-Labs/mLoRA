@@ -1,4 +1,10 @@
-from .adapter import ADAPTERCONFIG_CLASS, AdapterConfig, LoRAConfig, LoRAPlusConfig
+from .adapter import (
+    ADAPTERCONFIG_CLASS,
+    AdapterConfig,
+    LoRAConfig,
+    LoRAPlusConfig,
+    VeRAConfig,
+)
 from .dataset import DatasetConfig
 from .lr_scheduler import LRSchedulerConfig
 from .mlora import MLoRAConfig, MLoRAServerConfig
@@ -23,6 +29,7 @@ __all__ = [
     "AdapterConfig",
     "LoRAConfig",
     "LoRAPlusConfig",
+    "VeRAConfig",
     "ADAPTERCONFIG_CLASS",
     "OptimizerConfig",
     "LRSchedulerConfig",

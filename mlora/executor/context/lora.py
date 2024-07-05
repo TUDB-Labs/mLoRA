@@ -71,31 +71,12 @@ class TrainLoRAContext(TrainTaskContext):
         # base_model.model.model.layers.{0}.self_attn.{q_proj}.{lora_A}.weight
         # base_model.model.model.layers.{0}.mlp.{gate_proj}.{lora_A}.weight
         ret_val = {}
+        prefix_name = "base_model.model.model."
         for name, adapter in self.adapter_model_.items():
-            prefix_name = "base_model.model.model." + name
-            ret_val[prefix_name + ".lora_A.weight"] = adapter.lora_a_
-            ret_val[prefix_name + ".lora_B.weight"] = adapter.lora_b_
+            ret_val[prefix_name + name + ".lora_A.weight"] = adapter.lora_a_
+            ret_val[prefix_name + name + ".lora_B.weight"] = adapter.lora_b_
 
         return ret_val
-
-    @override
-    def state_dict(self) -> Dict[str, torch.Tensor]:
-        return self.optimizer_.state_dict()
-
-    @override
-    def recover_optimizer(self, state_dict: Dict[str, torch.Tensor]):
-        assert self.optimizer_ is not None
-        self.optimizer_.load_state_dict(state_dict)
-
-    @override
-    def recover_lr(self, last_epoch: int):
-        # the last_epoch is increased every time you call .step() of scheduler
-        # different from the train epoch, be careful
-        if self.lr_scheduler_ is None:
-            return
-
-        # we recreate the lr scheduler
-        self.create_lr_scheduler(self.config_.lr_scheduler_config_, last_epoch)
 
     @override
     def recover_weight(self, weight_dict: Dict[str, torch.Tensor]):

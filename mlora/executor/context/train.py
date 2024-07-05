@@ -40,17 +40,23 @@ class TrainTaskContext(TaskContext):
     def weight_dict(self) -> Dict[str, torch.Tensor]: ...
 
     @abstractmethod
-    def state_dict(self) -> Dict[str, torch.Tensor]: ...
-
-    # recover_optimizer
-    @abstractmethod
-    def recover_optimizer(self, state_dict: Dict[str, torch.Tensor]): ...
-
-    @abstractmethod
-    def recover_lr(self, now_epoch: int): ...
-
-    @abstractmethod
     def recover_weight(self, weight_dict: Dict[str, torch.Tensor]): ...
+
+    def state_dict(self) -> Dict[str, torch.Tensor]:
+        return self.optimizer_.state_dict()
+
+    def recover_optimizer(self, state_dict: Dict[str, torch.Tensor]):
+        assert self.optimizer_ is not None
+        self.optimizer_.load_state_dict(state_dict)
+
+    def recover_lr(self, last_epoch: int):
+        # the last_epoch is increased every time you call .step() of scheduler
+        # different from the train epoch, be careful
+        if self.lr_scheduler_ is None:
+            return
+
+        # we recreate the lr scheduler
+        self.create_lr_scheduler(self.config_.lr_scheduler_config_, last_epoch)
 
     def create_optimizer(self, optim_config: OptimizerConfig | None):
         assert optim_config is not None

@@ -1,13 +1,15 @@
-from typing import Dict, List, Optional, Tuple
+from typing import List, MutableMapping, Optional, Tuple
 
 import bitsandbytes
 import torch
+import torch.nn.functional as F
 
 from mlora.model.args import ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 from .adapter import Adapter
-from .lora import LoRA, LoRAFunction
+from .lora import LoRA, LoRAFunction, get_range_tensor
+from .vera import VeRA
 
 
 class Linear(torch.nn.Module):
@@ -25,7 +27,7 @@ class Linear(torch.nn.Module):
 
         self.device_ = weight.weight.device
         self.weight_ = weight
-        self.adapters_: Dict[str, Adapter] = {}
+        self.adapters_: MutableMapping[str, Adapter] = {}
 
     def forward(self, data: torch.Tensor, input_args: ModelData) -> torch.Tensor:
         # data shape is: batch_size * max_seq_len * dim
@@ -37,7 +39,9 @@ class Linear(torch.nn.Module):
             result = self.weight_.forward(data)
         set_backward_tracepoint(result.grad_fn, "b_linear")
 
-        return self.__lora_forward(data, input_args, result)
+        result = self.__lora_forward(data, input_args, result)
+        result = self.__vera_forward(data, input_args, result)
+        return result
 
     def __lora_forward(
         self, data: torch.Tensor, input_args: ModelData, result: torch.Tensor
@@ -70,6 +74,46 @@ class Linear(torch.nn.Module):
                 result, data, input_args, dropouts, scalings, *loras
             )
         set_backward_tracepoint(result.grad_fn, "b_lora")
+
+        return result
+
+    def __vera_forward(
+        self, data: torch.Tensor, input_args: ModelData, result: torch.Tensor
+    ) -> torch.Tensor:
+        lora_range = get_range_tensor(data.device, data.shape[0])
+
+        for lora_config in input_args.data_config_:
+            adapter_name = lora_config.adapter_name_
+
+            if adapter_name not in self.adapters_ or not isinstance(
+                self.adapters_[adapter_name], VeRA
+            ):
+                continue
+
+            adapter = self.adapters_[adapter_name]
+
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
+
+            with nvtx_range("f_vera"):
+                lora_data = F.dropout(
+                    data[start_idx:end_idx],
+                    p=adapter.dropout_,
+                    training=True,
+                    inplace=False,
+                )
+                lora_data = lora_data.mul(adapter.scaling_)
+                lora_data = lora_data @ adapter.lora_a_.transpose(0, 1)
+                lora_data = lora_data * adapter.d_vec_
+                lora_data = lora_data @ adapter.lora_b_.transpose(0, 1)
+                lora_data = lora_data * adapter.b_vec_
+                lora_data = lora_data.to(result.dtype)
+
+                result = result.index_add(
+                    dim=0, index=lora_range[start_idx:end_idx], source=lora_data
+                )
+
+        set_backward_tracepoint(result.grad_fn, "b_vera")
 
         return result
 
