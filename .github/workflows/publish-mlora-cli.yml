@@ -1,0 +1,35 @@
+name: Create and publish mlora_cli tool
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  mlora_cli-pypi-publish:
+    name: Upload release to PyPI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build setuptools twine
+
+      - name: Build the package
+        run: |
+          ./build.sh
+
+      - name: Publish the package
+        run: |
+          twine upload ./dist/mlora_cli* -u __token__ -p ${{ secrets.PYPI_PASSWORD }}

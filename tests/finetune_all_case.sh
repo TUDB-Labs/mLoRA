@@ -12,5 +12,5 @@ declare -a test_case_yamls=(
 set -x
 for test_case in "${test_case_yamls[@]}"
 do
-    python mlora.py --base_model $1 --config ${test_case}
+    python mlora_train.py --base_model $1 --config ${test_case}
 done

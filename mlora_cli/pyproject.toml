@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlora_cli"
+version = "0.2"
+description = "A cli tool for mLoRA system."
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = ["rich", "InquirerPy"]
+
+[project.urls]
+"Homepage" = "https://github.com/TUDB-Labs/mLoRA"
+"Bug Tracker" = "https://github.com/TUDB-Labs/mLoRA/issues"
+
+[tool.setuptools.packages.find]
+include = [".*"]

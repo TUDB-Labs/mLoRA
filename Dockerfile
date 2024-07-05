@@ -38,7 +38,9 @@ ENV PYENV_ROOT=/root/.pyenv
 ENV PATH "$PYENV_ROOT/bin/:$PATH"
 
 RUN /usr/bin/echo -e '#!/bin/bash\n/usr/sbin/sshd -D' | tee /opt/start.sh \
+    && /usr/bin/echo -e '#!/bin/bash\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"\npython mlora_server.py --base_model $BASE_MODEL --root $STORAGE_DIR' | tee /opt/deploy.sh \
     && chmod +x /opt/start.sh \
+    && chmod +x /opt/deploy.sh \
     && /usr/bin/echo -e 'export PYENV_ROOT=/root/.pyenv' >> ~/.bashrc \
     && /usr/bin/echo -e 'export PATH=/root/.pyenv/bin:$PATH' >> ~/.bashrc \
     && /usr/bin/echo -e 'eval "$(pyenv init -)"' >> ~/.bashrc \
@@ -57,5 +59,7 @@ RUN . ~/.bashrc \
     && pyenv virtualenv $PYTHON_VERSION mlora \
     && pyenv local mlora \
     && pip install .[ci_test,test,debug,deploy]
+
+WORKDIR /mLoRA
 
 CMD /bin/bash /opt/start.sh

@@ -14,14 +14,14 @@ from mlora.model.tokenizer import Tokenizer
 from .task import Task
 
 
-def _parse_dir_name(dir_name: str) -> Tuple[int, int, int]:
+def _parse_dir_name(dir_name: str) -> Tuple[int, int, int]:  # type: ignore
     split_group = dir_name.split("_")
 
     epoch = int(split_group[1]) if len(split_group) >= 2 else None
     data_idx = int(split_group[2]) if len(split_group) >= 3 else None
     step = int(split_group[3]) if len(split_group) >= 4 else None
 
-    return epoch, data_idx, step
+    return epoch, data_idx, step  # type: ignore
 
 
 def _list_folders_in_dir(directory: str) -> List[str]:

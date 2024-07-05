@@ -7,8 +7,7 @@ from transformers import AutoConfig, AutoModelForCausalLM
 
 from mlora.model.args import LinearInfo, LLMModelArgs, Masks, ModelData
 from mlora.model.checkpoint import CheckpointRecomputeFunction
-from mlora.model.modules import (AdapterModel, Decoder, Embedding, OutputLayer,
-                                 RMSNorm)
+from mlora.model.modules import AdapterModel, Decoder, Embedding, OutputLayer, RMSNorm
 from mlora.profiler import nvtx_wrapper, set_backward_tracepoint
 
 from .model_llm import LLMModel

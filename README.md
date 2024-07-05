@@ -44,9 +44,9 @@ cd mLoRA
 pip install .
 ```
 
-The `mlora.py` code is a starting point for batch fine-tuning LoRA adapters.
+The `mlora_train.py` code is a starting point for batch fine-tuning LoRA adapters.
 ```bash
-python mlora.py \
+python mlora_train.py \
   --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
   --config demo/lora/lora_case_1.yaml
 ```
@@ -55,7 +55,7 @@ You can check the adapters' configuration in [demo](./demo/) folder, there are s
 
 For further detailed usage information, please use `--help` option:
 ```bash
-python mlora.py --help
+python mlora_train.py --help
 ```
 
 ## Quickstart with Docker
@@ -79,35 +79,140 @@ ssh root@localhost -p <host_port>
 # pull the latest code and run the mlora
 cd /mLoRA
 git pull
-python mlora.py \
-  --base_model /model/TinyLlama-1.1B-Chat-v0.4 \
+python mlora_train.py \
+  --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
   --config demo/lora/lora_case_1.yaml
 ```
 
-## Deploy as service
+## Deploy as service with Docker
 We can deploy mLoAR as a service to continuously receive user requests and perform fine-tuning task.
 
-[![asciicast](https://asciinema.org/a/IifqdtBoJAVP4r8wg1lrcm9LI.svg)](https://asciinema.org/a/IifqdtBoJAVP4r8wg1lrcm9LI)
+First, you should pull the latest image (use same image for deploy):
 
 ```bash
-# Install requirements for deploy
-pip install .[deploy]
-# Start the server
-python mlora_server.py \
-  --base_model /data/TinyLlama-1.1B-Chat-v1.0/ \
-  --root /tmp/mlora
+docker pull yezhengmaolove/mlora:latest
 ```
-For further detailed usage information, please use `--help` option:
+
+Deploy our mLoRA server:
+```bash
+docker run -itd --runtime nvidia --gpus all \
+    -v ~/your_dataset_cache_dir:/cache \
+    -v ~/your_model_dir:/model \
+    -p <host_port>:8000 \
+    --name mlora_server \
+    -e "BASE_MODEL=TinyLlama/TinyLlama-1.1B-Chat-v0.4" \
+    -e "STORAGE_DIR=/cache" \
+    yezhengmaolove/mlora:latest /bin/bash /opt/deploy.sh
+```
+
+Once the service is deployed, install and use `mlora_cli.py` to interact with the server.
 
 ```bash
-python mlora_server.py --help
+# install the client tools
+pip install mlora-cli
+# use the mlora cli tool to connect to mlora server
+mlora_cli
+(mLoRA) set port <host_port>
+(mLoRA) set host http://<host_ip>
+# and enjoy it!!
 ```
 
-Once the service is deployed, use `mlora_cli.py` to interact with the server.
+<details>
 
+<summary>Step-by-step</summary>
+
+### Step1. Download the mlora image and install the mlora_cli
 ```bash
-python mlora_cli.py
+docker pull yezhengmaolove/mlora:latest
+pip install mlora-cli
 ```
+[![asciicast](https://asciinema.org/a/TfYrIsXgfZeMxPRrzOkWZ7T4b.svg)](https://asciinema.org/a/TfYrIsXgfZeMxPRrzOkWZ7T4b)
+
+### Step2. Start the mlora server with Docker
+```bash
+# first, we create a cache dir in host for cache some file
+mkdir ~/cache
+# second, we manually download the model weights from Hugging Face.
+mkdir ~/model && cd ~/model
+git clone https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0
+# we map port 8000 used by the mlora server to port 1288 on the host machine.
+# the BASE_MODEL environment variable indicates the path of the base model used by mlora.
+# the STORAGE_DIR environment variable indicates the path where datasets and lora adapters are stored.
+# we use the script /opt/deploy.sh in container to start the server.
+docker run -itd --runtime nvidia --gpus all \
+    -v ~/cache:/cache \
+    -v ~/model:/model \
+    -p 1288:8000 \
+    --name mlora_server \
+    -e "BASE_MODEL=/model/TinyLlama-1.1B-Chat-v1.0" \
+    -e "STORAGE_DIR=/cache" \
+    yezhengmaolove/mlora:latest /bin/bash /opt/deploy.sh
+```
+[![asciicast](https://asciinema.org/a/LrLH0jU176NQNfawHpCITaLGx.svg)](https://asciinema.org/a/LrLH0jU176NQNfawHpCITaLGx)
+
+### Step3. use mlora_cli tool link to mlora server
+we use mlora_cli link to the server http://127.0.0.1:1288 (must use the http protocal)
+```bash
+(mLoRA) set port 1288
+(mLoRA) set host http://127.0.0.1
+```
+[![asciicast](https://asciinema.org/a/GN1NBc2MEN8GrmcIasmIMDjNa.svg)](https://asciinema.org/a/GN1NBc2MEN8GrmcIasmIMDjNa)
+
+### Step4. upload some data file for train.
+we use the Stanford Alpaca dataset as a demo, the data just like below:
+```json
+[{"instruction": "", "input": "", "output": }, {...}]
+```
+```bash
+(mLoRA) file upload
+? file type: train data
+? name: alpaca
+? file path: /home/yezhengmao/alpaca-lora/alpaca_data.json
+```
+[![asciicast](https://asciinema.org/a/KN41mnlMShZWDs3dIrd64L4nS.svg)](https://asciinema.org/a/KN41mnlMShZWDs3dIrd64L4nS)
+
+### Step5. upload some template to provide a structured format for generating prompts
+the template in a yaml file, and write by templating language Jinja2, see the demo/prompt.yaml file
+
+the data file you upload can be considered as array data, with the elements in the array being of dictionary type. we consider each element as a data point in the template.
+```bash
+(mLoRA) file upload
+? file type: prompt template
+? name: simple_prompt
+? file path: /home/yezhengmao/mLoRA/demo/prompt.yaml
+```
+[![asciicast](https://asciinema.org/a/SFY8H0K4DppVvqmQCVuOuThoz.svg)](https://asciinema.org/a/SFY8H0K4DppVvqmQCVuOuThoz)
+
+### Step6. create a dataset
+we create a dataset, the dataset consists of data, a template, and the corresponding prompter.
+we can use `dataset showcase` command to check the if the prompts are generated correctly.
+```bash
+(mLoRA) dataset create
+? name: alpaca_dataset
+? train data file: alpaca
+? prompt template file: simple_prompt
+? prompter: instruction
+? data preprocessing: default
+(mLoRA) dataset showcase
+? dataset name: alpaca_dataset
+```
+[![asciicast](https://asciinema.org/a/mxpwo6gWihjEEsJ0dfcXG98cM.svg)](https://asciinema.org/a/mxpwo6gWihjEEsJ0dfcXG98cM)
+
+### Step7. create a adapter
+now we can use `adapter create` command to create a adapter for train.
+
+[![asciicast](https://asciinema.org/a/Wf4PHfoGC0PCcciGHOXCkX0xj.svg)](https://asciinema.org/a/Wf4PHfoGC0PCcciGHOXCkX0xj)
+
+### Step8. !!!! submit task to train !!!!
+Finally, we can submit the task to train our adapter using the defined dataset.
+NOTE: you can continuously submit or terminal training tasks.
+use the `adapter ls` or `task ls` to check the tasks' status
+
+[![asciicast](https://asciinema.org/a/vr8f1XtA0CBULGIP81w2bakkE.svg)](https://asciinema.org/a/vr8f1XtA0CBULGIP81w2bakkE)
+
+
+</details>
+
 
 ## Why you should use mLoRA
 
