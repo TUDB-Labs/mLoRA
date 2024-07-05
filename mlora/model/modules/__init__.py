@@ -7,6 +7,7 @@ from .lora import LoRA, LoRAFunction
 from .mlp import MLP
 from .output_layer import OutputLayer
 from .rms_norm import RMSNorm
+from .vera import VeRA, vera_shared_weight
 
 __all__ = [
     "Embedding",
@@ -16,6 +17,8 @@ __all__ = [
     "AdapterModel",
     "RMSNorm",
     "LoRA",
+    "VeRA",
+    "vera_shared_weight",
     "LoRAFunction",
     "Attention",
     "MLP",

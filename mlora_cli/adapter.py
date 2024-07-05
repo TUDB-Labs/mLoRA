@@ -37,7 +37,13 @@ def list_adapter(obj):
 def adapter_type_set(adapter_conf: Dict[str, Any]):
     adapter_type = inquirer.select(
         message="type:",
-        choices=[separator.Separator(), "lora", "loraplus", separator.Separator()],
+        choices=[
+            separator.Separator(),
+            "lora",
+            "loraplus",
+            "vera",
+            separator.Separator(),
+        ],
     ).execute()
     adapter_conf["type"] = adapter_type
 
@@ -46,6 +52,12 @@ def adapter_type_set(adapter_conf: Dict[str, Any]):
             message="lr_ratio:", float_allowed=True, default=8.0, replace_mode=True
         ).execute()
         adapter_conf["lr_ratio"] = lr_ratio
+
+    if adapter_type == "vera":
+        d_initial = inquirer.number(
+            message="d_initial:", float_allowed=True, default=0.1, replace_mode=True
+        ).execute()
+        adapter_conf["d_initial"] = d_initial
 
     return adapter_conf
 

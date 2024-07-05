@@ -235,22 +235,24 @@ We fine-tuned multiple LoRA adapters using four A6000 graphics cards with fp32 p
 
 ### Supported LoRA variants
 
-|         | Variant                                   |
-| ------- | ----------------------------------------- |
-| &check; | [QLoRA](https://arxiv.org/abs/2305.14314) |
-| &check; | [LoRA+](https://arxiv.org/abs/2402.12354) |
+|         | Variant                                             |
+| ------- | --------------------------------------------------- |
+| &check; | [QLoRA](https://arxiv.org/abs/2305.14314),NIPS,2023 |
+| &check; | [LoRA+](https://arxiv.org/abs/2402.12354),ICML,2024 |
+| &check; | [VeRA](https://arxiv.org/abs/2310.11454),ICLR,2024  |
 
 ### Supported preference alignment algorithms
-|         | Variant                                 |
-| ------- | --------------------------------------- |
-| &check; | [DPO](https://arxiv.org/abs/2305.18290) |
-| &check; | [CPO](https://arxiv.org/abs/2401.08417) |
+|         | Variant                                              |
+| ------- | ---------------------------------------------------- |
+| &check; | [DPO](https://arxiv.org/abs/2305.18290),NeurIPS,2024 |
+| &check; | [CPO](https://arxiv.org/abs/2401.08417),ICML,2024    |
 
 
 ## Document
 
 - Help Document[TODO]
 - [Design Document](./docs/design.md)
+- [How to develop a new adapter](./docs/develop_new_adapter.md)
 
 ## Contributing
 We welcome contributions to improve this repository! Please review the contribution guidelines before submitting pull requests or issues.

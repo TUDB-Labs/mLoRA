@@ -103,4 +103,35 @@ class LoRAPlusConfig(LoRAConfig):
         self.lr_ratio_ = float(self.lr_ratio_)
 
 
-ADAPTERCONFIG_CLASS = {"lora": LoRAConfig, "loraplus": LoRAPlusConfig}
+class VeRAConfig(LoRAConfig):
+    d_initial_: float
+
+    __params_map: Dict[str, str] = {
+        "d_initial_": "d_initial",
+    }
+
+    def __init__(self, config: Dict[str, str]):
+        super().__init__(config)
+        self.init(self.__params_map, config)
+
+        self.d_initial_ = float(self.d_initial_)
+
+    @override
+    def export(self) -> Dict[str, Any]:
+        return {
+            "lora_alpha": self.alpha_,
+            "lora_dropout": self.dropout_,
+            "r": self.r_,
+            "d_initial": self.d_initial_,
+            "peft_type": "VeRA",
+            "task_type": "CAUSAL_LM",
+            "bias": "none",
+            "target_modules": [key for key in self.target_ if self.target_[key]],
+        }
+
+
+ADAPTERCONFIG_CLASS = {
+    "lora": LoRAConfig,
+    "loraplus": LoRAPlusConfig,
+    "vera": VeRAConfig,
+}
