@@ -24,7 +24,7 @@ class InferenceTaskContext(TaskContext):
             return
 
         for _, adapter in self.adapter_model_.items():
-            self.switch_list_tensor(adapter.get_tensors(), device)
+            self.switch_list_tensor(adapter.get_all_tensors(), device)
 
         self.device_ = device
 

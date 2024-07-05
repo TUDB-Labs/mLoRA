@@ -1,0 +1,36 @@
+dispatcher:
+  name: "default"
+  concurrency_num: 1
+datasets:
+  - name: "data"
+    data: "demo/data.json"
+    prompt: "demo/prompt.yaml"
+    prompt_type: "instruction"
+    preprocess: "default"
+adapters:
+  - name: "lora_0"
+    type: "lora"
+    path: "adapters/lora_sft_checkpoint"
+    optimizer: "adamw"
+    lr: 3e-4
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: false
+      down_proj: false
+      up_proj: false
+tasks:
+  - type: "train"
+    name: "task_0"
+    adapter: "lora_0"
+    dataset: "data"
+    batch_size: 16
+    mini_batch_size: 16
+    num_epochs: 10
+    cutoff_len: 256
+    save_step: 10

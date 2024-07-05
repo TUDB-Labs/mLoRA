@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, List
+from typing import List, MutableMapping
 
 import torch
 
@@ -15,18 +15,21 @@ class Adapter(torch.nn.Module):
         self.adapter_name_ = adapter_name
 
     @abstractmethod
-    def get_tensors(self) -> List[torch.Tensor]: ...
+    def get_trainable_tensors(self) -> List[torch.Tensor]: ...
+
+    @abstractmethod
+    def get_all_tensors(self) -> List[torch.Tensor]: ...
 
     def disable_grad(self):
-        for tensor in self.get_tensors():
+        for tensor in self.get_trainable_tensors():
             tensor.requires_grad_(False)
             assert tensor.requires_grad is False
 
     def enable_grad(self):
-        for tensor in self.get_tensors():
+        for tensor in self.get_trainable_tensors():
             tensor.requires_grad_(True)
             assert tensor.requires_grad is True
             assert tensor.is_leaf
 
 
-AdapterModel = Dict[str, Adapter]
+AdapterModel = MutableMapping[str, Adapter]
