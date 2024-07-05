@@ -14,6 +14,16 @@ from mlora.model.tokenizer import Tokenizer
 from .task import Task
 
 
+def _get_context_state_from_dir_name(dir_name: str) -> Tuple[int, int, int]:
+    split_group = dir_name.split("_")
+
+    epoch = int(split_group[1])
+    data_idx = int(split_group[2])
+    step = int(split_group[3])
+
+    return epoch, data_idx, step
+
+
 class TrainTask(Task):
     now_epoch_: int
 
@@ -32,8 +42,61 @@ class TrainTask(Task):
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
         # prepare the context and the dataset
+        # NOTE: how to recover the sort of dataset
         self._pre_dataset()
         self._pre_context(linears_info)
+        self._pre_recover_context()
+
+    def _get_recover_folder(self) -> str | None:
+        if not os.path.isdir(self.context_.path_):
+            return None
+
+        def is_recover_dir(dir_name: str) -> bool:
+            if "checkpoint" not in dir_name:
+                return False
+
+            if not os.path.isdir(os.path.join(self.context_.path_, dir_name)):
+                return False
+
+            return True
+
+        recover_folders = list(filter(is_recover_dir, os.listdir(self.context_.path_)))
+
+        if recover_folders is None or len(recover_folders) <= 0:
+            return None
+
+        max_step = -1
+        to_recover_folder: str | None = None
+        for folder in recover_folders:
+            base_folder = os.path.basename(os.path.normpath(folder))
+            step, epoch, data_idx = _get_context_state_from_dir_name(base_folder)
+            if step is not None and step > max_step:
+                max_step = max(max_step, step)
+                self.now_epoch_ = epoch
+                self.now_data_idx_ = data_idx
+                self.now_step_ = step
+                to_recover_folder = os.path.join(self.context_.path_, folder)
+
+        return to_recover_folder
+
+    def _pre_recover_context(self):
+        to_recover_folder = self._get_recover_folder()
+        if to_recover_folder is None:
+            return
+
+        logging.info(
+            f"Task {self.task_name()} have recover directory {to_recover_folder}"
+            "need to recover."
+        )
+
+        # get the optimizer read the file from now_epoch
+        checkpoint = torch.load(to_recover_folder + os.sep + "checkpoint.bin")
+
+        self.context_.recover_weight(checkpoint["weight_dict"])
+        self.context_.recover_optimizer(checkpoint["state_dict"])
+        # recompute the lr's epoch for recover
+        lr_epoch = self.now_step_ // self.config_.accumulate_step_
+        self.context_.recover_lr(lr_epoch)
 
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
@@ -104,17 +167,34 @@ class TrainTask(Task):
 
         return ret_batch_tokens, ret_batch_masks
 
-    def _save(self, dir_suffix: str = "", additional_info: Dict[str, str] = {}):
+    def _save(self, is_checkpoint: bool = False, additional_info: Dict[str, str] = {}):
         output_dir = self.context_.path_
-        if dir_suffix != "":
-            output_dir += os.sep + self.context_.path_ + "_" + dir_suffix
+        if is_checkpoint:
+            checkpoint_dir = "checkpoint_" + "_".join(
+                [
+                    str(self.now_step_),
+                    str(self.now_epoch_),
+                    str(self.now_data_idx_),
+                ]
+            )
+            output_dir = self.context_.path_ + os.sep + checkpoint_dir
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        torch.save(
-            self.context_.weight_dict(), output_dir + os.sep + "adapter_model.bin"
-        )
+        # save to disk, if save checkpoint, we need also save the state dict
+        if is_checkpoint:
+            torch.save(
+                {
+                    "weight_dict": self.context_.weight_dict(),
+                    "state_dict": self.context_.state_dict(),
+                },
+                output_dir + os.sep + "checkpoint.bin",
+            )
+        else:
+            torch.save(
+                self.context_.weight_dict(), output_dir + os.sep + "adapter_model.bin"
+            )
 
         adapter_config: Dict[str, str] = {}
         adapter_config["base_model_name_or_path"] = self.llm_name_
@@ -126,7 +206,7 @@ class TrainTask(Task):
 
     @override
     def done(self):
-        self._save()
+        self._save(is_checkpoint=False)
         # release the context
         del self.context_
 
@@ -137,14 +217,14 @@ class TrainTask(Task):
     @override
     def step(self):
         stepd: bool = False
+        need_checkpoint: bool = False
 
         if self.now_step_ % self.config_.accumulate_step_ == 0:
             stepd = True
             self.context_.step()
 
-        # to save the model
         if self.now_step_ % self.config_.save_step_ == 0:
-            self._save(f"{self.now_step_}")
+            need_checkpoint = True
 
         self.now_step_ += 1
         self.now_data_idx_ += self.config_.mini_batch_size_
@@ -152,6 +232,11 @@ class TrainTask(Task):
         if self.now_data_idx_ >= len(self.data_):
             self.now_epoch_ += 1
             self.now_data_idx_ = 0
+
+        # to save the checkpoint, must ensure the order
+        # beacuse we need recover the state
+        if need_checkpoint:
+            self._save(is_checkpoint=True)
 
         # task finish we also need to step
         if not stepd and self.now_epoch_ >= self.config_.num_epochs_:

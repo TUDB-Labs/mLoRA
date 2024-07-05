@@ -185,26 +185,21 @@ class LoRA(Adapter):
     def init_weight(
         self, lora_a: torch.Tensor | None = None, lora_b: torch.Tensor | None = None
     ):
-        if lora_a is None:
-            torch.nn.init.kaiming_normal_(self.lora_a_, a=math.sqrt(5))
-        else:
-            self.lora_a_ = (
-                lora_a.to("cpu")
-                .detach()
-                .clone()
-                .to(dtype=torch.float32)
-                .requires_grad_(True)
-            )
+        # Gradient calculations are temporarily disabled for copy or init
+        with torch.no_grad():
+            if lora_a is None:
+                torch.nn.init.kaiming_normal_(self.lora_a_, a=math.sqrt(5))
+            else:
+                self.lora_a_.copy_(lora_a)
 
-        if lora_b is not None:
-            self.lora_b_ = (
-                lora_b.to("cpu")
-                .detach()
-                .clone()
-                .to(dtype=torch.float32)
-                .requires_grad_(True)
-            )
+            # lora_b is zero so do not need to init it
+            if lora_b is not None:
+                self.lora_b_.copy_(lora_b)
 
     @override
-    def get_tensors(self) -> List[torch.Tensor]:
+    def get_trainable_tensors(self) -> List[torch.Tensor]:
+        return [self.lora_a_, self.lora_b_]
+
+    @override
+    def get_all_tensors(self) -> List[torch.Tensor]:
         return [self.lora_a_, self.lora_b_]

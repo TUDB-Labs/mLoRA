@@ -22,13 +22,14 @@ class TrainTaskContext(TaskContext):
     lr_scheduler_: torch.optim.lr_scheduler.LRScheduler | None
 
     def __init__(
-        self, config: AdapterConfig, linears_info: OrderedDict[str, LinearInfo]
+        self,
+        config: AdapterConfig,
+        linears_info: OrderedDict[str, LinearInfo],
     ) -> None:
         super().__init__(config)
 
         # load the adapter's weight
         self.load_weight(linears_info)
-
         for module in self.adapter_model_.values():
             module.enable_grad()
 
@@ -38,6 +39,19 @@ class TrainTaskContext(TaskContext):
     @abstractmethod
     def weight_dict(self) -> Dict[str, torch.Tensor]: ...
 
+    @abstractmethod
+    def state_dict(self) -> Dict[str, torch.Tensor]: ...
+
+    # recover_optimizer
+    @abstractmethod
+    def recover_optimizer(self, state_dict: Dict[str, torch.Tensor]): ...
+
+    @abstractmethod
+    def recover_lr(self, now_epoch: int): ...
+
+    @abstractmethod
+    def recover_weight(self, weight_dict: Dict[str, torch.Tensor]): ...
+
     def create_optimizer(self, optim_config: OptimizerConfig | None):
         assert optim_config is not None
 
@@ -46,13 +60,15 @@ class TrainTaskContext(TaskContext):
 
         parameters: List[torch.Tensor] = []
         for adapter in self.adapter_model_.values():
-            parameters.extend(adapter.get_tensors())
+            parameters.extend(adapter.get_trainable_tensors())
 
         self.optimizer_ = OPTIMIZER_CLASS[optimizer_type_](
             parameters, **optim_config.to_fn_parameters()
         )
 
-    def create_lr_scheduler(self, lr_scheduler_config: LRSchedulerConfig | None):
+    def create_lr_scheduler(
+        self, lr_scheduler_config: LRSchedulerConfig | None, last_epoch: int = -1
+    ):
         assert self.optimizer_ is not None
 
         if lr_scheduler_config is None:
@@ -60,9 +76,13 @@ class TrainTaskContext(TaskContext):
             return
 
         lr_scheduler_type_ = lr_scheduler_config.lr_scheduler_
-        assert lr_scheduler_type_ in LR_SCHEDULER_CLASS
+
+        kwargs = lr_scheduler_config.to_fn_parameters()
+        kwargs["last_epoch"] = last_epoch
+
         self.lr_scheduler_ = LR_SCHEDULER_CLASS[lr_scheduler_type_](
-            self.optimizer_, **lr_scheduler_config.to_fn_parameters()  # type: ignore
+            self.optimizer_,
+            **kwargs,  # type: ignore
         )
 
     def switch_device(self, device: str) -> None:
@@ -70,7 +90,7 @@ class TrainTaskContext(TaskContext):
             return
 
         for _, adapter in self.adapter_model_.items():
-            self.switch_list_tensor(adapter.get_tensors(), device)
+            self.switch_list_tensor(adapter.get_all_tensors(), device)
 
         self.switch_optimizer(device)
 

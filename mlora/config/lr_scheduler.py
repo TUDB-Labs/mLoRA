@@ -14,7 +14,7 @@ class LRSchedulerConfig(DictConfig):
         self.init(self.__params_map, config)
 
     @abstractmethod
-    def to_fn_parameters(self) -> Dict[str, str]: ...
+    def to_fn_parameters(self) -> Dict[str, Any]: ...
 
 
 class CosineLRSchedulerConfig(LRSchedulerConfig):
