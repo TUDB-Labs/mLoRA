@@ -10,7 +10,7 @@ datasets:
 adapters:
   - name: "lora_0"
     type: "lora"
-    path: "adapters/lora_sft_lora_with_vera_0"
+    path: "adapters/lora_sft_lora_with_dora_0"
     optimizer: "adamw"
     lr: 3e-4
     r: 32
@@ -24,15 +24,14 @@ adapters:
       gate_proj: false
       down_proj: false
       up_proj: false
-  - name: "vera_0"
-    type: "vera"
-    path: "adapters/lora_sft_lora_with_vera_1"
+  - name: "dora_0"
+    type: "dora"
+    path: "adapters/lora_sft_lora_with_dora_1"
     optimizer: "adamw"
-    lr: 3e-3
-    r: 1024
+    lr: 1e-3
+    r: 32
     alpha: 64
     dropout: 0.05
-    d_initial: 10
     target_modules:
       q_proj: true
       k_proj: true
@@ -53,7 +52,7 @@ tasks:
     save_step: 2000
   - type: "train"
     name: "task_1"
-    adapter: "vera_0"
+    adapter: "dora_0"
     dataset: "data"
     batch_size: 64
     mini_batch_size: 64

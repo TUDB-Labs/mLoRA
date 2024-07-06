@@ -1,6 +1,7 @@
 from .adapter import Adapter, AdapterModel
 from .attention import Attention
 from .decoder import Decoder
+from .dora import DoRA
 from .embedding import Embedding
 from .linear import Linear
 from .lora import LoRA, LoRAFunction
@@ -19,6 +20,7 @@ __all__ = [
     "LoRA",
     "VeRA",
     "vera_shared_weight",
+    "DoRA",
     "LoRAFunction",
     "Attention",
     "MLP",

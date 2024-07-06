@@ -159,6 +159,13 @@ class LoRAFunction(torch.autograd.Function):
 
 
 class LoRA(Adapter):
+    lora_a_: torch.Tensor
+    lora_b_: torch.Tensor
+
+    r_: int
+    dropout_: float
+    scaling_: float
+
     def __init__(
         self,
         adapter_name: str,
@@ -178,7 +185,6 @@ class LoRA(Adapter):
         )
 
         self.r_: int = r
-        self.alpha_: int = alpha
         self.dropout_: float = dropout
         self.scaling_: float = alpha / r
 

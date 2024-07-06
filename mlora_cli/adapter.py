@@ -42,6 +42,7 @@ def adapter_type_set(adapter_conf: Dict[str, Any]):
             "lora",
             "loraplus",
             "vera",
+            "dora",
             separator.Separator(),
         ],
     ).execute()
