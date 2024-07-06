@@ -179,6 +179,7 @@ class Attention(torch.nn.Module):
                 name_=name,
                 in_dim_=module.weight_.in_features,
                 out_dim_=module.weight_.out_features,
+                base_weight_=module.weight_,
             )
 
         return ret_val

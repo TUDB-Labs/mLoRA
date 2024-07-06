@@ -240,6 +240,7 @@ We fine-tuned multiple LoRA adapters using four A6000 graphics cards with fp32 p
 | &check; | [QLoRA](https://arxiv.org/abs/2305.14314),NIPS,2023 |
 | &check; | [LoRA+](https://arxiv.org/abs/2402.12354),ICML,2024 |
 | &check; | [VeRA](https://arxiv.org/abs/2310.11454),ICLR,2024  |
+| &check; | [DoRA](https://arxiv.org/abs/2402.09353),ICML,2024  |
 
 ### Supported preference alignment algorithms
 |         | Variant                                              |

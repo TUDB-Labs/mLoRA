@@ -130,8 +130,17 @@ class VeRAConfig(LoRAConfig):
         }
 
 
+class DoRAConfig(LoRAConfig):
+    __params_map: Dict[str, str] = {}
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.init(self.__params_map, config)
+
+
 ADAPTERCONFIG_CLASS = {
     "lora": LoRAConfig,
     "loraplus": LoRAPlusConfig,
     "vera": VeRAConfig,
+    "dora": DoRAConfig,
 }

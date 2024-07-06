@@ -6,6 +6,7 @@ declare -a test_case_yamls=(
     "demo/checkpoint/checkpoint_case_2.yaml"
     "demo/loraplus/loraplus_case_1.yaml"
     "demo/vera/vera_case_1.yaml"
+    "demo/dora/dora_case_1.yaml"
     "demo/dpo/dpo_case_1.yaml"
     "demo/dpo/dpo_case_2.yaml"
     "demo/dpo/dpo_case_3.yaml"

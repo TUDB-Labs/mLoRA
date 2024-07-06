@@ -1,6 +1,7 @@
 from .adapter import (
     ADAPTERCONFIG_CLASS,
     AdapterConfig,
+    DoRAConfig,
     LoRAConfig,
     LoRAPlusConfig,
     VeRAConfig,
@@ -30,6 +31,7 @@ __all__ = [
     "LoRAConfig",
     "LoRAPlusConfig",
     "VeRAConfig",
+    "DoRAConfig",
     "ADAPTERCONFIG_CLASS",
     "OptimizerConfig",
     "LRSchedulerConfig",

@@ -1,4 +1,4 @@
-from typing import List, MutableMapping, Optional, Tuple
+from typing import Callable, List, MutableMapping, Optional, Tuple
 
 import bitsandbytes
 import torch
@@ -8,6 +8,7 @@ from mlora.model.args import ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
 
 from .adapter import Adapter
+from .dora import DoRA
 from .lora import LoRA, LoRAFunction, get_range_tensor
 from .vera import VeRA
 
@@ -39,8 +40,15 @@ class Linear(torch.nn.Module):
             result = self.weight_.forward(data)
         set_backward_tracepoint(result.grad_fn, "b_linear")
 
-        result = self.__lora_forward(data, input_args, result)
-        result = self.__vera_forward(data, input_args, result)
+        adapter_func_list: List[Callable] = [
+            self.__lora_forward,
+            self.__vera_forward,
+            self.__dora_forward,
+        ]
+
+        for func in adapter_func_list:
+            result = func(data, input_args, result)
+
         return result
 
     def __lora_forward(
@@ -114,6 +122,50 @@ class Linear(torch.nn.Module):
                 )
 
         set_backward_tracepoint(result.grad_fn, "b_vera")
+
+        return result
+
+    def __dora_forward(
+        self, data: torch.Tensor, input_args: ModelData, result: torch.Tensor
+    ) -> torch.Tensor:
+        lora_range = get_range_tensor(data.device, data.shape[0])
+
+        for lora_config in input_args.data_config_:
+            adapter_name = lora_config.adapter_name_
+
+            if adapter_name not in self.adapters_ or not isinstance(
+                self.adapters_[adapter_name], DoRA
+            ):
+                continue
+
+            adapter = self.adapters_[adapter_name]
+
+            start_idx = lora_config.batch_start_idx_
+            end_idx = lora_config.batch_end_idx_
+
+            with nvtx_range("f_dora"):
+                weight_norm = adapter.get_weight_norm()
+                mag_norm_scale = (adapter.magnitude_ / weight_norm).view(1, -1)
+
+                dora_data = F.dropout(
+                    data[start_idx:end_idx],
+                    p=adapter.dropout_,
+                    training=True,
+                    inplace=False,
+                )
+                lora_result = dora_data @ adapter.lora_a_.transpose(0, 1)
+                lora_result = lora_result @ adapter.lora_b_.transpose(0, 1)
+                lora_result = mag_norm_scale * lora_result * adapter.scaling_
+
+                base_result = (
+                    result[start_idx:end_idx] * (mag_norm_scale - 1) + lora_result
+                )
+
+                result = result.index_copy(
+                    dim=0, index=lora_range[start_idx:end_idx], source=base_result
+                )
+
+        set_backward_tracepoint(result.grad_fn, "b_dora")
 
         return result
 

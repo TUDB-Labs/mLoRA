@@ -67,6 +67,7 @@ class LinearInfo:
     name_: str
     in_dim_: int
     out_dim_: int
+    base_weight_: torch.nn.Linear
 
 
 @dataclass
