@@ -5,8 +5,12 @@ import importlib.util
 import logging
 
 
-def is_package_available(pkg_name: str, pkg_version: Optional[str] = None) -> Union[Tuple[bool, str], bool]:
-    # Check we're not importing a "pkg_name" directory somewhere but the actual library by trying to grab the version
+def is_package_available(
+    pkg_name: str,
+        pkg_version: Optional[str] = None,
+) -> Union[Tuple[bool, str], bool]:
+    # Check we're not importing a "pkg_name" directory somewhere
+    # but the actual library by trying to grab the version
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
     if package_exists:
@@ -17,7 +21,8 @@ def is_package_available(pkg_name: str, pkg_version: Optional[str] = None) -> Un
             package_exists = False
         logging.debug(f"Detected {pkg_name} version {package_version}")
     if pkg_version is not None:
-        return package_exists and version.parse(package_version) >= version.parse(pkg_version)
+        return package_exists and version.parse(
+            package_version) >= version.parse(pkg_version)
     else:
         return package_exists
 
