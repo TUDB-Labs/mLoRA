@@ -1,15 +1,15 @@
+from . import glue_tasks, qa_tasks
 from .common import (
-    BasicMetric,
     AutoMetric,
+    BasicMetric,
     BasicTask,
     CasualTask,
-    SequenceClassificationTask,
     CommonSenseTask,
     MultiTask,
+    SequenceClassificationTask,
     task_dict,
 )
 from .qa_tasks import QuestionAnswerTask
-from . import glue_tasks, qa_tasks
 
 glue_tasks.update_task_dict(task_dict)
 qa_tasks.update_task_dict(task_dict)
@@ -24,5 +24,5 @@ __all__ = [
     "CommonSenseTask",
     "QuestionAnswerTask",
     "MultiTask",
-    "task_dict"
+    "task_dict",
 ]

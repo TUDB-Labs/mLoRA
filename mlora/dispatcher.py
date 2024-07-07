@@ -1,20 +1,15 @@
-from .tokenizer import Tokenizer
-from .common import (
-    Tokens,
-    Masks,
-    DataClass,
-    MultiLoraBatchData,
-    LoraBatchDataConfig,
-)
-
-import sys
-import random
 import logging
+import random
+import sys
+from typing import Callable, Dict, List, Union
+
 import datasets
-from typing import Dict, List, Union, Callable
+
+from .common import DataClass, LoraBatchDataConfig, Masks, MultiLoraBatchData, Tokens
+from .tokenizer import Tokenizer
 
 
-class Event():
+class Event:
     __callback_list: List[Callable] = None
 
     def __init__(self):
@@ -36,14 +31,14 @@ def load_dataset(data_path: str):
     if data_path.endswith(".json") or data_path.endswith(".jsonl"):
         return datasets.load_dataset("json", data_files=data_path)
     else:
-        if ':' in data_path:
-            result = data_path.split(':')
+        if ":" in data_path:
+            result = data_path.split(":")
             return datasets.load_dataset(result[0], result[1])
         else:
             return datasets.load_dataset(data_path)
 
 
-class TrainTask():
+class TrainTask:
     tokenizer_: Tokenizer = None
 
     adapter_name_: str = ""
@@ -72,18 +67,20 @@ class TrainTask():
     next_train_data_start_idx_: int = 0
     next_test_data_start_idx_: int = 0
 
-    def __init__(self,
-                 tokenzer: Tokenizer,
-                 adapter_name: str,
-                 dataload_function: Callable,
-                 total_epoch_num: int,
-                 max_train_batch_size: int,
-                 max_train_micro_batch_size: int,
-                 max_test_batch_size: int,
-                 train_cutoff_len: int = 256,
-                 group_by_length: bool = True,
-                 expand_side: str = "right",
-                 expand_token_id: int = 0):
+    def __init__(
+        self,
+        tokenzer: Tokenizer,
+        adapter_name: str,
+        dataload_function: Callable,
+        total_epoch_num: int,
+        max_train_batch_size: int,
+        max_train_micro_batch_size: int,
+        max_test_batch_size: int,
+        train_cutoff_len: int = 256,
+        group_by_length: bool = True,
+        expand_side: str = "right",
+        expand_token_id: int = 0,
+    ):
         self.tokenizer_ = tokenzer
         self.adapter_name_ = adapter_name
         self.dataload_function_ = dataload_function
@@ -102,13 +99,13 @@ class TrainTask():
         for data in self.train_token_data_:
             max_train_tokens_len = max(max_train_tokens_len, len(data.tokens_))
             if len(data.tokens_) > self.train_cutoff_len_:
-                data.tokens_ = data.tokens_[:self.train_cutoff_len_]
+                data.tokens_ = data.tokens_[: self.train_cutoff_len_]
 
         logging.info(
-            f"Max train tokens length: {max_train_tokens_len}/{self.train_cutoff_len_}")
+            f"Max train tokens length: {max_train_tokens_len}/{self.train_cutoff_len_}"
+        )
         if self.group_by_length_:
-            self.train_token_data_.sort(
-                key=lambda x: len(x.tokens_), reverse=True)
+            self.train_token_data_.sort(key=lambda x: len(x.tokens_), reverse=True)
         else:
             random.shuffle(self.train_token_data_)
 
@@ -144,7 +141,8 @@ class TrainTask():
         logging.info(f"{self.adapter_name_} train data:")
         logging.info(
             f"    epoch: {self.epoch_cnt_}/{self.total_epoch_num_} \
-            step in epoch: {start_idx}/{len(self.train_token_data_)}")
+            step in epoch: {start_idx}/{len(self.train_token_data_)}"
+        )
 
         self.next_train_data_start_idx_ += self.max_train_micro_batch_size_
         if self.next_train_data_start_idx_ >= len(self.train_token_data_):
@@ -154,7 +152,7 @@ class TrainTask():
         return ret_data
 
 
-class Dispatcher():
+class Dispatcher:
     config_ = None
     tokenizer_: Tokenizer = None
 
@@ -175,9 +173,7 @@ class Dispatcher():
 
     strategy_: str = ""
 
-    def __init__(self,
-                 config: Dict[str, any],
-                 tokenizer: Tokenizer) -> None:
+    def __init__(self, config: Dict[str, any], tokenizer: Tokenizer) -> None:
         self.tokenizer_ = tokenizer
         self.config_ = config
 
@@ -195,15 +191,18 @@ class Dispatcher():
         # create ready task
         for lora in config["lora"]:
             self.ready_train_task_.append(
-                TrainTask(tokenzer=self.tokenizer_,
-                          adapter_name=lora["name"],
-                          dataload_function=lora["dataloader"],
-                          total_epoch_num=lora["num_epochs"],
-                          max_train_batch_size=lora["batch_size"],
-                          max_train_micro_batch_size=lora["micro_batch_size"],
-                          max_test_batch_size=lora.get("test_batch_size", -1),
-                          train_cutoff_len=config["cutoff_len"],
-                          group_by_length=lora.get("group_by_length", True)))
+                TrainTask(
+                    tokenzer=self.tokenizer_,
+                    adapter_name=lora["name"],
+                    dataload_function=lora["dataloader"],
+                    total_epoch_num=lora["num_epochs"],
+                    max_train_batch_size=lora["batch_size"],
+                    max_train_micro_batch_size=lora["micro_batch_size"],
+                    max_test_batch_size=lora.get("test_batch_size", -1),
+                    train_cutoff_len=config["cutoff_len"],
+                    group_by_length=lora.get("group_by_length", True),
+                )
+            )
 
     def optim_dispatch_strategy(self) -> Dict[str, List[DataClass]]:
         task_len = {}
@@ -215,7 +214,7 @@ class Dispatcher():
         min_need_pad_len = sys.maxsize
         win_start_idx = 0
         for sidx in range(0, len(task_len) - self.train_lora_simultaneously_num_ + 1):
-            win = task_len[sidx:sidx + self.train_lora_simultaneously_num_]
+            win = task_len[sidx : sidx + self.train_lora_simultaneously_num_]
             need_pad_len = 0
             for i in range(1, len(win)):
                 # aligin to the max seq len
@@ -224,13 +223,15 @@ class Dispatcher():
                 min_need_pad_len = need_pad_len
                 win_start_idx = sidx
         # the result is win_start_idx
-        result_win = task_len[win_start_idx:win_start_idx +
-                              self.train_lora_simultaneously_num_]
+        result_win = task_len[
+            win_start_idx : win_start_idx + self.train_lora_simultaneously_num_
+        ]
         ret_train_data = {}
         for result_task_len in result_win:
             task_idx = result_task_len[0]
-            ret_train_data[self.running_train_task_[
-                task_idx].adapter_name_] = self.running_train_task_[task_idx].get_train_data()
+            ret_train_data[self.running_train_task_[task_idx].adapter_name_] = (
+                self.running_train_task_[task_idx].get_train_data()
+            )
 
         return ret_train_data
 
@@ -262,12 +263,14 @@ class Dispatcher():
 
     # ready task -> running task
     def __dispatch_task_in(self):
-        assert len(
-            self.running_train_task_) <= self.train_lora_candidate_num_
+        assert len(self.running_train_task_) <= self.train_lora_candidate_num_
         if len(self.running_train_task_) == self.train_lora_candidate_num_:
             return
         # chose task into running
-        while len(self.running_train_task_) < self.train_lora_candidate_num_ and len(self.ready_train_task_) > 0:
+        while (
+            len(self.running_train_task_) < self.train_lora_candidate_num_
+            and len(self.ready_train_task_) > 0
+        ):
             # TODO to dispatch task
             task = self.ready_train_task_.pop(0)
             # to lazy load data
@@ -283,7 +286,8 @@ class Dispatcher():
                 self.done_train_task_.append(task)
 
         self.running_train_task_ = [
-            task for task in self.running_train_task_ if not task.is_train_done()]
+            task for task in self.running_train_task_ if not task.is_train_done()
+        ]
 
     def get_test_data(self) -> MultiLoraBatchData:
         pass
@@ -315,8 +319,7 @@ class Dispatcher():
         # batch the all adapter data
         adapter_start_idx: int = 0
         for adapter in all_train_data:
-            adapter_end_idx: int = adapter_start_idx + \
-                len(all_train_data[adapter])
+            adapter_end_idx: int = adapter_start_idx + len(all_train_data[adapter])
             for data in all_train_data[adapter]:
                 tokens: Tokens = data.tokens_.copy()
                 # get the pad token from lora config
@@ -341,15 +344,21 @@ class Dispatcher():
                     labels = labels.copy()
                 batch_labels.append(labels)
 
-            lora_batch_data_config.append(LoraBatchDataConfig(adapter_name_=adapter,
-                                                              batch_start_idx_=adapter_start_idx,
-                                                              batch_end_idx_=adapter_end_idx))
+            lora_batch_data_config.append(
+                LoraBatchDataConfig(
+                    adapter_name_=adapter,
+                    batch_start_idx_=adapter_start_idx,
+                    batch_end_idx_=adapter_end_idx,
+                )
+            )
             adapter_start_idx = adapter_end_idx
 
         self.__dispatch_task_out()
 
-        return MultiLoraBatchData(lora_batch_data_config_=lora_batch_data_config,
-                                  batch_tokens_=batch_tokens,
-                                  batch_labels_=batch_labels,
-                                  attention_masks_=attention_masks,
-                                  gradient_checkpoint_="recompute")
+        return MultiLoraBatchData(
+            lora_batch_data_config_=lora_batch_data_config,
+            batch_tokens_=batch_tokens,
+            batch_labels_=batch_labels,
+            attention_masks_=attention_masks,
+            gradient_checkpoint_="recompute",
+        )

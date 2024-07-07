@@ -1,15 +1,16 @@
-from mlora.tokenizer import Tokenizer
-from mlora.prompter import Prompter
-from mlora.common import DataClass
+import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from typing import Any, Dict, List, Tuple, Optional, Callable
 import datasets as hf_datasets
 import evaluate as hf_evaluate
-import logging
 import torch
 
+from mlora.common import DataClass
+from mlora.prompter import Prompter
+from mlora.tokenizer import Tokenizer
 
-class BasicMetric():
+
+class BasicMetric:
     def __init__(self) -> None:
         pass
 
@@ -23,8 +24,8 @@ class BasicMetric():
 class AutoMetric(BasicMetric):
     def __init__(self, task_name: str) -> None:
         super().__init__()
-        if ':' in task_name:
-            split = task_name.split(':')
+        if ":" in task_name:
+            split = task_name.split(":")
             self.metric_ = hf_evaluate.load(split[0], split[1])
         else:
             self.metric_ = hf_evaluate.load(task_name)
@@ -36,7 +37,7 @@ class AutoMetric(BasicMetric):
         return self.metric_.compute()
 
 
-class BasicTask():
+class BasicTask:
     def __init__(self) -> None:
         pass
 
@@ -44,9 +45,9 @@ class BasicTask():
     def peft_task_type(self) -> str:
         pass
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
         pass
 
     def loading_metric(self) -> BasicMetric:
@@ -59,17 +60,15 @@ class BasicTask():
 # Casual Fine-tuning Tasks
 # Instant-Created Class
 class CasualTask(BasicTask):
-    def __init__(self,
-                 data_path: str,
-                 prompt_template: str = None,
-                 validation_size: int = None) -> None:
+    def __init__(
+        self, data_path: str, prompt_template: str = None, validation_size: int = None
+    ) -> None:
         super().__init__()
         # Loading dataset
         if data_path.endswith(".json") or data_path.endswith(".jsonl"):
-            self.dataset_ = hf_datasets.load_dataset(
-                "json", data_files=data_path)
-        elif ':' in data_path:
-            split = data_path.split(':')
+            self.dataset_ = hf_datasets.load_dataset("json", data_files=data_path)
+        elif ":" in data_path:
+            split = data_path.split(":")
             self.dataset_ = hf_datasets.load_dataset(split[0], split[1])
         else:
             self.dataset_ = hf_datasets.load_dataset(data_path)
@@ -77,23 +76,23 @@ class CasualTask(BasicTask):
         self.prompter_ = Prompter(prompt_template)
         # Setup validation set
         if validation_size is not None:
-            self.dataset_ = self.dataset_.train_test_split(
-                test_size=validation_size)
+            self.dataset_ = self.dataset_.train_test_split(test_size=validation_size)
 
     @property
     def peft_task_type(self) -> str:
         return "CAUSAL_LM"
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
         data = self.dataset_["train" if is_train else "test"]
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
             prompt = self.prompter_.generate_prompt(
                 data_point["instruction"],
                 data_point.get("input", None),
-                data_point.get("output", None))
+                data_point.get("output", None),
+            )
             tokens = tokenizer.encode(data=prompt)
             ret.append(DataClass(tokens_=tokens, labels_=None))
             if idx % 10000 == 0:
@@ -132,11 +131,11 @@ class SequenceClassificationTask(BasicTask):
     def peft_task_type(self) -> str:
         return "SEQ_CLS"
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        if ':' in self.task_name_:
-            split = self.task_name_.split(':')
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        if ":" in self.task_name_:
+            split = self.task_name_.split(":")
             data = hf_datasets.load_dataset(split[0], split[1])
         else:
             data = hf_datasets.load_dataset(self.task_name_)
@@ -189,13 +188,13 @@ class MultiTask(BasicTask):
         self.task_type_ = "multi_task"
         self.label_dtype_ = None
         self.task_list_: List[BasicTask] = []
-        task_names = task_names.split(';')
+        task_names = task_names.split(";")
         for name in task_names:
             self.task_list_.append(task_dict[name])
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
         logging.info(f"Preparing data for {len(self.task_list_)} tasks")
         data: List[DataClass] = []
         assert is_train

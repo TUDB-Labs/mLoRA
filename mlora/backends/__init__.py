@@ -1,10 +1,11 @@
-from .common import BasicBackend
-from .cuda import CUDABackend
-from .mps import MPSBackend
-from .cpu import CPUBackend
+import os
 
 import torch
-import os
+
+from .common import BasicBackend
+from .cpu import CPUBackend
+from .cuda import CUDABackend
+from .mps import MPSBackend
 
 _backend: BasicBackend = None
 

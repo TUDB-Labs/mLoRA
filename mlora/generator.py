@@ -1,12 +1,13 @@
-from mlora.common import Tokens, LoraBatchDataConfig, MultiLoraBatchData
-from mlora.tokenizer import Tokenizer
-from mlora.prompter import Prompter
-from mlora.model import LLMModel
-
+import logging
 from dataclasses import dataclass
 from typing import List, Tuple, Union
-import logging
+
 import torch
+
+from mlora.common import LoraBatchDataConfig, MultiLoraBatchData, Tokens
+from mlora.model import LLMModel
+from mlora.prompter import Prompter
+from mlora.tokenizer import Tokenizer
 
 
 @dataclass
@@ -59,7 +60,8 @@ def _logits_sample_top_p(probs, p, filter_value=float("-inf"), min_tokens_to_kee
     sorted_indices_to_remove = cumulative_probs <= (1 - p)
     sorted_indices_to_remove[..., -min_tokens_to_keep:] = 0
     indices_to_remove = sorted_indices_to_remove.scatter(
-        1, sorted_indices, sorted_indices_to_remove)
+        1, sorted_indices, sorted_indices_to_remove
+    )
     return probs.masked_fill(indices_to_remove, filter_value)
 
 
@@ -76,25 +78,25 @@ def _logits_repetition_penalty(prev_tokens, probs, penalty):
     return probs
 
 
-def logits_process(probs: torch.Tensor,
-                   prev_tokens: torch.Tensor,
-                   temperature=1,
-                   top_p=0.9,
-                   top_k=50,
-                   do_sample=True,
-                   repetition_penalty=1.1,
-                   renormalize_logits=True):
+def logits_process(
+    probs: torch.Tensor,
+    prev_tokens: torch.Tensor,
+    temperature=1,
+    top_p=0.9,
+    top_k=50,
+    do_sample=True,
+    repetition_penalty=1.1,
+    renormalize_logits=True,
+):
     process_conditions = any([repetition_penalty > 0])
-    sample_conditions = any(
-        [temperature > 0, top_p > 0 and top_p <= 1.0, top_k > 0])
+    sample_conditions = any([temperature > 0, top_p > 0 and top_p <= 1.0, top_k > 0])
 
     if not do_sample and sample_conditions:
         do_sample = True
         logging.warn("do_sample force to enabled.")
 
     if repetition_penalty > 0:
-        probs = _logits_repetition_penalty(
-            prev_tokens, probs, repetition_penalty)
+        probs = _logits_repetition_penalty(prev_tokens, probs, repetition_penalty)
 
     if process_conditions and renormalize_logits:
         probs = probs.log_softmax(-1)
@@ -124,7 +126,7 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
     outputs = []
     for i, toks in enumerate(tokens.tolist()):
         start = len(prompts[i])
-        toks = toks[start: start + max_gen_len]
+        toks = toks[start : start + max_gen_len]
         if tokenizer.pad_id_ in toks:
             pad_idx = toks.index(tokenizer.pad_id_)
             toks = toks[:pad_idx]
@@ -137,18 +139,22 @@ def gen_outputs(configs, tokenizer, prompts, tokens, max_gen_len):
 
     packed_outputs = {}
     for config in configs:
-        packed_outputs[config.adapter_name] = [config.get_response(
-            output) for output in outputs[config.batch_start_idx_:config.batch_end_idx_]]
+        packed_outputs[config.adapter_name] = [
+            config.get_response(output)
+            for output in outputs[config.batch_start_idx_ : config.batch_end_idx_]
+        ]
 
     return packed_outputs
 
 
 @torch.inference_mode()
-def generate(model: LLMModel,
-             tokenizer: Tokenizer,
-             configs: List[GenerateConfig],
-             max_gen_len=128,
-             stream_callback=None):
+def generate(
+    model: LLMModel,
+    tokenizer: Tokenizer,
+    configs: List[GenerateConfig],
+    max_gen_len=128,
+    stream_callback=None,
+):
 
     device = torch.device(model.device_)
     raw_prompts: List[Tokens] = []
@@ -156,12 +162,14 @@ def generate(model: LLMModel,
     config_dict = {}
     for config in configs:
         config_dict[config.adapter_name] = config
-        tokens = [tokenizer.encode(prompt)
-                  for prompt in config.get_prompts()]
+        tokens = [tokenizer.encode(prompt) for prompt in config.get_prompts()]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
-        batch_data_config.append(LoraBatchDataConfig(
-            config.adapter_name, config.batch_start_idx_, config.batch_end_idx_))
+        batch_data_config.append(
+            LoraBatchDataConfig(
+                config.adapter_name, config.batch_start_idx_, config.batch_end_idx_
+            )
+        )
         raw_prompts.extend(tokens)
 
     batch_size = len(raw_prompts)
@@ -170,8 +178,9 @@ def generate(model: LLMModel,
     assert max_tokens_len <= model.config_.max_seq_len_
     total_len = min(model.config_.max_seq_len_, max_gen_len + max_tokens_len)
 
-    tokens = torch.full((batch_size, total_len),
-                        tokenizer.pad_id_, dtype=torch.int64, device=device)
+    tokens = torch.full(
+        (batch_size, total_len), tokenizer.pad_id_, dtype=torch.int64, device=device
+    )
     for k, t in enumerate(raw_prompts):
         tokens[k, : len(t)] = torch.tensor(t, dtype=torch.int64, device=device)
 
@@ -183,34 +192,41 @@ def generate(model: LLMModel,
             lora_batch_data_config_=batch_data_config,
             batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
             diagonal_pos_=prev_pos + 1,
-            inference_mode_=True)
+            inference_mode_=True,
+        )
         outputs = model.forward(input_data)
         for output in outputs:
             config = config_dict[output.adapter_name]
             start_idx = output.batch_start_idx_
             end_idx = output.batch_end_idx_
 
-            next_token = logits_process(output.logits[:, -1],
-                                        tokens[start_idx:end_idx, :cur_pos],
-                                        config.temperature,
-                                        config.top_p,
-                                        config.top_k,
-                                        config.do_sample,
-                                        config.repetition_penalty,
-                                        config.renormalize_logits)
+            next_token = logits_process(
+                output.logits[:, -1],
+                tokens[start_idx:end_idx, :cur_pos],
+                config.temperature,
+                config.top_p,
+                config.top_k,
+                config.do_sample,
+                config.repetition_penalty,
+                config.renormalize_logits,
+            )
 
             next_token = torch.where(
-                input_text_mask[start_idx:end_idx,
-                                cur_pos], tokens[start_idx:end_idx, cur_pos], next_token
+                input_text_mask[start_idx:end_idx, cur_pos],
+                tokens[start_idx:end_idx, cur_pos],
+                next_token,
             )
             tokens[start_idx:end_idx, cur_pos] = next_token
 
         if stream_callback is not None:
-            stream_callback(cur_pos, gen_outputs(
-                configs, tokenizer, raw_prompts, tokens, max_gen_len))
+            stream_callback(
+                cur_pos,
+                gen_outputs(configs, tokenizer, raw_prompts, tokens, max_gen_len),
+            )
 
         stop_reached |= (~input_text_mask[:, cur_pos]) & (
-            next_token == tokenizer.eos_id_)
+            next_token == tokenizer.eos_id_
+        )
 
         if all(stop_reached):
             break

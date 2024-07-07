@@ -1,15 +1,16 @@
-from .common import Tokens, Masks
-
-from transformers import AutoTokenizer
+import logging
 from typing import List, Union
 
-import logging
+from transformers import AutoTokenizer
+
+from .common import Masks, Tokens
 
 
 class Tokenizer:
     def __init__(self, model_path: str):
         self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path, trust_remote_code=True)
+            model_path, trust_remote_code=True
+        )
         self.vocab_size_ = self.tokenizer.vocab_size
         self.bos_id_ = self.tokenizer.bos_token_id
         self.eos_id_ = self.tokenizer.eos_token_id
@@ -20,23 +21,25 @@ class Tokenizer:
             return
         if self.unk_id_ is None and self.eos_id_ is None:
             logging.warn(
-                "Detecting <eos> and <unk> are None, setting <pad> to 0 by default.")
+                "Detecting <eos> and <unk> are None, setting <pad> to 0 by default."
+            )
             self.pad_id_ = 0
         elif self.unk_id_ is not None:
-            logging.warn(
-                "Detecting <pad> is None, setting to <unk> by default.")
+            logging.warn("Detecting <pad> is None, setting to <unk> by default.")
             self.pad_id_ = self.unk_id_
         elif self.eos_id_ is not None:
-            logging.warn(
-                "Detecting <pad> is None, setting to <eos> by default.")
+            logging.warn("Detecting <pad> is None, setting to <eos> by default.")
             self.pad_id_ = self.eos_id_
 
-    def encode(self, data: Union[str, List[str]], add_special_tokens: bool = True) -> Tokens:
+    def encode(
+        self, data: Union[str, List[str]], add_special_tokens: bool = True
+    ) -> Tokens:
         if isinstance(data, str):
             data = [data]
         tokens = []
         ret = self.tokenizer(
-            data, add_special_tokens=add_special_tokens, return_attention_mask=False).input_ids
+            data, add_special_tokens=add_special_tokens, return_attention_mask=False
+        ).input_ids
         for toks in ret:
             tokens.extend(toks)
         return tokens

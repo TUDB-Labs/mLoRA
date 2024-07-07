@@ -1,11 +1,13 @@
-from .common import BasicMetric, AutoMetric, CommonSenseTask
-from mlora.tokenizer import Tokenizer
-from mlora.common import DataClass
+import logging
 from typing import List
 
 import datasets as hf_datasets
-import logging
 import torch
+
+from mlora.common import DataClass
+from mlora.tokenizer import Tokenizer
+
+from .common import AutoMetric, BasicMetric, CommonSenseTask
 
 
 class QuestionAnswerTask(CommonSenseTask):
@@ -28,16 +30,19 @@ class ARC(QuestionAnswerTask):
         assert subject in ["ARC-Easy", "ARC-Challenge"]
         self.subject_ = subject
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "allenai/ai2_arc", self.subject_)["train" if is_train else "test"]
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("allenai/ai2_arc", self.subject_)[
+            "train" if is_train else "test"
+        ]
         logging.info(f"Preparing data for {self.subject_}")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
-            prompt = "Please choose the correct answer to the question: " + \
-                data_point["question"]
+            prompt = (
+                "Please choose the correct answer to the question: "
+                + data_point["question"]
+            )
             choices = data_point["choices"]
             for label, text in zip(choices["label"], choices["text"]):
                 prompt += f" ({label}) {text}"
@@ -59,16 +64,19 @@ class BoolQ(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["true", "false"])
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "google/boolq")["train" if is_train else "validation"]
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("google/boolq")[
+            "train" if is_train else "validation"
+        ]
         logging.info("Preparing data for BoolQ")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
-            prompt = "Please answer the following question with true or false: " + \
-                f"{data_point['question']}?\nAnswer:"
+            prompt = (
+                "Please answer the following question with true or false: "
+                + f"{data_point['question']}?\nAnswer:"
+            )
             answer = "true" if data_point["answer"] else "false"
             if is_train:
                 prompt += f" {answer}"
@@ -87,16 +95,19 @@ class OpenBookQA(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["A", "B", "C", "D"])
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "allenai/openbookqa", "main")["train" if is_train else "test"]
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("allenai/openbookqa", "main")[
+            "train" if is_train else "test"
+        ]
         logging.info("Preparing data for OpenBookQA")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
-            prompt = "Please choose the correct answer to the question: " + \
-                data_point["question_stem"]
+            prompt = (
+                "Please choose the correct answer to the question: "
+                + data_point["question_stem"]
+            )
             choices = data_point["choices"]
             for label, text in zip(choices["label"], choices["text"]):
                 prompt += f" ({label}) {text}"
@@ -118,11 +129,10 @@ class PIQA(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["A", "B"])
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "piqa")["train" if is_train else "validation"]
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("piqa")["train" if is_train else "validation"]
         logging.info("Preparing data for PIQA")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
@@ -148,11 +158,12 @@ class SIQA(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["A", "B", "C"])
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "social_i_qa")["train" if is_train else "validation"]
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("social_i_qa")[
+            "train" if is_train else "validation"
+        ]
         logging.info("Preparing data for SIQA")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
@@ -162,7 +173,7 @@ class SIQA(QuestionAnswerTask):
             prompt += f"\n(B) {data_point['answerB']}"
             prompt += f"\n(C) {data_point['answerC']}"
             prompt += "\nAnswer:"
-            label = int(data_point['label']) - 1
+            label = int(data_point["label"]) - 1
             if is_train:
                 prompt += f" {self.labels_[label]}"
                 labels = None
@@ -180,15 +191,18 @@ class HellaSwag(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["A", "B", "C", "D"])
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "Rowan/hellaswag")["train" if is_train else "validation"]
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("Rowan/hellaswag")[
+            "train" if is_train else "validation"
+        ]
         logging.info("Preparing data for HellaSwag")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
-            prompt = "Please choose the correct ending to complete the given sentence.\n"
+            prompt = (
+                "Please choose the correct ending to complete the given sentence.\n"
+            )
             prompt += f"Sentence: {data_point['activity_label']}. {data_point['ctx']}"
             for label, text in enumerate(data_point["endings"]):
                 prompt += f"\n({self.labels_[label]}) {text}"
@@ -211,11 +225,12 @@ class WinoGrande(QuestionAnswerTask):
     def __init__(self) -> None:
         super().__init__(["A", "B"])
 
-    def loading_data(self,
-                     tokenizer: Tokenizer,
-                     is_train: bool = True) -> List[DataClass]:
-        data = hf_datasets.load_dataset(
-            "winogrande", "winogrande_debiased")["train" if is_train else "validation"]
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("winogrande", "winogrande_debiased")[
+            "train" if is_train else "validation"
+        ]
         logging.info("Preparing data for WinoGrande")
         ret: List[DataClass] = []
         for idx, data_point in enumerate(data):
@@ -238,13 +253,15 @@ class WinoGrande(QuestionAnswerTask):
 
 
 def update_task_dict(task_dict):
-    task_dict.update({
-        "arc-e": ARC("ARC-Easy"),
-        "arc-c": ARC("ARC-Challenge"),
-        "boolq": BoolQ(),
-        "obqa": OpenBookQA(),
-        "piqa": PIQA(),
-        "siqa": SIQA(),
-        "hellaswag": HellaSwag(),
-        "winogrande": WinoGrande(),
-    })
+    task_dict.update(
+        {
+            "arc-e": ARC("ARC-Easy"),
+            "arc-c": ARC("ARC-Challenge"),
+            "boolq": BoolQ(),
+            "obqa": OpenBookQA(),
+            "piqa": PIQA(),
+            "siqa": SIQA(),
+            "hellaswag": HellaSwag(),
+            "winogrande": WinoGrande(),
+        }
+    )

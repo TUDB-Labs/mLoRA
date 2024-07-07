@@ -1,13 +1,13 @@
 import json
 import logging
 import os.path as osp
-from typing import Optional, Union, Dict
+from typing import Dict, Optional, Union
 
 default_prompt_template = {
     "description": "Default Prompt Template Provided by m-LoRA",
     "prompt_input": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n",
     "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n",
-    "response_split": "### Output:"
+    "response_split": "### Output:",
 }
 
 
@@ -24,8 +24,7 @@ class Prompter:
         else:
             self.template = template
 
-        logging.info(
-            f"Using prompt template: {self.template['description']}")
+        logging.info(f"Using prompt template: {self.template['description']}")
 
     def generate_prompt(
         self,
@@ -40,9 +39,7 @@ class Prompter:
                 instruction=instruction, input=input
             )
         else:
-            res = self.template["prompt_no_input"].format(
-                instruction=instruction
-            )
+            res = self.template["prompt_no_input"].format(instruction=instruction)
         if label:
             res = f"{res}{label}\n"
         logging.debug(res)

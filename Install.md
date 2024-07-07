@@ -75,7 +75,7 @@ conda activate mlora
 pip3 install torch==2.3.1
 pip3 install -r requirements.txt
 # Install extra requirements on Linux
-bash install_linux.sh
+bash misc/install-linux.sh
 ```
 
 ## Verification

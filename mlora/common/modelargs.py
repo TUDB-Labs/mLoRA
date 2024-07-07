@@ -1,12 +1,11 @@
-from typing import Any, List, Dict, Callable
-from transformers.activations import ACT2FN
-from mlora.backends import get_backend
-
+import copy
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, List
 
 import torch
-import copy
+from transformers.activations import ACT2FN
 
+from mlora.backends import get_backend
 
 Tokens = List[int]
 Labels = List[Any]
@@ -105,11 +104,12 @@ class LoraConfig:
         assert isinstance(self.use_dora_, bool)
         assert isinstance(self.use_rslora_, bool)
         assert isinstance(self.lora_init_, str) and self.lora_init_ in [
-            "original", "gaussian"]
+            "original",
+            "gaussian",
+        ]
         assert isinstance(self.lora_r_, int) and self.lora_r_ > 0
         assert isinstance(self.lora_alpha_, int) and self.lora_alpha_ > 0
-        assert isinstance(self.lora_dropout_,
-                          float) and self.lora_dropout_ >= 0
+        assert isinstance(self.lora_dropout_, float) and self.lora_dropout_ >= 0
         assert isinstance(self.target_modules_, Dict)
         for key, value in self.target_modules_.items():
             assert isinstance(key, str) and len(key) > 0
@@ -203,30 +203,34 @@ class MixConfig(LoraConfig):
         super().check()
         if self.expert_config_ is not None:
             self.expert_config_.check()
-        assert isinstance(self.router_aux_loss_coef_,
-                          float) and self.router_aux_loss_coef_ >= 0
-        assert isinstance(self.router_init_range_,
-                          float) and self.router_init_range_ >= 0
-        assert isinstance(self.routing_strategy_,
-                          str) and self.routing_strategy_ in available_routing_strategies
-        assert isinstance(self.jitter_noise_,
-                          float) and self.jitter_noise_ >= 0
+        assert (
+            isinstance(self.router_aux_loss_coef_, float)
+            and self.router_aux_loss_coef_ >= 0
+        )
+        assert (
+            isinstance(self.router_init_range_, float) and self.router_init_range_ >= 0
+        )
+        assert (
+            isinstance(self.routing_strategy_, str)
+            and self.routing_strategy_ in available_routing_strategies
+        )
+        assert isinstance(self.jitter_noise_, float) and self.jitter_noise_ >= 0
         assert isinstance(self.router_loss_, bool)
         assert isinstance(self.num_experts_, int) and self.num_experts_ > 0
-        assert self.act_fn_ is None or (isinstance(
-            self.act_fn_, str) and self.act_fn_ in ACT2FN)
+        assert self.act_fn_ is None or (
+            isinstance(self.act_fn_, str) and self.act_fn_ in ACT2FN
+        )
         if self.routing_strategy_ == "mixtral":
             assert isinstance(self.top_k_, int) and self.top_k_ > 0
         elif self.routing_strategy_ == "switch":
-            assert isinstance(self.router_z_loss_coef_,
-                              float) and self.router_z_loss_coef_ >= 0
+            assert (
+                isinstance(self.router_z_loss_coef_, float)
+                and self.router_z_loss_coef_ >= 0
+            )
             if self.sparse_step_ is not None:
-                assert isinstance(self.sparse_step_,
-                                  int) and self.sparse_step_ > 0
-            assert isinstance(self.expert_capacity_,
-                              int) and self.expert_capacity_ > 0
-            assert isinstance(self.ffn_dropout_,
-                              float) and self.ffn_dropout_ >= 0
+                assert isinstance(self.sparse_step_, int) and self.sparse_step_ > 0
+            assert isinstance(self.expert_capacity_, int) and self.expert_capacity_ > 0
+            assert isinstance(self.ffn_dropout_, float) and self.ffn_dropout_ >= 0
 
         return self
 
@@ -237,7 +241,8 @@ class MixConfig(LoraConfig):
             expert_config.update(config["expert_lora"])
             self.expert_config_ = LoraConfig().from_config(expert_config)
         self.router_aux_loss_coef_ = config.get(
-            "router_aux_loss_coef", 0.001)  # for training
+            "router_aux_loss_coef", 0.001
+        )  # for training
         self.routing_strategy_ = config["routing_strategy"]
         self.router_loss_ = config.get("router_loss", True)
         self.num_experts_ = config["num_experts"]
@@ -252,7 +257,8 @@ class MixConfig(LoraConfig):
             self.router_init_range_ = config.get("router_init_range", 1.0)
             self.jitter_noise_ = config.get("jitter_noise", 0.01)
             self.router_z_loss_coef_ = config.get(
-                "router_z_loss_coef", 0.001)  # for training
+                "router_z_loss_coef", 0.001
+            )  # for training
             # expert_capacity = (max_sequence_length / num_experts) * capacity_factor
             # common values of capacity_factor: 1.0, 1.25, 2.0
             self.expert_capacity_ = config.get("expert_capacity", 32)
@@ -292,7 +298,9 @@ class MixConfig(LoraConfig):
 
 
 def lora_config_factory(config: Dict[str, any]) -> LoraConfig:
-    if ("peft_type" in config and config["peft_type"] == "MIXLORA") or "routing_strategy" in config:
+    if (
+        "peft_type" in config and config["peft_type"] == "MIXLORA"
+    ) or "routing_strategy" in config:
         return MixConfig().from_config(config).check()
     else:
         return LoraConfig().from_config(config).check()

@@ -1,35 +1,35 @@
-from mlora.common import (
-    _flash_attn_available,
-    prepare_4d_causal_attention_mask,
-    scaled_dot_product_attention,
-    precompute_rope_angle,
-    apply_rotary_emb,
-    get_unpad_data,
-    repeat_kv,
-    Masks,
-    Linear,
-    FeedForward,
-    MultiLoraBatchData,
-    CHECKPOINT_CLASSES,
-    LLMModelArgs,
-    LLMAttention,
-    LLMFeedForward,
-    LLMDecoder,
-    LLMForCausalLM,
-)
-from mlora.common.mix_lora import _mixtral_slice_tensor
-from mlora.backends import _backend, get_backend
-from mlora.utils import copy_parameters
-
-from typing import Tuple, Dict, List, Optional
-from transformers.activations import ACT2FN
 from collections import OrderedDict
 from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import transformers.models.llama.modeling_llama as modeling_llama
+from transformers.activations import ACT2FN
+
+from mlora.backends import _backend, get_backend
+from mlora.common import (
+    CHECKPOINT_CLASSES,
+    FeedForward,
+    Linear,
+    LLMAttention,
+    LLMDecoder,
+    LLMFeedForward,
+    LLMForCausalLM,
+    LLMModelArgs,
+    Masks,
+    MultiLoraBatchData,
+    _flash_attn_available,
+    apply_rotary_emb,
+    get_unpad_data,
+    precompute_rope_angle,
+    prepare_4d_causal_attention_mask,
+    repeat_kv,
+    scaled_dot_product_attention,
+)
+from mlora.common.mix_lora import _mixtral_slice_tensor
+from mlora.utils import copy_parameters
 
 if _flash_attn_available:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -43,7 +43,14 @@ class LlamaConfig(LLMModelArgs):
 
 # Multi-headed attention from 'Attention Is All You Need' paper.
 class LlamaAttention(LLMAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: LlamaConfig):
+    def __init__(
+        self,
+        wq: nn.Module,
+        wk: nn.Module,
+        wv: nn.Module,
+        wo: nn.Module,
+        args: LlamaConfig,
+    ):
         super().__init__()
         # attention
         self.wq_: Linear = Linear(wq, args.device_)  # dim * dim
@@ -52,7 +59,11 @@ class LlamaAttention(LLMAttention):
         self.wo_: Linear = Linear(wo, args.device_)  # dim * dim
         # cos and sin
         self.cos_, self.sin_ = precompute_rope_angle(
-            args.dim_ // args.n_heads_, args.max_seq_len_, args.rope_theta_, args.device_)
+            args.dim_ // args.n_heads_,
+            args.max_seq_len_,
+            args.rope_theta_,
+            args.device_,
+        )
         # config
         self.dim_ = args.dim_
         self.n_heads_ = args.n_heads_
@@ -70,10 +81,12 @@ class LlamaAttention(LLMAttention):
             "o_proj": self.wo_,
         }
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_args: MultiLoraBatchData,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
         xq = self.wq_.forward(hidden_states, input_args)
@@ -81,12 +94,15 @@ class LlamaAttention(LLMAttention):
         xv = self.wv_.forward(hidden_states, input_args)
 
         # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_).transpose(
+            1, 2
+        )
+        xk = xk.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
+        xv = xv.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
 
         # apply rotary embedding
         assert xq.dtype == xk.dtype
@@ -98,8 +114,7 @@ class LlamaAttention(LLMAttention):
         xk = repeat_kv(xk, self.n_rep_)
         xv = repeat_kv(xv, self.n_rep_)
 
-        attention_score = scaled_dot_product_attention(
-            xq, xk, xv, attention_mask)
+        attention_score = scaled_dot_product_attention(xq, xk, xv, attention_mask)
 
         attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
 
@@ -108,18 +123,39 @@ class LlamaAttention(LLMAttention):
 
 
 class LlamaFlashAttention(LlamaAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: LlamaConfig):
+    def __init__(
+        self,
+        wq: nn.Module,
+        wk: nn.Module,
+        wv: nn.Module,
+        wo: nn.Module,
+        args: LlamaConfig,
+    ):
         assert _flash_attn_available, "Flash Attention is not available"
         super().__init__(wq, wk, wv, wo, args)
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
     ):
 
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+            (
+                query_states,
+                key_states,
+                value_states,
+                indices_q,
+                cu_seq_lens,
+                max_seq_lens,
+            ) = self._upad_input(
                 query_states, key_states, value_states, attention_mask, query_length
             )
 
@@ -140,31 +176,38 @@ class LlamaFlashAttention(LlamaAttention):
             )
 
             attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length)
+                attn_output_unpad, indices_q, batch_size, query_length
+            )
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal_
+                query_states,
+                key_states,
+                value_states,
+                dropout,
+                softmax_scale=softmax_scale,
+                causal=self.is_causal_,
             )
 
         return attn_output
 
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(
-            attention_mask)
+    def _upad_input(
+        self, query_layer, key_layer, value_layer, attention_mask, query_length
+    ):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len,
-                              num_key_value_heads, head_dim), indices_k
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len,
-                                num_key_value_heads, head_dim), indices_k
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len,
-                                    self.n_heads_, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.n_heads_, head_dim),
+                indices_k,
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -180,7 +223,8 @@ class LlamaFlashAttention(LlamaAttention):
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
             query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask)
+                query_layer, attention_mask
+            )
 
         return (
             query_layer,
@@ -191,10 +235,12 @@ class LlamaFlashAttention(LlamaAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_args: MultiLoraBatchData,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
         xq = self.wq_.forward(hidden_states, input_args)
@@ -202,12 +248,15 @@ class LlamaFlashAttention(LlamaAttention):
         xv = self.wv_.forward(hidden_states, input_args)
 
         # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_).transpose(
+            1, 2
+        )
+        xk = xk.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
+        xv = xv.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
 
         # apply rotary embedding
         assert xq.dtype == xk.dtype
@@ -236,7 +285,8 @@ class LlamaFlashAttention(LlamaAttention):
         ).to(input_dtype)
 
         attn_output = attn_output.reshape(
-            batch_size, max_seq_len, self.dim_).contiguous()
+            batch_size, max_seq_len, self.dim_
+        ).contiguous()
         attn_output = self.wo_.forward(attn_output, input_args)
 
         return attn_output
@@ -249,7 +299,9 @@ LLAMA_ATTENTION_CLASSES = {
 
 
 class LlamaMLP(LLMFeedForward):
-    def __init__(self, w1: nn.Module, w2: nn.Module, w3: nn.Module, args: LlamaConfig) -> None:
+    def __init__(
+        self, w1: nn.Module, w2: nn.Module, w3: nn.Module, args: LlamaConfig
+    ) -> None:
         super().__init__()
         # feed forward
         self.w1_: Linear = Linear(w1, args.device_)
@@ -264,34 +316,42 @@ class LlamaMLP(LLMFeedForward):
             "w3_proj": self.w3_,
         }
 
-    def _batch_forward(self, data: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def _batch_forward(
+        self, data: torch.Tensor, input_args: MultiLoraBatchData
+    ) -> torch.Tensor:
         w1 = self.w1_.forward(data, input_args)
         w3 = self.w3_.forward(data, input_args)
         return self.w2_.forward(self.act_(w1) * w3, input_args)
 
     def _lora_forward(
-            self, lora_name: str, act_fn: nn.Module, data: torch.Tensor) -> torch.Tensor:
+        self, lora_name: str, act_fn: nn.Module, data: torch.Tensor
+    ) -> torch.Tensor:
         # Applying LoRA weights to FFN weights
         if lora_name in self.w1_.loras_:
             w1 = self.w1_.loras_[lora_name].forward(
-                self.w1_.base_layer_.forward(data), data)
+                self.w1_.base_layer_.forward(data), data
+            )
         else:
             w1 = self.w1_.base_layer_.forward(data)
 
         if lora_name in self.w3_.loras_:
             w3 = self.w3_.loras_[lora_name].forward(
-                self.w3_.base_layer_.forward(data), data)
+                self.w3_.base_layer_.forward(data), data
+            )
         else:
             w3 = self.w3_.base_layer_.forward(data)
 
         act_result = act_fn(w1) * w3
         if lora_name in self.w2_.loras_:
             return self.w2_.loras_[lora_name].forward(
-                self.w2_.base_layer_.forward(act_result), act_result)
+                self.w2_.base_layer_.forward(act_result), act_result
+            )
         else:
             return self.w2_.base_layer_.forward(act_result)
 
-    def _mixlora_forward(self, moe_name, act_fn, expert_mask, hidden_states, input_dtype):
+    def _mixlora_forward(
+        self, moe_name, act_fn, expert_mask, hidden_states, input_dtype
+    ):
         common_w1 = self.w1_.base_layer_.forward(hidden_states.to(input_dtype))
         common_w3 = self.w3_.base_layer_.forward(hidden_states.to(input_dtype))
         final_expert_states = []
@@ -300,27 +360,31 @@ class LlamaMLP(LLMFeedForward):
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.w1_.loras_:
-                lora_data = _mixtral_slice_tensor(
-                    hidden_states, top_x, input_dtype)
+                lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
                 w1 = self.w1_.loras_[lora_name].forward(
-                    _mixtral_slice_tensor(common_w1, top_x, input_dtype), lora_data)
+                    _mixtral_slice_tensor(common_w1, top_x, input_dtype), lora_data
+                )
             else:
                 lora_data = None
                 w1 = _mixtral_slice_tensor(common_w1, top_x, input_dtype)
 
             if lora_name in self.w3_.loras_:
-                w3 = self.w3_.loras_[lora_name].forward(_mixtral_slice_tensor(common_w3, top_x, input_dtype),
-                                                        _mixtral_slice_tensor(hidden_states, top_x, input_dtype, lora_data))
+                w3 = self.w3_.loras_[lora_name].forward(
+                    _mixtral_slice_tensor(common_w3, top_x, input_dtype),
+                    _mixtral_slice_tensor(hidden_states, top_x, input_dtype, lora_data),
+                )
             else:
                 w3 = _mixtral_slice_tensor(common_w3, top_x, input_dtype)
 
             act_result = act_fn(w1) * w3
             if lora_name in self.w2_.loras_:
-                final_expert_states.append(self.w2_.loras_[lora_name].forward(
-                    self.w2_.base_layer_.forward(act_result), act_result))
-            else:
                 final_expert_states.append(
-                    self.w2_.base_layer_.forward(act_result))
+                    self.w2_.loras_[lora_name].forward(
+                        self.w2_.base_layer_.forward(act_result), act_result
+                    )
+                )
+            else:
+                final_expert_states.append(self.w2_.base_layer_.forward(act_result))
 
         return final_expert_states
 
@@ -353,22 +417,24 @@ class LlamaDecoderLayer(LLMDecoder):
         linear_layers.update(self.mlp_.state_dict())
         return linear_layers
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                attention_mask: torch.Tensor,
-                input_args: MultiLoraBatchData):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        input_args: MultiLoraBatchData,
+    ):
 
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
         # Self Attention
         hidden_states = self.self_attn_.forward(
-            hidden_states, input_args, attention_mask)
+            hidden_states, input_args, attention_mask
+        )
         hidden_states = residual + hidden_states
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm_(hidden_states)
-        hidden_states, router_logits = self.mlp_.forward(
-            hidden_states, input_args)
+        hidden_states, router_logits = self.mlp_.forward(hidden_states, input_args)
         hidden_states = residual + hidden_states
 
         return hidden_states, *router_logits
@@ -381,8 +447,7 @@ class LlamaEmbedding(nn.Module):
         self.padding_idx_: int = pad_token
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        data = F.embedding(tokens, self.token_embedding_,
-                           padding_idx=self.padding_idx_)
+        data = F.embedding(tokens, self.token_embedding_, padding_idx=self.padding_idx_)
         return data
 
 
@@ -407,7 +472,8 @@ class LlamaSequentialWrapper(nn.Module):
             return (output,) + input[1:]
         elif module_name == "LlamaDecoderLayer":
             outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
-                self.wrapper_module_.forward, *input)
+                self.wrapper_module_.forward, *input
+            )
             if len(outputs) > 1:
                 self.router_probs_ = outputs[1:]
             return (outputs[0],) + input[1:]
@@ -422,8 +488,13 @@ class LlamaForCausalLM(LLMForCausalLM):
         self.vocab_size_ = config.vocab_size_
         self.embed_tokens_: LlamaEmbedding = None
         self.norm_: LlamaEmbedding = None
-        self.lm_head_ = nn.Linear(config.dim_, config.vocab_size_, bias=False,
-                                  dtype=config.dtype_, device=config.device_)
+        self.lm_head_ = nn.Linear(
+            config.dim_,
+            config.vocab_size_,
+            bias=False,
+            dtype=config.dtype_,
+            device=config.device_,
+        )
         self.layers_: List[LlamaDecoderLayer] = []
 
     def decoder_stack(self) -> List[LLMDecoder]:
@@ -432,8 +503,7 @@ class LlamaForCausalLM(LLMForCausalLM):
     def sequential_module(self) -> OrderedDict:
         seq_module = OrderedDict()
 
-        seq_module.update(
-            {"embedding": LlamaSequentialWrapper(self.embed_tokens_)})
+        seq_module.update({"embedding": LlamaSequentialWrapper(self.embed_tokens_)})
         seq_module.move_to_end("embedding")
 
         for index, layer in enumerate(self.layers_):
@@ -441,26 +511,34 @@ class LlamaForCausalLM(LLMForCausalLM):
             seq_module.update({layer_name: LlamaSequentialWrapper(layer)})
             seq_module.move_to_end(layer_name)
 
-        seq_module.update(
-            {"norm": LlamaSequentialWrapper(self.norm_)})
+        seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
         seq_module.move_to_end("norm")
 
         return seq_module
 
-    def causal_mask(self,
-                    input_tokens: torch.Tensor,
-                    additional_mask: List[Masks] = None,
-                    diagonal: int = 1) -> torch.Tensor:
+    def causal_mask(
+        self,
+        input_tokens: torch.Tensor,
+        additional_mask: List[Masks] = None,
+        diagonal: int = 1,
+    ) -> torch.Tensor:
 
-        return prepare_4d_causal_attention_mask(input_tokens=input_tokens, n_heads=1,
-                                                additional_mask=additional_mask, diagonal=diagonal,
-                                                dtype=self.config_.dtype_, device=self.config_.device_)
+        return prepare_4d_causal_attention_mask(
+            input_tokens=input_tokens,
+            n_heads=1,
+            additional_mask=additional_mask,
+            diagonal=diagonal,
+            dtype=self.config_.dtype_,
+            device=self.config_.device_,
+        )
 
     @staticmethod
-    def from_pretrained(llm_model: modeling_llama.LlamaForCausalLM,
-                        attn_impl: str = "eager",
-                        use_sliding_window: bool = False,
-                        device: str = get_backend().device_name() + ":0"):
+    def from_pretrained(
+        llm_model: modeling_llama.LlamaForCausalLM,
+        attn_impl: str = "eager",
+        use_sliding_window: bool = False,
+        device: str = get_backend().device_name() + ":0",
+    ):
         assert not use_sliding_window, "Llama model does not support SWA."
         llm_config: modeling_llama.LlamaConfig = llm_model.config
         llm_args = LlamaConfig(
@@ -487,9 +565,9 @@ class LlamaForCausalLM(LLMForCausalLM):
         model = LlamaForCausalLM(llm_args)
         llm_model.requires_grad_(False)
         model.embed_tokens_ = LlamaEmbedding(
-            llm_model.model.embed_tokens.weight, llm_args.pad_token_id_)
-        model.norm_ = LlamaRMSNorm(
-            llm_model.model.norm.weight, llm_args.rms_norm_eps_)
+            llm_model.model.embed_tokens.weight, llm_args.pad_token_id_
+        )
+        model.norm_ = LlamaRMSNorm(llm_model.model.norm.weight, llm_args.rms_norm_eps_)
         copy_parameters(llm_model.lm_head, model.lm_head_)
 
         for idx, layer in enumerate(llm_model.model.layers):
@@ -501,16 +579,20 @@ class LlamaForCausalLM(LLMForCausalLM):
                 layer.self_attn.o_proj,
                 llm_args,
             )
-            decoder.mlp_ = FeedForward(LlamaMLP(
-                layer.mlp.gate_proj,
-                layer.mlp.down_proj,
-                layer.mlp.up_proj,
-                llm_args,
-            ))
+            decoder.mlp_ = FeedForward(
+                LlamaMLP(
+                    layer.mlp.gate_proj,
+                    layer.mlp.down_proj,
+                    layer.mlp.up_proj,
+                    llm_args,
+                )
+            )
             decoder.input_layernorm_ = LlamaRMSNorm(
-                layer.input_layernorm.weight, llm_args.rms_norm_eps_)
+                layer.input_layernorm.weight, llm_args.rms_norm_eps_
+            )
             decoder.post_attention_layernorm_ = LlamaRMSNorm(
-                layer.post_attention_layernorm.weight, llm_args.rms_norm_eps_)
+                layer.post_attention_layernorm.weight, llm_args.rms_norm_eps_
+            )
             model.layers_.append(decoder)
 
         return model

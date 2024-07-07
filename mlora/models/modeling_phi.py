@@ -1,35 +1,35 @@
-from mlora.common import (
-    _flash_attn_available,
-    prepare_4d_causal_attention_mask,
-    scaled_dot_product_attention,
-    precompute_rope_angle,
-    apply_rotary_emb,
-    get_unpad_data,
-    repeat_kv,
-    Masks,
-    Linear,
-    FeedForward,
-    MultiLoraBatchData,
-    CHECKPOINT_CLASSES,
-    LLMModelArgs,
-    LLMAttention,
-    LLMFeedForward,
-    LLMDecoder,
-    LLMForCausalLM,
-)
-from mlora.common.mix_lora import _mixtral_slice_tensor
-from mlora.backends import _backend, get_backend
-from mlora.utils import copy_parameters
-
-from typing import Tuple, Dict, List, Optional
-from transformers.activations import ACT2FN
 from collections import OrderedDict
 from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import transformers.models.phi.modeling_phi as modeling_phi
+from transformers.activations import ACT2FN
+
+from mlora.backends import _backend, get_backend
+from mlora.common import (
+    CHECKPOINT_CLASSES,
+    FeedForward,
+    Linear,
+    LLMAttention,
+    LLMDecoder,
+    LLMFeedForward,
+    LLMForCausalLM,
+    LLMModelArgs,
+    Masks,
+    MultiLoraBatchData,
+    _flash_attn_available,
+    apply_rotary_emb,
+    get_unpad_data,
+    precompute_rope_angle,
+    prepare_4d_causal_attention_mask,
+    repeat_kv,
+    scaled_dot_product_attention,
+)
+from mlora.common.mix_lora import _mixtral_slice_tensor
+from mlora.utils import copy_parameters
 
 if _flash_attn_available:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -46,14 +46,20 @@ class PhiConfig(LLMModelArgs):
 
 
 @torch.jit.script
-def apply_partial_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, rotary_emb_dim: int, seq_len: int,
-                             cos: torch.Tensor, sin: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def apply_partial_rotary_emb(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    rotary_emb_dim: int,
+    seq_len: int,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     q_rot, q_pass = (
-        xq[..., : rotary_emb_dim],
+        xq[..., :rotary_emb_dim],
         xq[..., rotary_emb_dim:],
     )
     k_rot, k_pass = (
-        xk[..., : rotary_emb_dim],
+        xk[..., :rotary_emb_dim],
         xk[..., rotary_emb_dim:],
     )
     # [batch_size, seq_length, num_heads, head_dim // partial_rotary_factor]
@@ -68,7 +74,14 @@ def apply_partial_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, rotary_emb_dim:
 
 # Multi-headed attention from 'Attention Is All You Need' paper.
 class PhiAttention(LLMAttention):
-    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module, args: PhiConfig):
+    def __init__(
+        self,
+        q_proj: nn.Module,
+        k_proj: nn.Module,
+        v_proj: nn.Module,
+        dense: nn.Module,
+        args: PhiConfig,
+    ):
         super().__init__()
         # attention
         self.wq_: Linear = Linear(q_proj, args.device_)
@@ -84,18 +97,22 @@ class PhiAttention(LLMAttention):
         self.dtype_ = args.dtype_
         self.is_causal_ = True
         # cos and sin
-        self.rotary_emb_dim_ = int(
-            args.partial_rotary_factor_ * self.head_dim_)
+        self.rotary_emb_dim_ = int(args.partial_rotary_factor_ * self.head_dim_)
         self.cos_, self.sin_ = precompute_rope_angle(
-            self.rotary_emb_dim_, args.max_seq_len_, args.rope_theta_, args.device_)
+            self.rotary_emb_dim_, args.max_seq_len_, args.rope_theta_, args.device_
+        )
         # qk norm
         self.qk_layernorm_: bool = args.qk_layernorm_
         if self.qk_layernorm_:
             self.q_layernorm_ = nn.LayerNorm(
-                self.hidden_size_ // self.num_heads_, eps=args.norm_eps_, elementwise_affine=True
+                self.hidden_size_ // self.num_heads_,
+                eps=args.norm_eps_,
+                elementwise_affine=True,
             )
             self.k_layernorm_ = nn.LayerNorm(
-                self.hidden_size_ // self.num_heads_, eps=args.norm_eps_, elementwise_affine=True
+                self.hidden_size_ // self.num_heads_,
+                eps=args.norm_eps_,
+                elementwise_affine=True,
             )
         else:
             self.q_layernorm_ = nn.Identity()
@@ -109,10 +126,12 @@ class PhiAttention(LLMAttention):
             "dense": self.dense_,
         }
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_args: MultiLoraBatchData,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
         xq = self.wq_.forward(hidden_states, input_args)
@@ -123,17 +142,21 @@ class PhiAttention(LLMAttention):
         xk = self.k_layernorm_(xk)
 
         # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_).transpose(
+            1, 2
+        )
+        xk = xk.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
+        xv = xv.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
 
         # partial rotary embedding
         assert xq.dtype == xk.dtype
         xq, xk = apply_partial_rotary_emb(
-            xq, xk, self.rotary_emb_dim_, max_seq_len, self.cos_, self.sin_)
+            xq, xk, self.rotary_emb_dim_, max_seq_len, self.cos_, self.sin_
+        )
 
         # before dim: batch_size, n_kv_head, seq_len, head_dim
         # after dim: batch_size, n_head, seq_len, head_dim
@@ -141,7 +164,8 @@ class PhiAttention(LLMAttention):
         xv = repeat_kv(xv, self.n_rep_)
 
         attention_score = scaled_dot_product_attention(
-            xq.to(torch.float32), xk.to(torch.float32), xv, attention_mask)
+            xq.to(torch.float32), xk.to(torch.float32), xv, attention_mask
+        )
 
         attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
         attention_score = self.dense_.forward(attention_score, input_args)
@@ -150,18 +174,39 @@ class PhiAttention(LLMAttention):
 
 
 class PhiFlashAttention2(PhiAttention):
-    def __init__(self, q_proj: nn.Module, k_proj: nn.Module, v_proj: nn.Module, dense: nn.Module, args: PhiConfig):
+    def __init__(
+        self,
+        q_proj: nn.Module,
+        k_proj: nn.Module,
+        v_proj: nn.Module,
+        dense: nn.Module,
+        args: PhiConfig,
+    ):
         assert _flash_attn_available, "Flash Attention is not available"
         super().__init__(q_proj, k_proj, v_proj, dense, args)
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
     ):
 
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+            (
+                query_states,
+                key_states,
+                value_states,
+                indices_q,
+                cu_seq_lens,
+                max_seq_lens,
+            ) = self._upad_input(
                 query_states, key_states, value_states, attention_mask, query_length
             )
 
@@ -182,31 +227,38 @@ class PhiFlashAttention2(PhiAttention):
             )
 
             attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length)
+                attn_output_unpad, indices_q, batch_size, query_length
+            )
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal_
+                query_states,
+                key_states,
+                value_states,
+                dropout,
+                softmax_scale=softmax_scale,
+                causal=self.is_causal_,
             )
 
         return attn_output
 
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(
-            attention_mask)
+    def _upad_input(
+        self, query_layer, key_layer, value_layer, attention_mask, query_length
+    ):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len,
-                              num_key_value_heads, head_dim), indices_k
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len,
-                                num_key_value_heads, head_dim), indices_k
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len,
-                                    self.num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim),
+                indices_k,
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -222,7 +274,8 @@ class PhiFlashAttention2(PhiAttention):
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
             query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask)
+                query_layer, attention_mask
+            )
 
         return (
             query_layer,
@@ -233,10 +286,12 @@ class PhiFlashAttention2(PhiAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_args: MultiLoraBatchData,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
         xq = self.wq_.forward(hidden_states, input_args)
@@ -247,17 +302,21 @@ class PhiFlashAttention2(PhiAttention):
         xk = self.k_layernorm_(xk)
 
         # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_).transpose(
+            1, 2
+        )
+        xk = xk.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
+        xv = xv.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
 
         # partial rotary embedding
         assert xq.dtype == xk.dtype
         xq, xk = apply_partial_rotary_emb(
-            xq, xk, self.rotary_emb_dim_, max_seq_len, self.cos_, self.sin_)
+            xq, xk, self.rotary_emb_dim_, max_seq_len, self.cos_, self.sin_
+        )
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
@@ -282,7 +341,8 @@ class PhiFlashAttention2(PhiAttention):
         ).to(input_dtype)
 
         attn_output = attn_output.reshape(
-            batch_size, max_seq_len, self.dim_).contiguous()
+            batch_size, max_seq_len, self.dim_
+        ).contiguous()
         attn_output = self.dense_.forward(attn_output, input_args)
 
         return attn_output
@@ -308,17 +368,21 @@ class PhiMLP(LLMFeedForward):
             "fc2": self.fc2_,
         }
 
-    def _batch_forward(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def _batch_forward(
+        self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData
+    ) -> torch.Tensor:
         hidden_states = self.fc1_.forward(hidden_states, input_args)
         hidden_states = self.act_(hidden_states)
         hidden_states = self.fc2_.forward(hidden_states, input_args)
         return hidden_states
 
     def _lora_forward(
-            self, lora_name: str, act_fn: nn.Module, hidden_states: torch.Tensor) -> torch.Tensor:
+        self, lora_name: str, act_fn: nn.Module, hidden_states: torch.Tensor
+    ) -> torch.Tensor:
         if lora_name in self.fc1_.loras_:
             hidden_states = self.fc1_.loras_[lora_name].forward(
-                self.fc1_.base_layer_.forward(hidden_states), hidden_states)
+                self.fc1_.base_layer_.forward(hidden_states), hidden_states
+            )
         else:
             hidden_states = self.fc1_.base_layer_.forward(hidden_states)
 
@@ -326,47 +390,57 @@ class PhiMLP(LLMFeedForward):
 
         if lora_name in self.fc2_.loras_:
             hidden_states = self.fc2_.loras_[lora_name].forward(
-                self.fc2_.base_layer_.forward(hidden_states), hidden_states)
+                self.fc2_.base_layer_.forward(hidden_states), hidden_states
+            )
         else:
             hidden_states = self.fc2_.base_layer_.forward(hidden_states)
 
         return hidden_states
 
-    def _mixlora_forward(self, moe_name, act_fn, expert_mask, hidden_states, input_dtype):
-        common_fc1 = self.fc1_.base_layer_.forward(
-            hidden_states.to(input_dtype))
+    def _mixlora_forward(
+        self, moe_name, act_fn, expert_mask, hidden_states, input_dtype
+    ):
+        common_fc1 = self.fc1_.base_layer_.forward(hidden_states.to(input_dtype))
         final_expert_states = []
         for expert_idx in range(expert_mask.shape[0]):
             _, top_x = torch.where(expert_mask[expert_idx])
 
             lora_name = f"moe.{moe_name}.experts.{expert_idx}"
             if lora_name in self.fc1_.loras_:
-                lora_data = _mixtral_slice_tensor(
-                    hidden_states, top_x, input_dtype)
-                act_result = act_fn(self.fc1_.loras_[lora_name].forward(
-                    _mixtral_slice_tensor(common_fc1, top_x, input_dtype), lora_data))
+                lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
+                act_result = act_fn(
+                    self.fc1_.loras_[lora_name].forward(
+                        _mixtral_slice_tensor(common_fc1, top_x, input_dtype), lora_data
+                    )
+                )
             else:
-                act_result = act_fn(_mixtral_slice_tensor(
-                    common_fc1, top_x, input_dtype))
+                act_result = act_fn(
+                    _mixtral_slice_tensor(common_fc1, top_x, input_dtype)
+                )
 
             if lora_name in self.fc2_.loras_:
-                final_expert_states.append(self.fc2_.loras_[lora_name].forward(
-                    self.fc2_.base_layer_.forward(act_result), act_result))
-            else:
                 final_expert_states.append(
-                    self.fc2_.base_layer_.forward(act_result))
+                    self.fc2_.loras_[lora_name].forward(
+                        self.fc2_.base_layer_.forward(act_result), act_result
+                    )
+                )
+            else:
+                final_expert_states.append(self.fc2_.base_layer_.forward(act_result))
 
         return final_expert_states
 
 
 class PhiDecoderLayer(LLMDecoder):
-    def __init__(self, layer_id: int, self_attn: LLMAttention, mlp: FeedForward, args: PhiConfig) -> None:
+    def __init__(
+        self, layer_id: int, self_attn: LLMAttention, mlp: FeedForward, args: PhiConfig
+    ) -> None:
         super().__init__()
         self.layer_id_: int = layer_id
         self.self_attn_ = self_attn
         self.mlp_ = mlp
         self.input_layernorm_ = nn.LayerNorm(
-            args.dim_, eps=args.layer_norm_eps_, dtype=args.dtype_, device=args.device_)
+            args.dim_, eps=args.layer_norm_eps_, dtype=args.dtype_, device=args.device_
+        )
         self.resid_pdrop_ = args.resid_pdrop_
 
     def state_dict(self) -> Dict[str, nn.Module]:
@@ -374,22 +448,28 @@ class PhiDecoderLayer(LLMDecoder):
         linear_layers.update(self.mlp_.state_dict())
         return linear_layers
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                attention_mask: torch.Tensor,
-                input_args: MultiLoraBatchData):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        input_args: MultiLoraBatchData,
+    ):
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
         # Self Attention
         attn_outputs = self.self_attn_.forward(
-            hidden_states, input_args, attention_mask)
+            hidden_states, input_args, attention_mask
+        )
         attn_outputs = F.dropout(
-            attn_outputs, self.resid_pdrop_, not input_args.inference_mode_)
+            attn_outputs, self.resid_pdrop_, not input_args.inference_mode_
+        )
         # Fully Connected
         feed_forward_outputs, router_logits = self.mlp_.forward(
-            hidden_states, input_args)
+            hidden_states, input_args
+        )
         feed_forward_outputs = F.dropout(
-            feed_forward_outputs, self.resid_pdrop_, not input_args.inference_mode_)
+            feed_forward_outputs, self.resid_pdrop_, not input_args.inference_mode_
+        )
         hidden_states = attn_outputs + feed_forward_outputs + residual
 
         return hidden_states, *router_logits
@@ -398,8 +478,13 @@ class PhiDecoderLayer(LLMDecoder):
 class PhiEmbedding(nn.Module):
     def __init__(self, config: PhiConfig):
         super().__init__()
-        self.embed_tokens = nn.Embedding(config.vocab_size_, config.dim_, config.pad_token_id_,
-                                         dtype=config.dtype_, device=config.device_)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size_,
+            config.dim_,
+            config.pad_token_id_,
+            dtype=config.dtype_,
+            device=config.device_,
+        )
         self.embed_dropout = nn.Dropout(config.embd_pdrop_)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -410,8 +495,12 @@ class PhiEmbedding(nn.Module):
 class PhiLayerNorm(nn.Module):
     def __init__(self, config: PhiConfig) -> None:
         super().__init__()
-        self.layernorm_ = nn.LayerNorm(config.dim_, eps=config.layer_norm_eps_,
-                                       dtype=config.dtype_, device=config.device_)
+        self.layernorm_ = nn.LayerNorm(
+            config.dim_,
+            eps=config.layer_norm_eps_,
+            dtype=config.dtype_,
+            device=config.device_,
+        )
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         return self.layernorm_(data)
@@ -438,7 +527,8 @@ class PhiSequentialWrapper(nn.Module):
             return (output,) + input[1:]
         elif module_name == "PhiDecoderLayer":
             outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
-                self.wrapper_module_.forward, *input)
+                self.wrapper_module_.forward, *input
+            )
             if len(outputs) > 1:
                 self.router_probs_ = outputs[1:]
             return (outputs[0],) + input[1:]
@@ -453,8 +543,13 @@ class PhiForCausalLM(LLMForCausalLM):
         self.vocab_size_ = config.vocab_size_
         self.embed_tokens_ = PhiEmbedding(config)
         self.final_layernorm_ = PhiLayerNorm(config)
-        self.lm_head_ = nn.Linear(config.dim_, config.vocab_size_, bias=True,
-                                  dtype=config.dtype_, device=config.device_)
+        self.lm_head_ = nn.Linear(
+            config.dim_,
+            config.vocab_size_,
+            bias=True,
+            dtype=config.dtype_,
+            device=config.device_,
+        )
         self.layers_: List[PhiDecoderLayer] = []
 
     def decoder_stack(self) -> List[LLMDecoder]:
@@ -463,8 +558,7 @@ class PhiForCausalLM(LLMForCausalLM):
     def sequential_module(self) -> OrderedDict:
         seq_module = OrderedDict()
 
-        seq_module.update(
-            {"embedding": PhiSequentialWrapper(self.embed_tokens_)})
+        seq_module.update({"embedding": PhiSequentialWrapper(self.embed_tokens_)})
         seq_module.move_to_end("embedding")
 
         for index, layer in enumerate(self.layers_):
@@ -472,26 +566,34 @@ class PhiForCausalLM(LLMForCausalLM):
             seq_module.update({layer_name: PhiSequentialWrapper(layer)})
             seq_module.move_to_end(layer_name)
 
-        seq_module.update(
-            {"norm": PhiSequentialWrapper(self.final_layernorm_)})
+        seq_module.update({"norm": PhiSequentialWrapper(self.final_layernorm_)})
         seq_module.move_to_end("norm")
 
         return seq_module
 
-    def causal_mask(self,
-                    input_tokens: torch.Tensor,
-                    additional_mask: List[Masks] = None,
-                    diagonal: int = 1) -> torch.Tensor:
+    def causal_mask(
+        self,
+        input_tokens: torch.Tensor,
+        additional_mask: List[Masks] = None,
+        diagonal: int = 1,
+    ) -> torch.Tensor:
 
-        return prepare_4d_causal_attention_mask(input_tokens=input_tokens, n_heads=1,
-                                                additional_mask=additional_mask, diagonal=diagonal,
-                                                dtype=self.config_.dtype_, device=self.config_.device_)
+        return prepare_4d_causal_attention_mask(
+            input_tokens=input_tokens,
+            n_heads=1,
+            additional_mask=additional_mask,
+            diagonal=diagonal,
+            dtype=self.config_.dtype_,
+            device=self.config_.device_,
+        )
 
     @staticmethod
-    def from_pretrained(llm_model: modeling_phi.PhiForCausalLM,
-                        attn_impl: str = "eager",
-                        use_sliding_window: bool = False,
-                        device: str = get_backend().device_name() + ":0"):
+    def from_pretrained(
+        llm_model: modeling_phi.PhiForCausalLM,
+        attn_impl: str = "eager",
+        use_sliding_window: bool = False,
+        device: str = get_backend().device_name() + ":0",
+    ):
         assert not use_sliding_window, "Phi model does not support SWA."
         llm_config: modeling_phi.PhiConfig = llm_model.config
         llm_args = PhiConfig(
@@ -521,12 +623,11 @@ class PhiForCausalLM(LLMForCausalLM):
 
         model = PhiForCausalLM(llm_args)
         llm_model.requires_grad_(False)
-        copy_parameters(llm_model.model.embed_tokens,
-                        model.embed_tokens_.embed_tokens)
-        copy_parameters(llm_model.model.final_layernorm,
-                        model.final_layernorm_.layernorm_)
-        copy_parameters(llm_model.lm_head,
-                        model.lm_head_)
+        copy_parameters(llm_model.model.embed_tokens, model.embed_tokens_.embed_tokens)
+        copy_parameters(
+            llm_model.model.final_layernorm, model.final_layernorm_.layernorm_
+        )
+        copy_parameters(llm_model.lm_head, model.lm_head_)
 
         for idx, layer in enumerate(llm_model.model.layers):
             decoder = PhiDecoderLayer(
@@ -538,11 +639,13 @@ class PhiForCausalLM(LLMForCausalLM):
                     layer.self_attn.dense,
                     llm_args,
                 ),
-                FeedForward(PhiMLP(
-                    layer.mlp.fc1,
-                    layer.mlp.fc2,
-                    llm_args,
-                )),
+                FeedForward(
+                    PhiMLP(
+                        layer.mlp.fc1,
+                        layer.mlp.fc2,
+                        llm_args,
+                    )
+                ),
                 llm_args,
             )
             copy_parameters(layer.input_layernorm, decoder.input_layernorm_)

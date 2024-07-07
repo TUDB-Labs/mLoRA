@@ -1,9 +1,9 @@
-from .modeling_llama import LlamaForCausalLM
+from .modeling_chatglm import GLMForCausalLM
 from .modeling_gemma import GemmaForCausalLM
+from .modeling_llama import LlamaForCausalLM
 from .modeling_mistral import MistralForCausalLM
 from .modeling_mistral import MistralForCausalLM as Qwen2ForCausalLM
 from .modeling_phi import PhiForCausalLM
-from .modeling_chatglm import GLMForCausalLM
 
 model_dict = {
     "llama": LlamaForCausalLM,
@@ -17,10 +17,11 @@ model_dict = {
 
 def from_pretrained(llm_model, **kwargs):
     if llm_model.config.model_type in model_dict:
-        return model_dict[llm_model.config.model_type].from_pretrained(llm_model, **kwargs)
+        return model_dict[llm_model.config.model_type].from_pretrained(
+            llm_model, **kwargs
+        )
     else:
-        raise RuntimeError(
-            f"Model {llm_model.config.model_type} not supported.")
+        raise RuntimeError(f"Model {llm_model.config.model_type} not supported.")
 
 
 __all__ = [

@@ -1,30 +1,30 @@
-from mlora.models.modeling_llama import (
-    LlamaConfig,
-    LlamaAttention,
-    LlamaMLP,
-    LlamaDecoderLayer,
-    LlamaRMSNorm,
-    LlamaEmbedding,
-    LlamaForCausalLM,
-)
-from mlora.common import (
-    _flash_attn_available,
-    apply_rotary_emb,
-    get_unpad_data,
-    repeat_kv,
-    FeedForward,
-    MultiLoraBatchData,
-)
-from mlora.backends import _backend, get_backend
-from mlora.utils import copy_parameters
-
 from dataclasses import dataclass
 from typing import Optional
 
 import torch
 import torch.nn as nn
-import transformers.models.qwen2.modeling_qwen2 as modeling_qwen2
 import transformers.models.mistral.modeling_mistral as modeling_mistral
+import transformers.models.qwen2.modeling_qwen2 as modeling_qwen2
+
+from mlora.backends import _backend, get_backend
+from mlora.common import (
+    FeedForward,
+    MultiLoraBatchData,
+    _flash_attn_available,
+    apply_rotary_emb,
+    get_unpad_data,
+    repeat_kv,
+)
+from mlora.models.modeling_llama import (
+    LlamaAttention,
+    LlamaConfig,
+    LlamaDecoderLayer,
+    LlamaEmbedding,
+    LlamaForCausalLM,
+    LlamaMLP,
+    LlamaRMSNorm,
+)
+from mlora.utils import copy_parameters
 
 if _flash_attn_available:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -39,7 +39,14 @@ class MistralConfig(LlamaConfig):
 
 
 class MistralFlashAttention(LlamaAttention):
-    def __init__(self, wq: nn.Module, wk: nn.Module, wv: nn.Module, wo: nn.Module, args: MistralConfig):
+    def __init__(
+        self,
+        wq: nn.Module,
+        wk: nn.Module,
+        wv: nn.Module,
+        wo: nn.Module,
+        args: MistralConfig,
+    ):
         assert _flash_attn_available, "Flash Attention is not available"
         super().__init__(wq, wk, wv, wo, args)
         # Qwen2
@@ -62,7 +69,14 @@ class MistralFlashAttention(LlamaAttention):
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+            (
+                query_states,
+                key_states,
+                value_states,
+                indices_q,
+                cu_seq_lens,
+                max_seq_lens,
+            ) = self._upad_input(
                 query_states, key_states, value_states, attention_mask, query_length
             )
 
@@ -94,12 +108,12 @@ class MistralFlashAttention(LlamaAttention):
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
                     causal=self.is_causal_,
-                    window_size=(self.sliding_window_,
-                                 self.sliding_window_),
+                    window_size=(self.sliding_window_, self.sliding_window_),
                 )
 
             attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length)
+                attn_output_unpad, indices_q, batch_size, query_length
+            )
         else:
             if not use_sliding_windows:
                 attn_output = flash_attn_func(
@@ -118,34 +132,35 @@ class MistralFlashAttention(LlamaAttention):
                     dropout,
                     softmax_scale=softmax_scale,
                     causal=self.is_causal_,
-                    window_size=(self.sliding_window_,
-                                 self.sliding_window_),
+                    window_size=(self.sliding_window_, self.sliding_window_),
                 )
 
         return attn_output
 
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+    def _upad_input(
+        self, query_layer, key_layer, value_layer, attention_mask, query_length
+    ):
         batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
 
         # On the first iteration we need to properly re-create the padding mask
         # by slicing it on the proper place
         if kv_seq_len != attention_mask.shape[-1]:
             attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:,
-                                            attention_mask_num_tokens - kv_seq_len:]
+            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
 
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(
-            attention_mask)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
 
-        key_layer = index_first_axis(key_layer.reshape(
-            batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(
-            batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+        )
 
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len,
-                                    num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim),
+                indices_k,
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -161,7 +176,8 @@ class MistralFlashAttention(LlamaAttention):
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
             query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask)
+                query_layer, attention_mask
+            )
 
         return (
             query_layer,
@@ -172,10 +188,12 @@ class MistralFlashAttention(LlamaAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
-    def forward(self,
-                hidden_states: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                attention_mask: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_args: MultiLoraBatchData,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
         xq = self.wq_.forward(hidden_states, input_args)
@@ -183,12 +201,15 @@ class MistralFlashAttention(LlamaAttention):
         xv = self.wv_.forward(hidden_states, input_args)
 
         # conver shape to multi head
-        xq = xq.view(batch_size, max_seq_len, self.n_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xk = xk.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
-        xv = xv.view(batch_size, max_seq_len, self.n_kv_heads_,
-                     self.head_dim_).transpose(1, 2)
+        xq = xq.view(batch_size, max_seq_len, self.n_heads_, self.head_dim_).transpose(
+            1, 2
+        )
+        xk = xk.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
+        xv = xv.view(
+            batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
+        ).transpose(1, 2)
 
         kv_seq_len = xk.shape[-2]
 
@@ -199,7 +220,10 @@ class MistralFlashAttention(LlamaAttention):
         use_sliding_windows = (
             (self.use_sliding_window_ is None or self.use_sliding_window_)
             and (self.sliding_window_ is not None and kv_seq_len > self.sliding_window_)
-            and (self.max_window_layers_ is None or self.layer_id_ < self.max_window_layers_)
+            and (
+                self.max_window_layers_ is None
+                or self.layer_id_ < self.max_window_layers_
+            )
         )
 
         # for llama2 need to repeat the heads
@@ -232,7 +256,8 @@ class MistralFlashAttention(LlamaAttention):
         ).to(input_dtype)
 
         attn_output = attn_output.reshape(
-            batch_size, max_seq_len, self.dim_).contiguous()
+            batch_size, max_seq_len, self.dim_
+        ).contiguous()
         attn_output = self.wo_.forward(attn_output, input_args)
 
         return attn_output
@@ -249,10 +274,12 @@ class MistralForCausalLM(LlamaForCausalLM):
         super().__init__(config)
 
     @staticmethod
-    def from_pretrained(llm_model: modeling_mistral.MistralForCausalLM,
-                        attn_impl: str = "eager",
-                        use_sliding_window: bool = False,
-                        device: str = get_backend().device_name() + ":0"):
+    def from_pretrained(
+        llm_model: modeling_mistral.MistralForCausalLM,
+        attn_impl: str = "eager",
+        use_sliding_window: bool = False,
+        device: str = get_backend().device_name() + ":0",
+    ):
         llm_config: modeling_mistral.MistralConfig = llm_model.config
         llm_args = MistralConfig(
             name_or_path_=llm_config.name_or_path,
@@ -276,7 +303,8 @@ class MistralForCausalLM(LlamaForCausalLM):
 
         if use_sliding_window and attn_impl != "flash_attn":
             raise ValueError(
-                f"Can not use sliding window attention with {attn_impl} attention.")
+                f"Can not use sliding window attention with {attn_impl} attention."
+            )
 
         # compatible with qwen2
         if isinstance(llm_config, modeling_qwen2.Qwen2Config):
@@ -288,30 +316,36 @@ class MistralForCausalLM(LlamaForCausalLM):
         model = MistralForCausalLM(llm_args)
         llm_model.requires_grad_(False)
         model.embed_tokens_ = LlamaEmbedding(
-            llm_model.model.embed_tokens.weight, llm_args.pad_token_id_)
-        model.norm_ = LlamaRMSNorm(
-            llm_model.model.norm.weight, llm_args.rms_norm_eps_)
+            llm_model.model.embed_tokens.weight, llm_args.pad_token_id_
+        )
+        model.norm_ = LlamaRMSNorm(llm_model.model.norm.weight, llm_args.rms_norm_eps_)
         copy_parameters(llm_model.lm_head, model.lm_head_)
 
         for idx, layer in enumerate(llm_model.model.layers):
             decoder = LlamaDecoderLayer(idx)
-            decoder.self_attn_ = MISTRAL_ATTENTION_CLASSES[llm_args.attn_implementation_](
+            decoder.self_attn_ = MISTRAL_ATTENTION_CLASSES[
+                llm_args.attn_implementation_
+            ](
                 layer.self_attn.q_proj,
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
                 layer.self_attn.o_proj,
                 llm_args,
             )
-            decoder.mlp_ = FeedForward(LlamaMLP(
-                layer.mlp.gate_proj,
-                layer.mlp.down_proj,
-                layer.mlp.up_proj,
-                llm_args,
-            ))
+            decoder.mlp_ = FeedForward(
+                LlamaMLP(
+                    layer.mlp.gate_proj,
+                    layer.mlp.down_proj,
+                    layer.mlp.up_proj,
+                    llm_args,
+                )
+            )
             decoder.input_layernorm_ = LlamaRMSNorm(
-                layer.input_layernorm.weight, llm_args.rms_norm_eps_)
+                layer.input_layernorm.weight, llm_args.rms_norm_eps_
+            )
             decoder.post_attention_layernorm_ = LlamaRMSNorm(
-                layer.post_attention_layernorm.weight, llm_args.rms_norm_eps_)
+                layer.post_attention_layernorm.weight, llm_args.rms_norm_eps_
+            )
             model.layers_.append(decoder)
 
         return model

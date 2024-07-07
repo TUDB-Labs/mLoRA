@@ -1,20 +1,21 @@
-from .modelargs import MultiLoraBatchData
-from .modelargs import LoraConfig
-from mlora.backends import _backend, MPSBackend
-from mlora.utils import is_package_available
-
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from mlora.backends import MPSBackend, _backend
+from mlora.utils import is_package_available
+
+from .modelargs import LoraConfig, MultiLoraBatchData
+
 if is_package_available("bitsandbytes"):
-    from bitsandbytes.nn import Linear8bitLt, Linear4bit
     import bitsandbytes as bnb
+    from bitsandbytes.nn import Linear4bit, Linear8bitLt
 else:
     from mlora.utils import Linear8bitLt, Linear4bit
 
-from typing import Any, Dict, Tuple, List
+from typing import Any, Dict, List, Tuple
 
 
 def is_quantized(weight: torch.nn.Parameter):
@@ -38,7 +39,8 @@ def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
     im, Sim = bnb.functional.transform(im, "col32")
     if state.CxB is None:
         state.CxB, state.SB = bnb.functional.transform(
-            weight.data, to_order=state.formatB)
+            weight.data, to_order=state.formatB
+        )
     out32, Sout32 = bnb.functional.igemmlt(im, state.CxB, Sim, state.SB)
     return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
 
@@ -54,19 +56,22 @@ def get_range_tensor(device: torch.device, batch_size: int = 1024):
     if device not in g_cached_range_tensor or batch_size > g_max_range:
         g_max_range = g_max_range if g_max_range > batch_size else batch_size
         g_cached_range_tensor[device] = torch.arange(
-            0, g_max_range, step=1, device=device)
+            0, g_max_range, step=1, device=device
+        )
     return g_cached_range_tensor[device]
 
 
 class LoraFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx,
-                result: torch.Tensor,
-                data: torch.Tensor,
-                input_args: MultiLoraBatchData,
-                dropouts: List[float],
-                scalings: List[float],
-                *args):
+    def forward(
+        ctx,
+        result: torch.Tensor,
+        data: torch.Tensor,
+        input_args: MultiLoraBatchData,
+        dropouts: List[float],
+        scalings: List[float],
+        *args,
+    ):
         # the lora module is f32 precision
         data = data.to(torch.float32)
 
@@ -74,7 +79,11 @@ class LoraFunction(torch.autograd.Function):
 
         lora_range = get_range_tensor(data.device, data.shape[0])
         for lora_a, lora_b, lora_config, dropout, scaling in zip(
-            args[::2], args[1::2], input_args.lora_batch_data_config_, dropouts, scalings
+            args[::2],
+            args[1::2],
+            input_args.lora_batch_data_config_,
+            dropouts,
+            scalings,
         ):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
@@ -134,7 +143,8 @@ class LoraFunction(torch.autograd.Function):
         # the lora module is fp32 precision
         grad_output = grad_output.to(torch.float32)
         lora_range = get_range_tensor(
-            grad_output.device, batch_size=grad_output.shape[0])
+            grad_output.device, batch_size=grad_output.shape[0]
+        )
         for lora_a, lora_b, drop_data, dropout, scaling, lora_config in zip(
             loras[::3],
             loras[1::3],
@@ -161,7 +171,7 @@ class LoraFunction(torch.autograd.Function):
 
             # bstage shape is batch_size * seq_len * r
             bstage = grad_y @ lora_b
-            bstage *= (scaling / (1 - dropout))
+            bstage *= scaling / (1 - dropout)
 
             grad_a = torch.sum(bstage.transpose(1, 2) @ lora_data, dim=0)
             grad_b = torch.sum(grad_y.transpose(1, 2) @ drop_data, dim=0)
@@ -171,11 +181,9 @@ class LoraFunction(torch.autograd.Function):
             if grad_data is not None:
                 grad_x = bstage @ lora_a
                 if isinstance(_backend, MPSBackend):
-                    grad_data.index_add_(
-                        0, lora_range[start_idx:end_idx], grad_x)
+                    grad_data.index_add_(0, lora_range[start_idx:end_idx], grad_x)
                 else:
-                    grad_data.index_copy_(
-                        0, lora_range[start_idx:end_idx], grad_x)
+                    grad_data.index_copy_(0, lora_range[start_idx:end_idx], grad_x)
 
         return (
             grad_result,
@@ -188,11 +196,13 @@ class LoraFunction(torch.autograd.Function):
 
 
 class Lora(nn.Module):
-    def __init__(self,
-                 base_layer: nn.Module,
-                 shape: Tuple[int, int],
-                 config: LoraConfig,
-                 device: str):
+    def __init__(
+        self,
+        base_layer: nn.Module,
+        shape: Tuple[int, int],
+        config: LoraConfig,
+        device: str,
+    ):
 
         super().__init__()
 
@@ -214,9 +224,19 @@ class Lora(nn.Module):
         self.dropout_ = nn.Dropout(p=config.lora_dropout_)
 
         self.lora_a_ = nn.Linear(
-            self.in_features_, self.r_, bias=False, dtype=torch.float32, device=self.device_)
+            self.in_features_,
+            self.r_,
+            bias=False,
+            dtype=torch.float32,
+            device=self.device_,
+        )
         self.lora_b_ = nn.Linear(
-            self.r_, self.out_features_, bias=False, dtype=torch.float32, device=self.device_)
+            self.r_,
+            self.out_features_,
+            bias=False,
+            dtype=torch.float32,
+            device=self.device_,
+        )
 
         self.use_dora_: bool = config.use_dora_
         self.magnitude_vector_: nn.Parameter = None
@@ -232,8 +252,10 @@ class Lora(nn.Module):
         # if the lora_tensor is not (None, None), use it to init the lora weight
         assert isinstance(lora_tensor, Tuple)
         assert len(lora_tensor) == 2
-        assert ((lora_tensor[0] is None) and (lora_tensor[1] is None)) or (isinstance(
-            lora_tensor[0], torch.Tensor) and isinstance(lora_tensor[1], torch.Tensor))
+        assert ((lora_tensor[0] is None) and (lora_tensor[1] is None)) or (
+            isinstance(lora_tensor[0], torch.Tensor)
+            and isinstance(lora_tensor[1], torch.Tensor)
+        )
 
         if lora_tensor == (None, None):
             if self.initializer_ == "original":
@@ -253,18 +275,23 @@ class Lora(nn.Module):
             quant_state = getattr(self.base_layer_, "state", None)
             weight = dequantize_bnb_weight(weight, state=quant_state)
             self.magnitude_vector_ = nn.Parameter(
-                self._get_weight_norm(weight), requires_grad=True).to(self.device_)
+                self._get_weight_norm(weight), requires_grad=True
+            ).to(self.device_)
 
     def apply_dora(
-            self, residual: torch.Tensor, result_lora: torch.Tensor, hidden_states: torch.Tensor):
+        self,
+        residual: torch.Tensor,
+        result_lora: torch.Tensor,
+        hidden_states: torch.Tensor,
+    ):
         weight = self.base_layer_.weight
         if is_quantized(weight):
             # for 8bit and 4bit quantization
             quant_state = getattr(self.base_layer_, "state", None)
-            weight = dequantize_bnb_weight(
-                weight, state=quant_state).to(torch.float32)
+            weight = dequantize_bnb_weight(weight, state=quant_state).to(torch.float32)
             residual = torch.nn.functional.linear(
-                hidden_states.to(torch.float32), weight)
+                hidden_states.to(torch.float32), weight
+            )
         else:
             # for full precision or half precision
             weight = weight.to(torch.float32)
@@ -272,11 +299,17 @@ class Lora(nn.Module):
         mag_norm_scale = (self.magnitude_vector_ / weight_norm).view(1, -1)
         return mag_norm_scale * residual + mag_norm_scale * result_lora
 
-    def forward(self, residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
-        result_lora = self.lora_b_(self.lora_a_(self.dropout_(
-            hidden_states.to(torch.float32)))) * self.scaling_
+    def forward(
+        self, residual: torch.Tensor, hidden_states: torch.Tensor
+    ) -> torch.Tensor:
+        result_lora = (
+            self.lora_b_(self.lora_a_(self.dropout_(hidden_states.to(torch.float32))))
+            * self.scaling_
+        )
         if self.use_dora_:
-            return self.apply_dora(residual, result_lora, hidden_states).to(hidden_states.dtype)
+            return self.apply_dora(residual, result_lora, hidden_states).to(
+                hidden_states.dtype
+            )
         else:
             return residual + result_lora.to(residual.dtype)
 
@@ -287,7 +320,8 @@ class Linear(nn.Module):
 
         if not isinstance(base_layer, nn.Linear):
             assert isinstance(base_layer, Linear8bitLt) or isinstance(
-                base_layer, Linear4bit), f"error type - {type(base_layer)}."
+                base_layer, Linear4bit
+            ), f"error type - {type(base_layer)}."
         else:
             base_layer.requires_grad_(False)
 
@@ -295,32 +329,38 @@ class Linear(nn.Module):
         self.base_layer_ = base_layer.to(self.device_)
         self.loras_: Dict[str, Lora] = {}
 
-    def init_lora_weight(self,
-                         lora_config: LoraConfig,
-                         lora_tensor=(None, None),
-                         adapter_name=None):
+    def init_lora_weight(
+        self, lora_config: LoraConfig, lora_tensor=(None, None), adapter_name=None
+    ):
         if adapter_name is None:
             adapter_name = lora_config.adapter_name
 
         if isinstance(self.base_layer_, Linear4bit):
-            out_dim, in_dim = self.base_layer_.out_features, self.base_layer_.in_features
+            out_dim, in_dim = (
+                self.base_layer_.out_features,
+                self.base_layer_.in_features,
+            )
         else:
             out_dim, in_dim = self.base_layer_.weight.shape
 
         if adapter_name not in self.loras_:
             self.loras_[adapter_name] = Lora(
-                self.base_layer_, (in_dim, out_dim), lora_config, self.device_)
+                self.base_layer_, (in_dim, out_dim), lora_config, self.device_
+            )
 
         self.loras_[adapter_name].reset_parameters(lora_tensor)
 
-    def _appy_dora(self,
-                   residual: torch.Tensor,
-                   lora_delta: torch.Tensor,
-                   hidden_states: torch.Tensor,
-                   input_args: MultiLoraBatchData):
+    def _appy_dora(
+        self,
+        residual: torch.Tensor,
+        lora_delta: torch.Tensor,
+        hidden_states: torch.Tensor,
+        input_args: MultiLoraBatchData,
+    ):
         next_states = torch.zeros_like(residual)
         lora_range = get_range_tensor(
-            next_states.device, batch_size=next_states.shape[0])
+            next_states.device, batch_size=next_states.shape[0]
+        )
         for lora_config in input_args.lora_batch_data_config_:
             adapter_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
@@ -330,15 +370,27 @@ class Linear(nn.Module):
                 continue
 
             if self.loras_[adapter_name].use_dora_:
-                next_states.index_add_(0, lora_range[start_idx:end_idx], self.loras_[adapter_name].apply_dora(
-                    residual[start_idx:end_idx], lora_delta[start_idx:end_idx], hidden_states[start_idx:end_idx]))
+                next_states.index_add_(
+                    0,
+                    lora_range[start_idx:end_idx],
+                    self.loras_[adapter_name].apply_dora(
+                        residual[start_idx:end_idx],
+                        lora_delta[start_idx:end_idx],
+                        hidden_states[start_idx:end_idx],
+                    ),
+                )
             else:
                 next_states.index_add_(
-                    0, lora_range[start_idx:end_idx], residual[start_idx:end_idx] + lora_delta[start_idx:end_idx])
+                    0,
+                    lora_range[start_idx:end_idx],
+                    residual[start_idx:end_idx] + lora_delta[start_idx:end_idx],
+                )
 
         return next_states
 
-    def _efficient_impl(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def _efficient_impl(
+        self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData
+    ) -> torch.Tensor:
         # hidden_states shape is: batch_size * max_seq_len * dim
         # result = hidden_states @ self.weight_.transpose(0, 1)
         residual = self.base_layer_.forward(hidden_states)
@@ -359,8 +411,10 @@ class Linear(nn.Module):
                 scalings.append(None)
                 continue
 
-            loras += (self.loras_[adapter_name].lora_a_.weight,
-                      self.loras_[adapter_name].lora_b_.weight)
+            loras += (
+                self.loras_[adapter_name].lora_a_.weight,
+                self.loras_[adapter_name].lora_b_.weight,
+            )
             dropouts.append(self.loras_[adapter_name].dropout_.p)
             scalings.append(self.loras_[adapter_name].scaling_)
 
@@ -369,16 +423,31 @@ class Linear(nn.Module):
         if have_dora:
             lora_delta = torch.zeros_like(residual, dtype=torch.float32)
             lora_delta = LoraFunction.apply(
-                lora_delta, hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
-            next_states = self._appy_dora(residual.to(
-                torch.float32), lora_delta, hidden_states, input_args)
+                lora_delta,
+                hidden_states.to(torch.float32),
+                input_args,
+                dropouts,
+                scalings,
+                *loras,
+            )
+            next_states = self._appy_dora(
+                residual.to(torch.float32), lora_delta, hidden_states, input_args
+            )
         else:
             next_states = LoraFunction.apply(
-                residual.to(torch.float32), hidden_states.to(torch.float32), input_args, dropouts, scalings, *loras)
+                residual.to(torch.float32),
+                hidden_states.to(torch.float32),
+                input_args,
+                dropouts,
+                scalings,
+                *loras,
+            )
 
         return next_states.to(hidden_states.dtype)
 
-    def _compatible_impl(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def _compatible_impl(
+        self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData
+    ) -> torch.Tensor:
         # hidden_states shape is: batch_size * max_seq_len * dim
         # result = hidden_states @ self.weight_.transpose(0, 1)
         residual = self.base_layer_.forward(hidden_states)
@@ -387,8 +456,7 @@ class Linear(nn.Module):
             return residual
 
         next_states = torch.zeros_like(residual)
-        lora_range = get_range_tensor(
-            hidden_states.device, hidden_states.shape[0])
+        lora_range = get_range_tensor(hidden_states.device, hidden_states.shape[0])
 
         for lora_config in input_args.lora_batch_data_config_:
             adapter_name = lora_config.adapter_name_
@@ -399,12 +467,15 @@ class Linear(nn.Module):
                 continue
 
             lora_data = self.loras_[adapter_name].forward(
-                residual[start_idx: end_idx], hidden_states[start_idx:end_idx])
+                residual[start_idx:end_idx], hidden_states[start_idx:end_idx]
+            )
             next_states.index_add_(0, lora_range[start_idx:end_idx], lora_data)
 
         return next_states
 
-    def forward(self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData
+    ) -> torch.Tensor:
         if input_args.efficient_operator_:
             return self._efficient_impl(hidden_states, input_args)
         else:

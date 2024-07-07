@@ -1,17 +1,3 @@
-from mlora.common import (
-    CHECKPOINT_CLASSES,
-    FeedForward,
-)
-from mlora.models.modeling_llama import (
-    LlamaConfig,
-    LLAMA_ATTENTION_CLASSES as GEMMA_ATTENTION_CLASSES,
-    LlamaMLP,
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-)
-from mlora.backends import get_backend
-from mlora.utils import copy_parameters
-
 from collections import OrderedDict
 from typing import Tuple
 
@@ -19,6 +5,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import transformers.models.gemma.modeling_gemma as modeling_gemma
+
+from mlora.backends import get_backend
+from mlora.common import CHECKPOINT_CLASSES, FeedForward
+from mlora.models.modeling_llama import (
+    LLAMA_ATTENTION_CLASSES as GEMMA_ATTENTION_CLASSES,
+)
+from mlora.models.modeling_llama import (
+    LlamaConfig,
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaMLP,
+)
+from mlora.utils import copy_parameters
 
 
 class GemmaRMSNorm(nn.Module):
@@ -46,8 +45,7 @@ class GemmaEmbedding(nn.Module):
         self.normalizer_: float = normalizer
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        data = F.embedding(tokens, self.token_embedding_,
-                           padding_idx=self.padding_idx_)
+        data = F.embedding(tokens, self.token_embedding_, padding_idx=self.padding_idx_)
         # normalized
         # Gemma downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
@@ -76,7 +74,8 @@ class GemmaSequentialWrapper(nn.Module):
             return (output,) + input[1:]
         elif module_name == "LlamaDecoderLayer":
             outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
-                self.wrapper_module_.forward, *input)
+                self.wrapper_module_.forward, *input
+            )
             if len(outputs) > 1:
                 self.router_probs_ = outputs[1:]
             return (outputs[0],) + input[1:]
@@ -91,8 +90,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
     def sequential_module(self) -> OrderedDict:
         seq_module = OrderedDict()
 
-        seq_module.update(
-            {"embedding": GemmaSequentialWrapper(self.embed_tokens_)})
+        seq_module.update({"embedding": GemmaSequentialWrapper(self.embed_tokens_)})
         seq_module.move_to_end("embedding")
 
         for index, layer in enumerate(self.layers_):
@@ -100,17 +98,18 @@ class GemmaForCausalLM(LlamaForCausalLM):
             seq_module.update({layer_name: GemmaSequentialWrapper(layer)})
             seq_module.move_to_end(layer_name)
 
-        seq_module.update(
-            {"norm": GemmaSequentialWrapper(self.norm_)})
+        seq_module.update({"norm": GemmaSequentialWrapper(self.norm_)})
         seq_module.move_to_end("norm")
 
         return seq_module
 
     @staticmethod
-    def from_pretrained(llm_model: modeling_gemma.GemmaForCausalLM,
-                        attn_impl: str = "eager",
-                        use_sliding_window: bool = False,
-                        device: str = get_backend().device_name() + ":0"):
+    def from_pretrained(
+        llm_model: modeling_gemma.GemmaForCausalLM,
+        attn_impl: str = "eager",
+        use_sliding_window: bool = False,
+        device: str = get_backend().device_name() + ":0",
+    ):
         assert not use_sliding_window, "Gemma model does not support SWA."
         llm_config: modeling_gemma.GemmaConfig = llm_model.config
         llm_args = LlamaConfig(
@@ -137,9 +136,11 @@ class GemmaForCausalLM(LlamaForCausalLM):
         model = GemmaForCausalLM(llm_args)
         llm_model.requires_grad_(False)
         model.embed_tokens_ = GemmaEmbedding(
-            llm_model.model.embed_tokens.weight, llm_args.pad_token_id_, llm_args.dim_**0.5)
-        model.norm_ = GemmaRMSNorm(
-            llm_model.model.norm.weight, llm_args.rms_norm_eps_)
+            llm_model.model.embed_tokens.weight,
+            llm_args.pad_token_id_,
+            llm_args.dim_**0.5,
+        )
+        model.norm_ = GemmaRMSNorm(llm_model.model.norm.weight, llm_args.rms_norm_eps_)
         copy_parameters(llm_model.lm_head, model.lm_head_)
 
         for idx, layer in enumerate(llm_model.model.layers):
@@ -151,16 +152,20 @@ class GemmaForCausalLM(LlamaForCausalLM):
                 layer.self_attn.o_proj,
                 llm_args,
             )
-            decoder.mlp_ = FeedForward(LlamaMLP(
-                layer.mlp.gate_proj,
-                layer.mlp.down_proj,
-                layer.mlp.up_proj,
-                llm_args,
-            ))
+            decoder.mlp_ = FeedForward(
+                LlamaMLP(
+                    layer.mlp.gate_proj,
+                    layer.mlp.down_proj,
+                    layer.mlp.up_proj,
+                    llm_args,
+                )
+            )
             decoder.input_layernorm_ = GemmaRMSNorm(
-                layer.input_layernorm.weight, llm_args.rms_norm_eps_)
+                layer.input_layernorm.weight, llm_args.rms_norm_eps_
+            )
             decoder.post_attention_layernorm_ = GemmaRMSNorm(
-                layer.post_attention_layernorm.weight, llm_args.rms_norm_eps_)
+                layer.post_attention_layernorm.weight, llm_args.rms_norm_eps_
+            )
             model.layers_.append(decoder)
 
         return model

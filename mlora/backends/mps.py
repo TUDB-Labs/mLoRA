@@ -1,6 +1,8 @@
-from .common import BasicBackend
 import contextlib
+
 import torch
+
+from .common import BasicBackend
 
 _mps_bf16_supported = None
 
@@ -13,7 +15,7 @@ class MPSBackend(BasicBackend):
         return "APPLE MPS"
 
     def device_name(self) -> str:
-        return 'mps'
+        return "mps"
 
     def is_available(self) -> bool:
         return torch.backends.mps.is_available()
