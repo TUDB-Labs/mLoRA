@@ -19,13 +19,6 @@ class CITTask(TrainTask):
     pooling_method_: str
 
     @override
-    def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
-        self.tokenizer_ = tokenizer
-        # prepare the dataset and context
-        self._pre_dataset()
-        self._pre_context(linears_info)
-
-    @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
         logging.info(
             f"Adapter {self.context_.name_} epoch: {

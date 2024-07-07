@@ -142,6 +142,7 @@ class CITTaskConfig(TrainTaskConfig):
         self.init(self.__params_map, config)
 
         self.lambda_ = float(self.lambda_)
+        self.temperature_ = float(self.temperature_)
 
 
 TASKCONFIG_CLASS: Dict[str, Type[TaskConfig]] = {
