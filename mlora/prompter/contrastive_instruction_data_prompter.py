@@ -21,5 +21,4 @@ class ContrastiveInstructionDataPrompter(Prompter):
             original_str, paraphrased_str = self.__generate_prompt(data_point)
             original_data.append(original_str)
             paraphrased_data.append(paraphrased_str)
-
         return original_data + paraphrased_data
