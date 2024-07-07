@@ -39,6 +39,12 @@ def _add_base_cmd(parser):
         "--log_level", type=str, default="INFO", help="Set the log level."
     )
     parser.add_argument("--log_file", type=str, help="Save log to specific file.")
+    parser.add_argument(
+        "--metric_file",
+        type=str,
+        default="/tmp/mlora_metric",
+        help="Save metric to specific file.",
+    )
     return parser
 
 

@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple, override
 
 import torch
 
+import mlora.profiler
 from mlora.config import TaskConfig, TrainTaskConfig
 from mlora.executor.context import TrainTaskContext
 from mlora.model.args import LinearInfo, Masks, MLoRADataConfig, Tokens
@@ -86,7 +87,7 @@ class TrainTask(Task):
 
         logging.info(
             f"Task {self.task_name()} have recover directory {to_recover_folder}"
-            "need to recover."
+            " need to recover."
         )
 
         # get the optimizer read the file from now_epoch
@@ -135,9 +136,13 @@ class TrainTask(Task):
                 .view(-1)
                 .to(loss_input.device)
             )
-            loss = self.context_.loss_fn_(loss_input, loss_target)
+            loss: torch.Tensor = self.context_.loss_fn_(loss_input, loss_target)
 
             logging.info(f"Adapter {self.context_.name_} loss: {loss}")
+
+            mlora.profiler.metric_log(
+                self.context_.path_ + "_loss", loss.item(), self.now_step_
+            )
 
             return loss
 
