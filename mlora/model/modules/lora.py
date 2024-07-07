@@ -82,6 +82,30 @@ class LoRAFunction(torch.autograd.Function):
         return result
 
     @staticmethod
+    def init_grad_data(data: torch.Tensor) -> torch.Tensor:
+        # mps do not support mps backend
+        if isinstance(get_backend(), MPSBackend):
+            return torch.zeros_like(data)
+        else:
+            return torch.empty_like(data)
+
+    @staticmethod
+    def in_place_fill_grad_data(grad_data: torch.Tensor, index: torch.Tensor):
+        # mps use zero like, do not need to fill it again
+        if grad_data is not None and not isinstance(get_backend(), MPSBackend):
+            grad_data.index_fill_(0, index, 0)
+
+    @staticmethod
+    def in_place_add_grad_data(
+        grad_data: torch.Tensor, index: torch.Tensor, grad_x: torch.Tensor
+    ):
+        # copy faster than add, but mps do not support copy
+        if isinstance(get_backend(), MPSBackend):
+            grad_data.index_add_(0, index, grad_x)
+        else:
+            grad_data.index_copy_(0, index, grad_x)
+
+    @staticmethod
     def backward(ctx: Any, *grad_outputs: Any) -> Any:
         grad_output: torch.Tensor = grad_outputs[0]
         grad_result = None
@@ -96,15 +120,13 @@ class LoRAFunction(torch.autograd.Function):
         if ctx.needs_input_grad[0]:
             grad_result = grad_output
         if ctx.needs_input_grad[1]:
-            if isinstance(get_backend(), MPSBackend):
-                grad_data = torch.zeros_like(data)
-            else:
-                grad_data = torch.empty_like(data)
+            grad_data = LoRAFunction.init_grad_data(data)
 
         # the lora module is fp32 precision
         grad_output = grad_output.to(torch.float32)
         lora_range = get_range_tensor(
-            grad_output.device, batch_size=grad_output.shape[0])
+            grad_output.device, batch_size=grad_output.shape[0]
+        )
         for lora_a, lora_b, drop_data, dropout, scaling, lora_config in zip(
             loras[::3],
             loras[1::3],
@@ -118,8 +140,10 @@ class LoRAFunction(torch.autograd.Function):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 grad_loras += (None, None)
-                if grad_data is not None and not isinstance(get_backend(), MPSBackend):
-                    grad_data.index_fill_(0, lora_range[start_idx:end_idx], 0)
+                # mps do not supprt empty like, so we need fill it
+                LoRAFunction.in_place_fill_grad_data(
+                    grad_data, lora_range[start_idx:end_idx]
+                )
                 continue
 
             # lora_data shape is batch_size * seq_len * in_dim
@@ -129,7 +153,7 @@ class LoRAFunction(torch.autograd.Function):
 
             # bstage shape is batch_size * seq_len * r
             bstage = grad_y @ lora_b
-            bstage *= (scaling / (1 - dropout))
+            bstage *= scaling / (1 - dropout)
 
             grad_a = torch.sum(bstage.transpose(1, 2) @ lora_data, dim=0)
             grad_b = torch.sum(grad_y.transpose(1, 2) @ drop_data, dim=0)
@@ -138,12 +162,9 @@ class LoRAFunction(torch.autograd.Function):
             # grad_data shape is batch_size * seq_len * in_dim
             if grad_data is not None:
                 grad_x = bstage @ lora_a
-                if isinstance(get_backend(), MPSBackend):
-                    grad_data.index_add_(
-                        0, lora_range[start_idx:end_idx], grad_x)
-                else:
-                    grad_data.index_copy_(
-                        0, lora_range[start_idx:end_idx], grad_x)
+                LoRAFunction.in_place_add_grad_data(
+                    grad_data, lora_range[start_idx:end_idx], grad_x
+                )
 
         return (
             grad_result,
