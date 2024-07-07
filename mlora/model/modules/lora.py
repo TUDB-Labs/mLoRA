@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Tuple, override
 import torch
 import torch.nn.functional as F
 
+from mlora.backends import get_backend, MPSBackend
 from mlora.model.args import ModelData
 
 from .adapter import Adapter
@@ -58,24 +59,17 @@ class LoRAFunction(torch.autograd.Function):
             end_idx = lora_config.batch_end_idx_
 
             # must ensure the dropout is not zero
-            # is dropout == 0
-            #   dropdata is a data's referece, so the data will be changed
-            assert dropout != 0
+            # is dropout == 0, dropdata is a data's referece, so the data will be changed
+            assert dropout > 0.0
 
-            drop_data = F.dropout(
-                data[start_idx:end_idx], p=dropout, training=True, inplace=False
-            )
+            drop_data = F.dropout(data[start_idx:end_idx], p=dropout)
             drop_data.mul_(scaling)
-
             drop_data = drop_data @ lora_a.transpose(0, 1)
-
             lora_data = drop_data @ lora_b.transpose(0, 1)
 
             lora_data = lora_data.to(result.dtype)
 
-            result.index_add_(
-                dim=0, index=lora_range[start_idx:end_idx], source=lora_data
-            )
+            result.index_add_(0, lora_range[start_idx:end_idx], lora_data)
 
             save_inputs += (lora_a, lora_b, drop_data)
 
@@ -96,19 +90,20 @@ class LoRAFunction(torch.autograd.Function):
         grad_scalings = None
         grad_loras: Tuple[torch.Tensor | None, ...] = ()
 
-        data = ctx.saved_tensors[0]
-        loras = ctx.saved_tensors[1:]
+        data, *loras = ctx.saved_tensors
 
         if ctx.needs_input_grad[0]:
             grad_result = grad_output
         if ctx.needs_input_grad[1]:
-            grad_data = torch.empty_like(data)
+            if isinstance(get_backend(), MPSBackend):
+                grad_data = torch.zeros_like(data)
+            else:
+                grad_data = torch.empty_like(data)
 
         # the lora module is fp32 precision
         grad_output = grad_output.to(torch.float32)
         lora_range = get_range_tensor(
-            grad_output.device, batch_size=grad_output.shape[0]
-        )
+            grad_output.device, batch_size=grad_output.shape[0])
         for lora_a, lora_b, drop_data, dropout, scaling, lora_config in zip(
             loras[::3],
             loras[1::3],
@@ -122,10 +117,8 @@ class LoRAFunction(torch.autograd.Function):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 grad_loras += (None, None)
-                if grad_data is not None:
-                    grad_data.index_fill_(
-                        dim=0, index=lora_range[start_idx:end_idx], value=0
-                    )
+                if grad_data is not None and not isinstance(get_backend(), MPSBackend):
+                    grad_data.index_fill_(0, lora_range[start_idx:end_idx], 0)
                 continue
 
             # lora_data shape is batch_size * seq_len * in_dim
@@ -135,7 +128,7 @@ class LoRAFunction(torch.autograd.Function):
 
             # bstage shape is batch_size * seq_len * r
             bstage = grad_y @ lora_b
-            bstage *= scaling / (1 - dropout)
+            bstage *= (scaling / (1 - dropout))
 
             grad_a = torch.sum(bstage.transpose(1, 2) @ lora_data, dim=0)
             grad_b = torch.sum(grad_y.transpose(1, 2) @ drop_data, dim=0)
@@ -144,9 +137,12 @@ class LoRAFunction(torch.autograd.Function):
             # grad_data shape is batch_size * seq_len * in_dim
             if grad_data is not None:
                 grad_x = bstage @ lora_a
-                grad_data.index_copy_(
-                    dim=0, index=lora_range[start_idx:end_idx], source=grad_x
-                )
+                if isinstance(get_backend(), MPSBackend):
+                    grad_data.index_add_(
+                        0, lora_range[start_idx:end_idx], grad_x)
+                else:
+                    grad_data.index_copy_(
+                        0, lora_range[start_idx:end_idx], grad_x)
 
         return (
             grad_result,
