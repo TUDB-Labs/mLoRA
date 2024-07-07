@@ -1,9 +1,10 @@
 import math
-from typing import Any, Dict, List, Tuple, override
+from typing import Any, Dict, List, Optional, Tuple, override
 
 import torch
 import torch.nn.functional as F
 
+from mlora.backends import MPSBackend, get_backend
 from mlora.model.args import ModelData
 
 from .adapter import Adapter
@@ -58,24 +59,18 @@ class LoRAFunction(torch.autograd.Function):
             end_idx = lora_config.batch_end_idx_
 
             # must ensure the dropout is not zero
-            # is dropout == 0
-            #   dropdata is a data's referece, so the data will be changed
-            assert dropout != 0
+            # is dropout == 0, dropdata is a data's referece
+            # so the data will be changed
+            assert dropout > 0.0
 
-            drop_data = F.dropout(
-                data[start_idx:end_idx], p=dropout, training=True, inplace=False
-            )
+            drop_data = F.dropout(data[start_idx:end_idx], p=dropout)
             drop_data.mul_(scaling)
-
             drop_data = drop_data @ lora_a.transpose(0, 1)
-
             lora_data = drop_data @ lora_b.transpose(0, 1)
 
             lora_data = lora_data.to(result.dtype)
 
-            result.index_add_(
-                dim=0, index=lora_range[start_idx:end_idx], source=lora_data
-            )
+            result.index_add_(0, lora_range[start_idx:end_idx], lora_data)
 
             save_inputs += (lora_a, lora_b, drop_data)
 
@@ -87,6 +82,30 @@ class LoRAFunction(torch.autograd.Function):
         return result
 
     @staticmethod
+    def init_grad_data(data: torch.Tensor) -> torch.Tensor:
+        # mps do not support mps backend
+        if isinstance(get_backend(), MPSBackend):
+            return torch.zeros_like(data)
+        else:
+            return torch.empty_like(data)
+
+    @staticmethod
+    def in_place_fill_grad_data(grad_data: Optional[torch.Tensor], index: torch.Tensor):
+        # mps use zero like, do not need to fill it again
+        if grad_data is not None and not isinstance(get_backend(), MPSBackend):
+            grad_data.index_fill_(0, index, 0)
+
+    @staticmethod
+    def in_place_add_grad_data(
+        grad_data: torch.Tensor, index: torch.Tensor, grad_x: torch.Tensor
+    ):
+        # copy faster than add, but mps do not support copy
+        if isinstance(get_backend(), MPSBackend):
+            grad_data.index_add_(0, index, grad_x)
+        else:
+            grad_data.index_copy_(0, index, grad_x)
+
+    @staticmethod
     def backward(ctx: Any, *grad_outputs: Any) -> Any:
         grad_output: torch.Tensor = grad_outputs[0]
         grad_result = None
@@ -96,13 +115,12 @@ class LoRAFunction(torch.autograd.Function):
         grad_scalings = None
         grad_loras: Tuple[torch.Tensor | None, ...] = ()
 
-        data = ctx.saved_tensors[0]
-        loras = ctx.saved_tensors[1:]
+        data, *loras = ctx.saved_tensors
 
         if ctx.needs_input_grad[0]:
             grad_result = grad_output
         if ctx.needs_input_grad[1]:
-            grad_data = torch.empty_like(data)
+            grad_data = LoRAFunction.init_grad_data(data)
 
         # the lora module is fp32 precision
         grad_output = grad_output.to(torch.float32)
@@ -122,10 +140,10 @@ class LoRAFunction(torch.autograd.Function):
             assert not ((lora_a is None) ^ (lora_b is None))
             if lora_a is None and lora_b is None:
                 grad_loras += (None, None)
-                if grad_data is not None:
-                    grad_data.index_fill_(
-                        dim=0, index=lora_range[start_idx:end_idx], value=0
-                    )
+                # mps do not supprt empty like, so we need fill it
+                LoRAFunction.in_place_fill_grad_data(
+                    grad_data, lora_range[start_idx:end_idx]
+                )
                 continue
 
             # lora_data shape is batch_size * seq_len * in_dim
@@ -144,8 +162,8 @@ class LoRAFunction(torch.autograd.Function):
             # grad_data shape is batch_size * seq_len * in_dim
             if grad_data is not None:
                 grad_x = bstage @ lora_a
-                grad_data.index_copy_(
-                    dim=0, index=lora_range[start_idx:end_idx], source=grad_x
+                LoRAFunction.in_place_add_grad_data(
+                    grad_data, lora_range[start_idx:end_idx], grad_x
                 )
 
         return (

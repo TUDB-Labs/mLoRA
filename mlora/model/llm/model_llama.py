@@ -9,6 +9,12 @@ from mlora.model.args import LinearInfo, LLMModelArgs, Masks, ModelData
 from mlora.model.checkpoint import CheckpointRecomputeFunction
 from mlora.model.modules import AdapterModel, Decoder, Embedding, OutputLayer, RMSNorm
 from mlora.profiler import nvtx_wrapper, set_backward_tracepoint
+from mlora.utils import is_package_available
+
+if is_package_available("bitsandbytes"):
+    from transformers import BitsAndBytesConfig
+else:
+    from mlora.utils import BitsAndBytesConfig
 
 from .model_llm import LLMModel
 
@@ -217,8 +223,6 @@ class LlamaModel(LLMModel):
         else:
             load_4bit = precision in ["nf4", "fp4"]
             load_8bit = precision == "int8"
-
-            from transformers import BitsAndBytesConfig
 
             additional_load_args["torch_dtype"] = torch.float32
             additional_load_args["quantization_config"] = BitsAndBytesConfig(

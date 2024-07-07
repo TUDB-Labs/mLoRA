@@ -1,11 +1,16 @@
 from typing import Callable, List, MutableMapping, Optional, Tuple
 
-import bitsandbytes
 import torch
 import torch.nn.functional as F
 
 from mlora.model.args import ModelData
 from mlora.profiler import nvtx_range, set_backward_tracepoint
+from mlora.utils import is_package_available
+
+if is_package_available("bitsandbytes"):
+    from bitsandbytes.nn import Linear4bit, Linear8bitLt
+else:
+    from mlora.utils import Linear8bitLt, Linear4bit
 
 from .adapter import Adapter
 from .dora import DoRA
@@ -20,8 +25,8 @@ class Linear(torch.nn.Module):
         super().__init__()
 
         if not isinstance(weight, torch.nn.Linear):
-            assert isinstance(weight, bitsandbytes.nn.Linear8bitLt) or isinstance(
-                weight, bitsandbytes.nn.Linear4bit
+            assert isinstance(weight, Linear8bitLt) or isinstance(
+                weight, Linear4bit
             ), f"error type - {type(weight)}."
         else:
             weight.requires_grad_(False)
