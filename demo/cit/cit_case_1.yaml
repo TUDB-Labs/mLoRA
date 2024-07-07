@@ -1,0 +1,68 @@
+dispatcher:
+  name: "default"
+  concurrency_num: 2
+datasets:
+  - name: "cit_data"
+    data: "demo/data.json"
+    prompt: "demo/contrastive_instruction_prompt.yaml"
+    prompt_type: "contrastive_instruction"
+    preprocess: "default"
+adapters:
+  - name: "lora_cit"
+    type: "lora"
+    path: "adapters/lora_cit"
+    optimizer: "adamw"
+    lr: 3e-4
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: false
+      down_proj: false
+      up_proj: false
+  - name: "loraplus_cit"
+    type: "loraplus"
+    path: "adapters/loraplus_cit"
+    optimizer: "adamw"
+    lr_ratio: 8
+    lr: 3e-4
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: false
+      down_proj: false
+      up_proj: false
+tasks:
+  - type: "cit"
+    name: "task_0"
+    adapter: "lora_cit"
+    dataset: "cit_data"
+    batch_size: 16
+    mini_batch_size: 16
+    num_epochs: 10
+    cutoff_len: 256
+    save_step: 2000
+    contrastive_pooling_method: "last"
+    lambda: 1.0
+    temperature: 2.0
+  - type: "cit"
+    name: "task_1"
+    adapter: "loraplus_cit"
+    dataset: "cit_data"
+    batch_size: 16
+    mini_batch_size: 16
+    num_epochs: 10
+    cutoff_len: 256
+    save_step: 2000
+    contrastive_pooling_method: "last"
+    lambda: 0.5
+    temperature: 2.0

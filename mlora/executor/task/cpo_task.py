@@ -5,6 +5,7 @@ from typing import List, Tuple, override
 import torch
 import torch.nn.functional as F
 
+import mlora.profiler
 from mlora.config import CPOTaskConfig
 from mlora.executor.context import TrainLoRAContext
 from mlora.model.args import LinearInfo, MLoRADataConfig, Tokens
@@ -95,6 +96,12 @@ class CPOTask(TrainTask):
 
             loss = loss_prefer.mean() + loss_chosen
 
+            mlora.profiler.metric_log(
+                self.context_.path_ + "_loss", loss.item(), self.now_step_
+            )
+            mlora.profiler.metric_log(
+                self.context_.path_ + "_loss_prefer", loss_prefer.item(), self.now_step_
+            )
             logging.info(f"Adapter {self.context_.name_} loss: {loss}")
             return loss
 

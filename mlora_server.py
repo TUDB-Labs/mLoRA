@@ -159,6 +159,7 @@ if __name__ == "__main__":
     mlora.utils.setup_seed(args.seed)
     mlora.utils.setup_logging(args.log_level, args.log_file)
     mlora.utils.setup_cuda_check()
+    mlora.utils.setup_metric_logger(args.metric_file)
 
     backend_server_run_process = multiprocessing.Process(
         target=backend_server_run_fn, args=(args,)

@@ -6,7 +6,13 @@ from .package import (
     NoneContexts,
     is_package_available,
 )
-from .setup import setup_cuda_check, setup_logging, setup_seed, setup_trace_mode
+from .setup import (
+    setup_cuda_check,
+    setup_logging,
+    setup_metric_logger,
+    setup_seed,
+    setup_trace_mode,
+)
 
 __all__ = [
     "get_cmd_args",
@@ -20,4 +26,5 @@ __all__ = [
     "Linear4bit",
     "BitsAndBytesConfig",
     "NoneContexts",
+    "setup_metric_logger",
 ]

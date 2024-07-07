@@ -12,6 +12,7 @@ from .mlora import MLoRAConfig, MLoRAServerConfig
 from .optimizer import OptimizerConfig
 from .task import (
     TASKCONFIG_CLASS,
+    CITTaskConfig,
     CPOTaskConfig,
     DPOTaskConfig,
     TaskConfig,
@@ -26,6 +27,7 @@ __all__ = [
     "TrainTaskConfig",
     "DPOTaskConfig",
     "CPOTaskConfig",
+    "CITTaskConfig",
     "TASKCONFIG_CLASS",
     "AdapterConfig",
     "LoRAConfig",

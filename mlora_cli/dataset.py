@@ -71,6 +71,7 @@ def create_dataset(obj):
             separator.Separator(),
             "instruction",
             "preference",
+            "contrastive_instruction",
             separator.Separator(),
         ],
     ).execute()
