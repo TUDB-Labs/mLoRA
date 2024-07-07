@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple, override
 import torch
 import torch.nn.functional as F
 
-from mlora.backends import get_backend, MPSBackend
+from mlora.backends import MPSBackend, get_backend
 from mlora.model.args import ModelData
 
 from .adapter import Adapter

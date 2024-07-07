@@ -1,7 +1,9 @@
-from .common import BasicBackend
 import contextlib
 import logging
+
 import torch
+
+from .common import BasicBackend
 
 _cpu_bf16_supported = None
 
@@ -14,7 +16,7 @@ class CPUBackend(BasicBackend):
         return "CPU"
 
     def device_name(self) -> str:
-        return 'cpu'
+        return "cpu"
 
     def is_available(self) -> bool:
         return True
@@ -54,5 +56,5 @@ class CPUBackend(BasicBackend):
             torch.set_rng_state(cpu_rng_state)
 
     def check_available(self):
-        logging.info(f'{self.name()} initialized successfully.')
+        logging.info(f"{self.name()} initialized successfully.")
         return True

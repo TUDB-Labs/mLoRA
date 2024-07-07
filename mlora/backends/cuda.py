@@ -1,5 +1,6 @@
-from .common import BasicBackend
 import torch
+
+from .common import BasicBackend
 
 
 class CUDABackend(BasicBackend):
@@ -11,7 +12,7 @@ class CUDABackend(BasicBackend):
         return "NVIDIA CUDA"
 
     def device_name(self) -> str:
-        return 'cuda'
+        return "cuda"
 
     def is_available(self) -> bool:
         return torch.cuda.is_available()

@@ -8,7 +8,7 @@ from mlora.profiler import nvtx_range, set_backward_tracepoint
 from mlora.utils import is_package_available
 
 if is_package_available("bitsandbytes"):
-    from bitsandbytes.nn import Linear8bitLt, Linear4bit
+    from bitsandbytes.nn import Linear4bit, Linear8bitLt
 else:
     from mlora.utils import Linear8bitLt, Linear4bit
 
@@ -26,7 +26,8 @@ class Linear(torch.nn.Module):
 
         if not isinstance(weight, torch.nn.Linear):
             assert isinstance(weight, Linear8bitLt) or isinstance(
-                weight, Linear4bit), f"error type - {type(weight)}."
+                weight, Linear4bit
+            ), f"error type - {type(weight)}."
         else:
             weight.requires_grad_(False)
 

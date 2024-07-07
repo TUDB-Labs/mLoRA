@@ -1,13 +1,14 @@
-from typing import Tuple, Union, Optional
-from packaging import version
 import importlib.metadata
 import importlib.util
 import logging
+from typing import Optional, Tuple, Union
+
+from packaging import version
 
 
 def is_package_available(
     pkg_name: str,
-        pkg_version: Optional[str] = None,
+    pkg_version: Optional[str] = None,
 ) -> Union[Tuple[bool, str], bool]:
     # Check we're not importing a "pkg_name" directory somewhere
     # but the actual library by trying to grab the version
@@ -21,8 +22,9 @@ def is_package_available(
             package_exists = False
         logging.debug(f"Detected {pkg_name} version {package_version}")
     if pkg_version is not None:
-        return package_exists and version.parse(
-            package_version) >= version.parse(pkg_version)
+        return package_exists and version.parse(package_version) >= version.parse(
+            pkg_version
+        )
     else:
         return package_exists
 

@@ -1,7 +1,9 @@
-from mlora.utils import NoneContexts
 import logging
 import random
+
 import torch
+
+from mlora.utils import NoneContexts
 
 
 class BasicBackend:
@@ -41,7 +43,8 @@ class BasicBackend:
 
     def fork_rng(self, rng_devices: list):
         return torch.random.fork_rng(
-            devices=rng_devices, device_type=self.device_name())
+            devices=rng_devices, device_type=self.device_name()
+        )
 
     def autocast(self, **kwargs):
         return NoneContexts()
@@ -53,5 +56,5 @@ class BasicBackend:
         if not self.is_initialized():
             logging.error(f"{self.name()} not initialized.")
             return False
-        logging.info(f'{self.name()} initialized successfully.')
+        logging.info(f"{self.name()} initialized successfully.")
         return True
