@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, List, Tuple, override
+from typing import Any, Dict, List, Optional, Tuple, override
 
 import torch
 import torch.nn.functional as F
@@ -90,7 +90,7 @@ class LoRAFunction(torch.autograd.Function):
             return torch.empty_like(data)
 
     @staticmethod
-    def in_place_fill_grad_data(grad_data: torch.Tensor, index: torch.Tensor):
+    def in_place_fill_grad_data(grad_data: Optional[torch.Tensor], index: torch.Tensor):
         # mps use zero like, do not need to fill it again
         if grad_data is not None and not isinstance(get_backend(), MPSBackend):
             grad_data.index_fill_(0, index, 0)

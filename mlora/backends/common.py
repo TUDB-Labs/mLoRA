@@ -8,19 +8,19 @@ from mlora.utils import NoneContexts
 
 class BasicBackend:
     def name(self) -> str:
-        pass
+        return "none"
 
     def device_name(self) -> str:
-        pass
+        return "null"
 
     def is_available(self) -> bool:
-        pass
+        return False
 
     def is_initialized(self) -> bool:
-        pass
+        return False
 
     def is_bf16_supported(self) -> bool:
-        pass
+        return False
 
     def manual_seed(self, seed: int):
         random.seed(seed)

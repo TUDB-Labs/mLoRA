@@ -16,6 +16,7 @@
 #
 # Github:  https://github.com/TUDB-Labs/mLoRA
 
+import mlora.model
 import mlora.utils
 import mlora.executor
 import mlora.executor.task
@@ -73,7 +74,8 @@ def backend_server_run_fn(args):
 
     root_dir_list = mlora.server.root_dir_list()
     root_dir_list = dict(
-        map(lambda kv: (kv[0], os.path.join(args.root, kv[1])), root_dir_list.items())
+        map(lambda kv: (kv[0], os.path.join(
+            args.root, kv[1])), root_dir_list.items())
     )
 
     mlora.server.set_root_dir_list(root_dir_list)
@@ -164,7 +166,7 @@ if __name__ == "__main__":
     backend_server_run_process.start()
 
     logging.info("Start the backend model run process")
-    tokenizer, model = mlora.utils.load_model(args)
+    tokenizer, model = mlora.model.load_model(args)
     config = mlora.config.MLoRAServerConfig(
         {"name": "backend", "concurrency_num": args.concurrency_num}
     )

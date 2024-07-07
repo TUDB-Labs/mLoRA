@@ -16,6 +16,7 @@
 #
 # Github:  https://github.com/TUDB-Labs/mLoRA
 
+import mlora.model
 import mlora.utils
 import mlora.executor
 import mlora.config
@@ -31,7 +32,7 @@ if __name__ == "__main__":
     if args.trace:
         mlora.utils.setup_trace_mode()
 
-    tokenizer, model = mlora.utils.load_model(args)
+    tokenizer, model = mlora.model.load_model(args)
     config = mlora.config.MLoRAConfig(args.config)
 
     # init all task from config file

@@ -31,7 +31,7 @@ def is_package_available(
 
 class Unsubscribable:
     def __init__(self) -> None:
-        raise RuntimeError(f"Instant unsubscribable class {__class__}")
+        raise RuntimeError(f"Instant unsubscribable class {self.__class__}")
 
 
 # Class Placeholder for Bitsandbytes
