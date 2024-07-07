@@ -50,10 +50,10 @@ class DoRA(LoRA):
         with torch.no_grad():
             # the dim is out_dim * in_dim
             lora_weight = self.scaling_ * (self.lora_b_ @ self.lora_a_)
-            weight = (
-                lora_weight.to(self.base_weight_.weight.device)
-                + self.base_weight_.weight
-            )
+            ie = torch.eye(self.base_weight_.in_features)
+            weight = lora_weight.to(
+                self.base_weight_.weight.device
+            ) + self.base_weight_.forward(ie).transpose(0, 1)
             weight = weight.to(self.lora_a_.device)
             weight_norm: torch.Tensor = torch.linalg.norm(weight, dim=1).to(
                 weight.dtype
