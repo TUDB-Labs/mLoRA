@@ -137,6 +137,11 @@ class LoraConfig:
             "dense": False,
             "fc1": False,
             "fc2": False,
+            # GLM names
+            "qkv_proj": False,
+            "dense": False,
+            "dense_h_to_4h": False,
+            "dense_4h_to_h": False,
         }
         if isinstance(config["target_modules"], List):
             for target in config["target_modules"]:

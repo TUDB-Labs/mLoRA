@@ -162,48 +162,49 @@ def avail_tasks():
 
 
 def show_help():
-    print("Launcher of m-LoRA")
-    print("Usage: python launch.py COMMAND [ARGS...]")
-    print("Command:")
-    print("    gen         generate a configuration from template")
-    print("    run         Automatically training and evaluate")
-    print("    inference   Run inference on existed adapter")
-    print("    evaluate    Run evaluation on existed adapter")
-    print("    train       Run training with configuration")
-    print("    avail       List all available tasks")
-    print("    help        Show help information")
-    print("")
-    print("Arguments of gen:")
-    print("    --template          lora, mixlora, etc.")
-    print("    --tasks             task names separate by \';\'")
-    print("    --adapter_name      default is task name")
-    print("    --file_name         [mlora.json]")
-    print("    --cutoff_len")
-    print("    --save_step")
-    print("    --warmup_steps")
-    print("    --learning_rate")
-    print("    --loraplus_lr_ratio")
-    print("    --batch_size")
-    print("    --micro_batch_size")
-    print("    --test_batch_size")
-    print("    --num_epochs")
-    print("    --use_dora")
-    print("    --use_rslora")
-    print("    --group_by_length")
-    print("")
-    print("Arguments of run, train, inference and evaluate:")
-    print("    --base_model   model name or path")
-    print("    --config       [mlora.json]")
-    print("    --load_adapter [false]")
-    print("    --random_seed  [42]")
-    print("    --cuda_device  [0]")
-    print("    --log_file     [mlora.log]")
-    print("    --overwrite    [false]")
-    print("    --attn_impl    [eager]")
-    print("    --quantize     [none], 4bit, 8bit")
-    print("    --dtype        [bf16], fp16, fp32")
-    print("    --tf32         [false]")
-    print("")
+    print("""
+    Launcher of m-LoRA
+    Usage: python launch.py COMMAND [ARGS...]
+    Command:
+        gen         generate a configuration from template
+        run         Automatically training and evaluate
+        inference   Run inference on existed adapter
+        evaluate    Run evaluation on existed adapter
+        train       Run training with configuration
+        avail       List all available tasks
+        help        Show help information
+
+    Arguments of gen:
+        --template          lora, mixlora, etc.
+        --tasks             task names separate by ';'
+        --adapter_name      default is task name
+        --file_name         [mlora.json]
+        --cutoff_len
+        --save_step
+        --warmup_steps
+        --learning_rate
+        --loraplus_lr_ratio
+        --batch_size
+        --micro_batch_size
+        --test_batch_size
+        --num_epochs
+        --use_dora
+        --use_rslora
+        --group_by_length
+
+    Arguments of run, train, inference and evaluate:
+        --base_model   model name or path
+        --config       [mlora.json]
+        --load_adapter [false]
+        --random_seed  [42]
+        --cuda_device  [0]
+        --log_file     [mlora.log]
+        --overwrite    [false]
+        --attn_impl    [eager]
+        --quantize     [none], 4bit, 8bit
+        --dtype        [bf16], fp16, fp32
+        --tf32         [false]
+    """)
 
 
 command_map = {

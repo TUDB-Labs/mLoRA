@@ -1,0 +1,59 @@
+{
+    "cutoff_len": 512,
+    "save_step": 1000,
+    "train_lora_candidate_num": 2,
+    "train_lora_simultaneously_num": 2,
+    "train_strategy": "optim",
+    "lora": [
+        {
+            "name": "mixlora",
+            "optim": "adamw",
+            "scheduler_type": "constant",
+            "warmup_steps": 0,
+            "lr": 0.0002,
+            "batch_size": 16,
+            "micro_batch_size": 4,
+            "test_batch_size": 16,
+            "num_epochs":20,
+            "r": 16,
+            "lora_alpha": 32,
+            "lora_dropout": 0.05,
+            "target_modules": {
+                "qkv_proj": true,
+                "dense":true,
+                "dense_h_to_4h":true,
+                "dense_4h_to_h":true
+            },
+            "routing_strategy": "mixtral",
+            "num_experts": 8,
+            "top_k": 2,
+            "data": "data/dummy_data.json",
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
+        },
+        {
+            "name": "lora",
+            "optim": "adamw",
+            "lr": 1e-4,
+            "batch_size": 16,
+            "micro_batch_size": 4,
+            "test_batch_size": 16,
+            "num_epochs": 20,
+            "use_dora": true,
+            "r": 8,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
+            "target_modules": {
+                "qkv_proj": true,
+                "dense":true,
+                "dense_h_to_4h":true,
+                "dense_4h_to_h":true
+            },
+            "data": "data/dummy_data.json",
+            "prompt": "template/template_demo.json",
+            "group_by_length": false,
+            "expand_side": "right"
+        }
+    ]
+}
