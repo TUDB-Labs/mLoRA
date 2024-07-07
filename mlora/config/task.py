@@ -121,8 +121,32 @@ class CPOTaskConfig(TrainTaskConfig):
         self.beta_ = float(self.beta_)
 
 
+class CITTaskConfig(TrainTaskConfig):
+    contrastive_pooling_method_: str
+    lambda_: float
+    temperature_: float
+
+    __params_map: Dict[str, str] = {
+        "contrastive_pooling_method_": "contrastive_pooling_method",
+        "lambda_": "lambda",
+        "temperature_": "temperature",
+    }
+
+    def __init__(
+        self,
+        config: Dict[str, str],
+        adapters: Mapping[str, AdapterConfig],
+        datasets: Mapping[str, DatasetConfig],
+    ):
+        super().__init__(config, adapters, datasets)
+        self.init(self.__params_map, config)
+
+        self.lambda_ = float(self.lambda_)
+
+
 TASKCONFIG_CLASS: Dict[str, Type[TaskConfig]] = {
     "train": TrainTaskConfig,
     "dpo": DPOTaskConfig,
     "cpo": CPOTaskConfig,
+    "cit": CITTaskConfig,
 }

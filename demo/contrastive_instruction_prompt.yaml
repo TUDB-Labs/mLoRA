@@ -1,0 +1,13 @@
+template: |
+  ### Instruction:
+  {% if is_origin %}
+  {{ data_point['instruction'] + '\n'}}
+  {% else %}
+  {{ data_point['instruction_paraphrased'] + '\n'}}
+  {% endif %}
+  {% if 'input' in data_point %}
+  ### Input:
+  {{ data_point['input'] + '\n'}}
+  {% endif %}
+  ### Output:
+  {{ data_point['chosen'] + '\n'}}
