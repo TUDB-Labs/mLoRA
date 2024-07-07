@@ -151,3 +151,9 @@ class MLoRAData:
             data_config_=[config.model_data_config() for config in self.data_config_],
             enable_checkpoint_=True,
         )
+
+    def batch_size(self) -> int:
+        return len(self.batch_tokens_)
+
+    def token_len(self) -> int:
+        return len(self.batch_tokens_[0])

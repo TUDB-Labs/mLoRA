@@ -43,3 +43,7 @@ def setup_cuda_check():
 
 def setup_trace_mode():
     mlora.profiler.setup_trace_mode()
+
+
+def setup_metric_logger(path: str):
+    mlora.profiler.metric_init(path)

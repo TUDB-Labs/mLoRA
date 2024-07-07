@@ -5,6 +5,7 @@ from typing import List, Optional, OrderedDict, Tuple, override
 import torch
 import torch.nn.functional as F
 
+import mlora.profiler
 from mlora.config import DPOTaskConfig
 from mlora.executor.context import INFERENCECONTEXT_CLASS, TaskContext, TrainTaskContext
 from mlora.model.args import LinearInfo, MLoRADataConfig, Tokens
@@ -147,6 +148,20 @@ class DPOTask(TrainTask):
 
             loss: torch.Tensor = self.context_.loss_fn_(logits)
             loss = loss.mean()
+
+            mlora.profiler.metric_log(
+                self.context_.path_ + "_loss", loss.item(), self.now_step_
+            )
+            mlora.profiler.metric_log(
+                self.context_.path_ + "_chosen_reward",
+                chosen_reward.mean().item(),
+                self.now_step_,
+            )
+            mlora.profiler.metric_log(
+                self.context_.path_ + "_rejected_reward",
+                reject_reward.mean().item(),
+                self.now_step_,
+            )
 
             logging.info(
                 f"Task - {self.context_.name_} loss: {loss}, "

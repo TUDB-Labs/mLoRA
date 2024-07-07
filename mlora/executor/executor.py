@@ -3,6 +3,7 @@ from typing import Callable, Dict, Optional
 
 import torch
 
+import mlora.profiler
 from mlora.config import MLoRAConfig, TaskConfig
 from mlora.model.args import MLoRAData
 from mlora.model.llm import LLMModel
@@ -95,8 +96,15 @@ class Executor:
         self.dispatcher_.notify_terminate_task(task_name)
 
     def execute(self) -> None:
+        mm_collect_step = 0
+
         while not self.dispatcher_.is_done():
             data: MLoRAData = self.dispatcher_.data()
+
+            torch.cuda.reset_peak_memory_stats(device=self.model_.device_)
+
+            batch_size = data.batch_size()
+            token_len = data.token_len()
 
             output = self.model_.forward(data.model_data())
             labels = torch.tensor(data.batch_tokens_, dtype=torch.long)
@@ -113,3 +121,16 @@ class Executor:
                 total_loss.backward()
 
             self.dispatcher_.step()
+            mm_collect_step += 1
+
+            mlora.profiler.metric_log_dict(
+                "memory",
+                {
+                    "batch_size": batch_size,
+                    "token_len": token_len,
+                    "memory": torch.cuda.max_memory_allocated(
+                        device=self.model_.device_
+                    ),
+                },
+                mm_collect_step,
+            )
