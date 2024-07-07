@@ -59,7 +59,8 @@ class LoRAFunction(torch.autograd.Function):
             end_idx = lora_config.batch_end_idx_
 
             # must ensure the dropout is not zero
-            # is dropout == 0, dropdata is a data's referece, so the data will be changed
+            # is dropout == 0, dropdata is a data's referece
+            # so the data will be changed
             assert dropout > 0.0
 
             drop_data = F.dropout(data[start_idx:end_idx], p=dropout)
