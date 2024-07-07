@@ -61,19 +61,18 @@ class LLMModelOutput:
 
 
 @dataclass
-class LoraBatchDataConfig:
+class LLMBatchConfig:
     adapter_name_: str = ""
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
 
 
 @dataclass
-class MultiLoraBatchData:
-    lora_batch_data_config_: List[LoraBatchDataConfig] = None
-
+class LLMModelInput:
+    batch_configs_: List[LLMBatchConfig] = None
     batch_tokens_: List[Tokens] = None
     batch_labels_: List[Labels] = None
-    attention_masks_: List[Masks] = None
+    batch_masks_: List[Masks] = None
 
     output_router_logits_: bool = True
 
@@ -87,7 +86,7 @@ class MultiLoraBatchData:
 class LoraConfig:
     adapter_name: str = ""
     task_name: str = "casual"
-    device: str = f"{get_backend().device_name()}:0"
+    device: str = get_backend().default_device_name()
     # Weight-Decomposed Low-Rank Adaptation
     use_dora_: bool = False
     # Rank-Stabilized LoRA

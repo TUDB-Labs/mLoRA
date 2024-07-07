@@ -13,11 +13,11 @@ from mlora.common import (
     LLMDecoder,
     LLMForCausalLM,
     LLMModelArgs,
+    LLMModelInput,
     LLMModelOutput,
     LLMOutput,
     LoraConfig,
     MixConfig,
-    MultiLoraBatchData,
     lora_config_factory,
     router_loss_factory,
 )
@@ -129,10 +129,10 @@ class OutputLayer(torch.nn.Module):
         self.layers_: torch.ModuleDict = {}
 
     def forward(
-        self, data: torch.Tensor, input_args: MultiLoraBatchData
+        self, data: torch.Tensor, input_args: LLMModelInput
     ) -> List[LLMModelOutput]:
         outputs = []
-        for lora_config in input_args.lora_batch_data_config_:
+        for lora_config in input_args.batch_configs_:
             adapter_name = lora_config.adapter_name_
             start_idx = lora_config.batch_start_idx_
             end_idx = lora_config.batch_end_idx_
@@ -260,7 +260,7 @@ class LLMModel(torch.nn.Module):
         self.adapter_configs_: Dict[str, LoraConfig] = {}
 
     # compute the model: output probs
-    def forward(self, input_args: MultiLoraBatchData) -> List[LLMModelOutput]:
+    def forward(self, input_args: LLMModelInput) -> List[LLMModelOutput]:
         assert input_args.batch_tokens_ is not None
 
         labels = input_args.batch_labels_
@@ -274,15 +274,15 @@ class LLMModel(torch.nn.Module):
             )
 
         # prepare mask
-        if input_args.attention_masks_ is not None and 0 in input_args.attention_masks_:
+        if input_args.batch_masks_ is not None and 0 in input_args.batch_masks_:
             # 2d mask is passed through the layers
-            if isinstance(input_args.attention_masks_, torch.Tensor):
-                attn_mask = input_args.attention_masks_.to(
+            if isinstance(input_args.batch_masks_, torch.Tensor):
+                attn_mask = input_args.batch_masks_.to(
                     dtype=torch.int64, device=self.device_
                 )
             else:
                 attn_mask = torch.tensor(
-                    input_args.attention_masks_, dtype=torch.int64, device=self.device_
+                    input_args.batch_masks_, dtype=torch.int64, device=self.device_
                 )
         else:
             attn_mask = None
@@ -290,7 +290,7 @@ class LLMModel(torch.nn.Module):
         if self.config_.attn_implementation_ != "flash_attn":
             causal_mask = self.model_.causal_mask(
                 input_tokens=tokens,
-                additional_mask=input_args.attention_masks_,
+                additional_mask=input_args.batch_masks_,
                 diagonal=input_args.diagonal_pos_,
             )
         else:
@@ -298,7 +298,7 @@ class LLMModel(torch.nn.Module):
 
         input_args.batch_labels_ = None
         input_args.batch_tokens_ = None
-        input_args.attention_masks_ = None
+        input_args.batch_masks_ = None
 
         data = (tokens, causal_mask, input_args)
 
@@ -306,18 +306,18 @@ class LLMModel(torch.nn.Module):
             data = seq_layer.forward(data)
 
         # collecting router logits
-        router_logits = [[] for _ in range(len(input_args.lora_batch_data_config_))]
+        router_logits = [[] for _ in range(len(input_args.batch_configs_))]
         for seq_layer in self.seq_module_:
             if not hasattr(seq_layer, "router_probs_"):
                 continue
-            for idx in range(len(input_args.lora_batch_data_config_)):
+            for idx in range(len(input_args.batch_configs_)):
                 if seq_layer.router_probs_[idx] is not None:
                     router_logits[idx].append(seq_layer.router_probs_[idx])
 
         # calculate loss
         output = data[0]
         assert isinstance(output, List)
-        for idx, lora_config in enumerate(input_args.lora_batch_data_config_):
+        for idx, lora_config in enumerate(input_args.batch_configs_):
             output_data = output[idx]
             assert isinstance(output_data, LLMModelOutput)
             start_idx = lora_config.batch_start_idx_

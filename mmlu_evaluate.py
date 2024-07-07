@@ -125,17 +125,17 @@ def evaluate(subject: str,
         batch_data_config = []
         batch_start_idx = 0
         for name in adapter_names:
-            batch_data_config.append(mlora.LoraBatchDataConfig(
+            batch_data_config.append(mlora.LLMBatchConfig(
                 adapter_name_=name,
                 batch_start_idx_=batch_start_idx,
                 batch_end_idx_=batch_start_idx + bsz,
             ))
             batch_start_idx += bsz
 
-        input_args = mlora.MultiLoraBatchData(
-            lora_batch_data_config_=batch_data_config,
+        input_args = mlora.LLMModelInput(
+            batch_configs_=batch_data_config,
             batch_tokens_=batch_tokens[start_pos:end_pos] * len(adapter_names),
-            attention_masks_=atten_masks[start_pos:end_pos] *
+            batch_masks_=atten_masks[start_pos:end_pos] *
             len(adapter_names),
             inference_mode_=True,
         )
@@ -243,7 +243,7 @@ def do_evaluate(model_name: str,
                 model_dtype: str,
                 adapter_names: List[str],
                 batch_size: int = 2,
-                device: str = f"{mlora.get_backend().device_name()}:0",
+                device: str = mlora.get_backend().default_device_name(),
                 output: str = "mmlu_scores.csv"):
     tokenizer = mlora.Tokenizer(model_name)
     model = mlora.LLMModel.from_pretrained(

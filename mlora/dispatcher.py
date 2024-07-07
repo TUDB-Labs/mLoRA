@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Union
 
 import datasets
 
-from .common import DataClass, LoraBatchDataConfig, Masks, MultiLoraBatchData, Tokens
+from .common import DataClass, LLMBatchConfig, LLMModelInput, Masks, Tokens
 from .tokenizer import Tokenizer
 
 
@@ -289,10 +289,10 @@ class Dispatcher:
             task for task in self.running_train_task_ if not task.is_train_done()
         ]
 
-    def get_test_data(self) -> MultiLoraBatchData:
+    def get_test_data(self) -> LLMModelInput:
         pass
 
-    def get_train_data(self) -> MultiLoraBatchData:
+    def get_train_data(self) -> LLMModelInput:
         self.__dispatch_task_in()
 
         # get task train data
@@ -314,7 +314,7 @@ class Dispatcher:
         batch_tokens: List[Tokens] = []
         attention_masks: List[Masks] = []
         batch_labels: List[List] = []
-        lora_batch_data_config: List[LoraBatchDataConfig] = []
+        lora_batch_data_config: List[LLMBatchConfig] = []
 
         # batch the all adapter data
         adapter_start_idx: int = 0
@@ -345,7 +345,7 @@ class Dispatcher:
                 batch_labels.append(labels)
 
             lora_batch_data_config.append(
-                LoraBatchDataConfig(
+                LLMBatchConfig(
                     adapter_name_=adapter,
                     batch_start_idx_=adapter_start_idx,
                     batch_end_idx_=adapter_end_idx,
@@ -355,10 +355,10 @@ class Dispatcher:
 
         self.__dispatch_task_out()
 
-        return MultiLoraBatchData(
-            lora_batch_data_config_=lora_batch_data_config,
+        return LLMModelInput(
+            batch_configs_=lora_batch_data_config,
             batch_tokens_=batch_tokens,
             batch_labels_=batch_labels,
-            attention_masks_=attention_masks,
+            batch_masks_=attention_masks,
             gradient_checkpoint_="recompute",
         )

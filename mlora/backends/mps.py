@@ -70,3 +70,16 @@ class MPSBackend(BasicBackend):
         # TODO: change to official implementation
         # running with compatible mode
         return torch.cuda.amp.autocast(**kwargs)
+
+    def init_tensor(self, tensor: torch.Tensor) -> torch.Tensor:
+        return torch.zeros_like(tensor)
+
+    def index_fill(
+        self, input: torch.Tensor, dim: int, index: torch.Tensor, value: torch.Tensor
+    ):
+        pass
+
+    def index_copy(
+        self, input: torch.Tensor, dim: int, index: torch.Tensor, source: torch.Tensor
+    ):
+        input.index_add_(dim, index, source)

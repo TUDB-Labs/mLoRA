@@ -4,7 +4,7 @@ from typing import List, Tuple, Union
 
 import torch
 
-from mlora.common import LoraBatchDataConfig, MultiLoraBatchData, Tokens
+from mlora.common import LLMBatchConfig, LLMModelInput, Tokens
 from mlora.model import LLMModel
 from mlora.prompter import Prompter
 from mlora.tokenizer import Tokenizer
@@ -158,7 +158,7 @@ def generate(
 
     device = torch.device(model.device_)
     raw_prompts: List[Tokens] = []
-    batch_data_config: List[LoraBatchDataConfig] = []
+    batch_data_config: List[LLMBatchConfig] = []
     config_dict = {}
     for config in configs:
         config_dict[config.adapter_name] = config
@@ -166,7 +166,7 @@ def generate(
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
         batch_data_config.append(
-            LoraBatchDataConfig(
+            LLMBatchConfig(
                 config.adapter_name, config.batch_start_idx_, config.batch_end_idx_
             )
         )
@@ -188,8 +188,8 @@ def generate(
     stop_reached = torch.tensor([False] * batch_size, device=device)
     input_text_mask = tokens != tokenizer.pad_id_
     for cur_pos in range(min_tokens_len, total_len):
-        input_data = MultiLoraBatchData(
-            lora_batch_data_config_=batch_data_config,
+        input_data = LLMModelInput(
+            batch_configs_=batch_data_config,
             batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
             diagonal_pos_=prev_pos + 1,
             inference_mode_=True,

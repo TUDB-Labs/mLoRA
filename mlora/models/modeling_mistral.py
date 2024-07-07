@@ -9,7 +9,7 @@ import transformers.models.qwen2.modeling_qwen2 as modeling_qwen2
 from mlora.backends import _backend, get_backend
 from mlora.common import (
     FeedForward,
-    MultiLoraBatchData,
+    LLMModelInput,
     _flash_attn_available,
     apply_rotary_emb,
     get_unpad_data,
@@ -191,7 +191,7 @@ class MistralFlashAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
@@ -278,7 +278,7 @@ class MistralForCausalLM(LlamaForCausalLM):
         llm_model: modeling_mistral.MistralForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().device_name() + ":0",
+        device: str = get_backend().default_device_name(),
     ):
         llm_config: modeling_mistral.MistralConfig = llm_model.config
         llm_args = MistralConfig(

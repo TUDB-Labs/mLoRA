@@ -18,8 +18,8 @@ from mlora.common import (
     LLMFeedForward,
     LLMForCausalLM,
     LLMModelArgs,
+    LLMModelInput,
     Masks,
-    MultiLoraBatchData,
     _flash_attn_available,
     apply_rotary_emb,
     get_unpad_data,
@@ -129,7 +129,7 @@ class PhiAttention(LLMAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
@@ -289,7 +289,7 @@ class PhiFlashAttention2(PhiAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
@@ -369,7 +369,7 @@ class PhiMLP(LLMFeedForward):
         }
 
     def _batch_forward(
-        self, hidden_states: torch.Tensor, input_args: MultiLoraBatchData
+        self, hidden_states: torch.Tensor, input_args: LLMModelInput
     ) -> torch.Tensor:
         hidden_states = self.fc1_.forward(hidden_states, input_args)
         hidden_states = self.act_(hidden_states)
@@ -452,7 +452,7 @@ class PhiDecoderLayer(LLMDecoder):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
     ):
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
@@ -592,7 +592,7 @@ class PhiForCausalLM(LLMForCausalLM):
         llm_model: modeling_phi.PhiForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().device_name() + ":0",
+        device: str = get_backend().default_device_name(),
     ):
         assert not use_sliding_window, "Phi model does not support SWA."
         llm_config: modeling_phi.PhiConfig = llm_model.config

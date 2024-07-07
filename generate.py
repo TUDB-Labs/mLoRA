@@ -20,7 +20,7 @@ def main(base_model: str,
          flash_attn: bool = False,
          max_seq_len: int = None,
          stream: bool = False,
-         device: str = f"{mlora.get_backend().device_name()}:0"):
+         device: str = mlora.get_backend().default_device_name()):
 
     model = mlora.LLMModel.from_pretrained(base_model, device=device,
                                            attn_impl="flash_attn" if flash_attn else "eager",

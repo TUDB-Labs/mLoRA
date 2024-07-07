@@ -6,7 +6,7 @@ from typing import Dict, List
 
 import torch
 
-from .common import DataClass, LoraBatchDataConfig, MixConfig, MultiLoraBatchData
+from .common import DataClass, LLMBatchConfig, LLMModelInput, MixConfig
 from .model import LLMModel
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
 from .tokenizer import Tokenizer
@@ -90,7 +90,7 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
         config.batch_start_idx_ = config.batch_end_idx_
         current_configs.append(config)
         batch_data_config.append(
-            LoraBatchDataConfig(
+            LLMBatchConfig(
                 adapter_name_=config.adapter_name,
                 batch_start_idx_=batch_start_idx,
                 batch_end_idx_=len(batch_tokens),
@@ -109,10 +109,10 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
         current_configs,
         sequence_lengths,
         batch_labels,
-        MultiLoraBatchData(
-            lora_batch_data_config_=batch_data_config,
+        LLMModelInput(
+            batch_configs_=batch_data_config,
             batch_tokens_=batch_tokens,
-            attention_masks_=atten_masks,
+            batch_masks_=atten_masks,
             inference_mode_=True,
         ),
     )

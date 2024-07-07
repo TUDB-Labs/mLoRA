@@ -18,8 +18,8 @@ from mlora.common import (
     LLMFeedForward,
     LLMForCausalLM,
     LLMModelArgs,
+    LLMModelInput,
     Masks,
-    MultiLoraBatchData,
     _flash_attn_available,
     apply_rotary_emb,
     get_unpad_data,
@@ -84,7 +84,7 @@ class LlamaAttention(LLMAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
@@ -238,7 +238,7 @@ class LlamaFlashAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
@@ -317,7 +317,7 @@ class LlamaMLP(LLMFeedForward):
         }
 
     def _batch_forward(
-        self, data: torch.Tensor, input_args: MultiLoraBatchData
+        self, data: torch.Tensor, input_args: LLMModelInput
     ) -> torch.Tensor:
         w1 = self.w1_.forward(data, input_args)
         w3 = self.w3_.forward(data, input_args)
@@ -421,7 +421,7 @@ class LlamaDecoderLayer(LLMDecoder):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
     ):
 
         residual = hidden_states
@@ -537,7 +537,7 @@ class LlamaForCausalLM(LLMForCausalLM):
         llm_model: modeling_llama.LlamaForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().device_name() + ":0",
+        device: str = get_backend().default_device_name(),
     ):
         assert not use_sliding_window, "Llama model does not support SWA."
         llm_config: modeling_llama.LlamaConfig = llm_model.config

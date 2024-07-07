@@ -1,12 +1,12 @@
 from .backends import get_backend
 from .common import (
+    LLMBatchConfig,
     LLMForCausalLM,
     LLMModelArgs,
+    LLMModelInput,
     LLMModelOutput,
-    LoraBatchDataConfig,
     LoraConfig,
     MixConfig,
-    MultiLoraBatchData,
     lora_config_factory,
 )
 from .dispatcher import Dispatcher, TrainTask
@@ -30,8 +30,8 @@ __all__ = [
     "LLMModelArgs",
     "LLMModelOutput",
     "LLMForCausalLM",
-    "LoraBatchDataConfig",
-    "MultiLoraBatchData",
+    "LLMBatchConfig",
+    "LLMModelInput",
     "LoraConfig",
     "MixConfig",
     "lora_config_factory",

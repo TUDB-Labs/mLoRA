@@ -222,7 +222,7 @@ if __name__ == "__main__":
     is_train = not args.inference and not args.evaluate
 
     if args.attn_impl is None:
-        if mlora.common._flash_attn_available:
+        if mlora.get_backend().device_name() == "cuda" and mlora.common._flash_attn_available:
             args.attn_impl = "flash_attn"
         else:
             args.attn_impl = "eager"
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         exit(-1)
 
     if args.device is None:
-        args.device = f"{mlora_backend.device_name()}:0"
+        args.device = mlora.get_backend().default_device_name()
 
     mlora_backend.use_deterministic_algorithms(args.deterministic)
     mlora_backend.allow_tf32(args.tf32)

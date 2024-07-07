@@ -13,6 +13,9 @@ class BasicBackend:
     def device_name(self) -> str:
         pass
 
+    def default_device_name(self) -> str:
+        return self.device_name()
+
     def is_available(self) -> bool:
         pass
 
@@ -48,6 +51,19 @@ class BasicBackend:
 
     def autocast(self, **kwargs):
         return NoneContexts()
+
+    def init_tensor(self, tensor: torch.Tensor) -> torch.Tensor:
+        return torch.empty_like(tensor)
+
+    def index_fill(
+        self, input: torch.Tensor, dim: int, index: torch.Tensor, value: torch.Tensor
+    ):
+        input.index_fill_(dim, index, value)
+
+    def index_copy(
+        self, input: torch.Tensor, dim: int, index: torch.Tensor, source: torch.Tensor
+    ):
+        input.index_copy_(dim, index, source)
 
     def check_available(self):
         if not self.is_available():

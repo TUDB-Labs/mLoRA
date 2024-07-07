@@ -14,6 +14,9 @@ class CUDABackend(BasicBackend):
     def device_name(self) -> str:
         return "cuda"
 
+    def default_device_name(self) -> str:
+        return "cuda:0"
+
     def is_available(self) -> bool:
         return torch.cuda.is_available()
 

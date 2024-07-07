@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 import torch
 
-from .modelargs import Masks, MultiLoraBatchData
+from .modelargs import LLMModelInput, Masks
 
 
 class LLMAttention(metaclass=ABCMeta):
@@ -16,7 +16,7 @@ class LLMAttention(metaclass=ABCMeta):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         pass
@@ -29,7 +29,7 @@ class LLMFeedForward(metaclass=ABCMeta):
 
     @classmethod
     def _batch_forward(
-        self, data: torch.Tensor, input_args: MultiLoraBatchData
+        self, data: torch.Tensor, input_args: LLMModelInput
     ) -> torch.Tensor:
         pass
 
@@ -49,7 +49,7 @@ class LLMDecoder(metaclass=ABCMeta):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_args: MultiLoraBatchData,
+        input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
         router_logits: Optional[List[List]] = None,
     ):

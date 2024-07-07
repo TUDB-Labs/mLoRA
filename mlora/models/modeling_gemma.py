@@ -108,7 +108,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
         llm_model: modeling_gemma.GemmaForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().device_name() + ":0",
+        device: str = get_backend().default_device_name(),
     ):
         assert not use_sliding_window, "Gemma model does not support SWA."
         llm_config: modeling_gemma.GemmaConfig = llm_model.config
