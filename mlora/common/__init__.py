@@ -17,13 +17,7 @@ from .checkpoint import (
 from .feed_forward import FeedForward
 
 # LoRA
-from .lora_linear import (
-    Linear,
-    Lora,
-    dequantize_bnb_weight,
-    get_range_tensor,
-    is_quantized,
-)
+from .lora_linear import Linear, Lora, get_range_tensor
 
 # MixLoRA MoEs
 from .mix_lora import (
@@ -69,9 +63,7 @@ __all__ = [
     "CheckpointRecomputeFunction",
     "CHECKPOINT_CLASSES",
     "FeedForward",
-    "is_quantized",
     "get_range_tensor",
-    "dequantize_bnb_weight",
     "Lora",
     "Linear",
     "MixtralRouterLoss",

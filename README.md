@@ -105,7 +105,8 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 
 ## Known issues
 
- + Applying quantization to Qwen2 in DoRA will result in an error
+ + Quantization with Qwen2 have no effect (same with transformers).
+ + Applying quantization with DoRA will result in higher memory and computation cost (same with PEFT).
  + Employing half precision models on MPS may occasionally result in challenges, such as encountering 'nan' values or experiencing convergence difficulties.
 
 ## Installation
