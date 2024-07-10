@@ -20,11 +20,7 @@
 ### Steps
 
 ```bash
-# Start a Container
 docker run --gpus all -it --rm mikecovlee/mlora
-# Clone Repository
-git clone https://github.com/scukdde-llm/mlora
-cd mlora
 ```
 
 You can check all available tags from: [mikecovlee/mlora/tags](https://hub.docker.com/r/mikecovlee/mlora/tags). Currently, we only provide a Linux image for the x86_64 (amd64) architecture.
