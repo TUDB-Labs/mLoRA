@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mlora"
 version = "0.3.4"
-description = "A tool for fine-tuning large language models (LLMs) using the LoRA or QLoRA methods more efficiently."
+description = "An Efficient Factory to Build Multiple LoRA Adapters"
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -18,10 +18,11 @@ dependencies = [
     "datasets",
     "evaluate",
     "accelerate",
-    "transformers==4.41.2",
+    "transformers==4.42.3",
     "sentencepiece",
     "huggingface_hub",
     "scikit-learn",
+    "tiktoken",
 ]
 
 [project.urls]

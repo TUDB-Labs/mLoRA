@@ -5,12 +5,12 @@ import torch
 import torch.nn as nn
 import transformers.models.mistral.modeling_mistral as modeling_mistral
 import transformers.models.qwen2.modeling_qwen2 as modeling_qwen2
+from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import _backend, get_backend
 from mlora.common import (
     FeedForward,
     LLMModelInput,
-    _flash_attn_available,
     apply_rotary_emb,
     get_unpad_data,
     repeat_kv,
@@ -26,7 +26,7 @@ from mlora.models.modeling_llama import (
 )
 from mlora.utils import copy_parameters
 
-if _flash_attn_available:
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
@@ -47,7 +47,7 @@ class MistralFlashAttention(LlamaAttention):
         wo: nn.Module,
         args: MistralConfig,
     ):
-        assert _flash_attn_available, "Flash Attention is not available"
+        assert is_flash_attn_2_available(), "Flash Attention is not available"
         super().__init__(wq, wk, wv, wo, args)
         # Qwen2
         self.use_sliding_window_ = args.use_sliding_window_

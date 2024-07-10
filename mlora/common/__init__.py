@@ -1,6 +1,5 @@
 # Attention and Feed Forward
 from .attention import (
-    _flash_attn_available,
     apply_rotary_emb,
     get_unpad_data,
     precompute_rope_angle,
@@ -51,7 +50,6 @@ from .modelargs import (
 )
 
 __all__ = [
-    "_flash_attn_available",
     "prepare_4d_causal_attention_mask",
     "precompute_rope_angle",
     "rotate_half",

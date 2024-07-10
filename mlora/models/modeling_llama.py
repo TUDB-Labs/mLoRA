@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import transformers.models.llama.modeling_llama as modeling_llama
 from transformers.activations import ACT2FN
+from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import _backend, get_backend
 from mlora.common import (
@@ -20,7 +21,6 @@ from mlora.common import (
     LLMModelArgs,
     LLMModelInput,
     Masks,
-    _flash_attn_available,
     apply_rotary_emb,
     get_unpad_data,
     precompute_rope_angle,
@@ -31,7 +31,7 @@ from mlora.common import (
 from mlora.common.mix_lora import _mixtral_slice_tensor
 from mlora.utils import copy_parameters
 
-if _flash_attn_available:
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
@@ -131,7 +131,7 @@ class LlamaFlashAttention(LlamaAttention):
         wo: nn.Module,
         args: LlamaConfig,
     ):
-        assert _flash_attn_available, "Flash Attention is not available"
+        assert is_flash_attn_2_available(), "Flash Attention is not available"
         super().__init__(wq, wk, wv, wo, args)
 
     def _flash_attention_forward(

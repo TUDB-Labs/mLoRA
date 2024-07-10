@@ -3,13 +3,13 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from transformers.utils import is_bitsandbytes_available
 
 from mlora.backends import _backend
-from mlora.utils import is_package_available
 
 from .modelargs import LLMModelInput, LoraConfig
 
-if is_package_available("bitsandbytes"):
+if is_bitsandbytes_available():
     import bitsandbytes as bnb
     from bitsandbytes.nn import Linear4bit, Linear8bitLt
 else:

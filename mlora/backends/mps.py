@@ -4,8 +4,6 @@ import torch
 
 from .common import BasicBackend
 
-_mps_bf16_supported = None
-
 
 class MPSBackend(BasicBackend):
     def __init__(self) -> None:
@@ -18,23 +16,11 @@ class MPSBackend(BasicBackend):
         return "mps"
 
     def is_available(self) -> bool:
-        return torch.backends.mps.is_available()
+        return torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
     def is_initialized(self) -> bool:
         # TODO: change to official implementation
         return not torch.mps._is_in_bad_fork()
-
-    def is_bf16_supported(self) -> bool:
-        # TODO: change to official implementation
-        global _mps_bf16_supported
-        if _mps_bf16_supported is None:
-            try:
-                torch.ones(5, dtype=torch.bfloat16, device="mps")
-                _mps_bf16_supported = True
-            except TypeError:
-                _mps_bf16_supported = False
-
-        return _mps_bf16_supported
 
     def manual_seed(self, seed: int):
         super().manual_seed(seed)

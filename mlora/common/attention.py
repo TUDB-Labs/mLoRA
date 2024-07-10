@@ -4,11 +4,7 @@ from typing import List, Optional, Tuple
 import torch
 import torch.nn.functional as F
 
-from mlora.utils import is_package_available
-
 from .modelargs import Masks
-
-_flash_attn_available = is_package_available("flash_attn")
 
 
 # input_tokens shape is: batch_size * seq_len

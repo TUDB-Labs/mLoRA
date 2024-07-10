@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import get_backend
 from mlora.common import (
@@ -19,13 +20,12 @@ from mlora.common import (
     LLMModelArgs,
     LLMModelInput,
     Masks,
-    _flash_attn_available,
     get_unpad_data,
     prepare_4d_causal_attention_mask,
 )
 from mlora.utils import copy_parameters
 
-if _flash_attn_available:
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
@@ -318,7 +318,7 @@ class CoreAttention(torch.nn.Module):
 
 class CoreFlashAttention2(CoreAttention):
     def __init__(self, *args, **kwargs):
-        assert _flash_attn_available, "Flash Attention is not available."
+        assert is_flash_attn_2_available(), "Flash Attention is not available."
         super().__init__(*args, **kwargs)
 
     def forward(self, query_layer, key_layer, value_layer, attention_mask, dropout=0.0):

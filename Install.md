@@ -70,8 +70,8 @@ conda activate mlora
 # Install requirements
 pip3 install torch==2.3.1
 pip3 install -r requirements.txt
-# Install extra requirements on Linux
-bash misc/install-linux.sh
+# Install extra requirements
+bash misc/install-extra.sh
 ```
 
 ## Verification
@@ -98,8 +98,6 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 
 ## Microsoft Windows
 
-**Note**: Windows with CUDA support is an experimental feature.
-
 ### Requirements
 
 - One or more NVIDIA GPUs
@@ -122,6 +120,8 @@ conda activate mlora
 # Install requirements (CUDA 12.1)
 pip3 install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
 pip3 install -r requirements.txt
+# Install extra requirements
+bash misc/install-extra.sh
 ```
 
 ## Verification
@@ -147,8 +147,6 @@ m-LoRA: NVIDIA CUDA initialized successfully.
 ```
 
 ## Apple macOS
-
-**Note**: macOS with MPS support is an experimental feature.
 
 ### Requirements
 

@@ -2,47 +2,48 @@ import logging
 import random
 
 import torch
+from transformers.utils import is_torch_bf16_available_on_device
 
 from mlora.utils import NoneContexts
 
 
 class BasicBackend:
     def name(self) -> str:
-        pass
+        raise NotImplementedError()
 
     def device_name(self) -> str:
-        pass
+        raise NotImplementedError()
 
     def default_device_name(self) -> str:
         return self.device_name()
 
     def is_available(self) -> bool:
-        pass
+        raise NotImplementedError()
 
     def is_initialized(self) -> bool:
-        pass
+        raise NotImplementedError()
 
     def is_bf16_supported(self) -> bool:
-        pass
+        return is_torch_bf16_available_on_device(self.device_name())
 
     def manual_seed(self, seed: int):
         random.seed(seed)
         torch.manual_seed(seed)
 
     def empty_cache(self):
-        pass
+        raise NotImplementedError()
 
     def use_deterministic_algorithms(self, mode: bool):
         torch.use_deterministic_algorithms(mode)
 
     def allow_tf32(self, mode: bool):
-        pass
+        raise NotImplementedError()
 
     def set_rng_state(self, device, state):
-        pass
+        raise NotImplementedError()
 
     def get_rng_state(self, device):
-        pass
+        raise NotImplementedError()
 
     def fork_rng(self, rng_devices: list):
         return torch.random.fork_rng(
