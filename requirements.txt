@@ -12,3 +12,4 @@ pandas
 fire
 black
 isort
+tiktoken
