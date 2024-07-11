@@ -1,10 +1,10 @@
 # m-LoRA: An Efficient "Factory" to Build Multiple LoRA Adapters
-[![](https://github.com/scukdde-llm/mlora/actions/workflows/mlora-test.yml/badge.svg)](https://github.com/scukdde-llm/mlora/actions/workflows/mlora-test.yml)
-[![](https://img.shields.io/github/stars/scukdde-llm/mlora?logo=GitHub)](https://github.com/scukdde-llm/mlora/stargazers)
+[![](https://github.com/scukdde-llm/mlora/actions/workflows/python-test.yml/badge.svg)](https://github.com/scukdde-llm/mlora/actions/workflows/python-test.yml)
+[![](https://img.shields.io/github/stars/scukdde-llm/mlora?logo=GitHub&style=flat)](https://github.com/scukdde-llm/mlora/stargazers)
+[![](https://img.shields.io/github/v/release/scukdde-llm/mlora?logo=Github)](https://github.com/scukdde-llm/mlora/releases/latest)
+[![](https://img.shields.io/pypi/v/mlora?logo=pypi)](https://pypi.org/project/mlora/)
+[![](https://img.shields.io/docker/v/mikecovlee/mlora?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/mlora/tags)
 [![](https://img.shields.io/github/license/scukdde-llm/mlora)](http://www.apache.org/licenses/LICENSE-2.0)
-[![](https://img.shields.io/github/v/release/scukdde-llm/mlora)](https://github.com/scukdde-llm/mlora/releases/latest)
-[![](https://img.shields.io/github/languages/top/scukdde-llm/mlora)](https://www.python.org/)
-[![](https://github.com/scukdde-llm/mlora/actions/workflows/python-test.yml/badge.svg)](https://github.com/scukdde-llm/mlora/actions/workflows/python-test.yml)  
 
 mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for efficient fine-tuning of multiple Large Language Models (LLMs) using LoRA and its variants. Key features of mLoRA include:
 
