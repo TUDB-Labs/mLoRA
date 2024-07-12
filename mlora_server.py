@@ -74,8 +74,7 @@ def backend_server_run_fn(args):
 
     root_dir_list = mlora.server.root_dir_list()
     root_dir_list = dict(
-        map(lambda kv: (kv[0], os.path.join(
-            args.root, kv[1])), root_dir_list.items())
+        map(lambda kv: (kv[0], os.path.join(args.root, kv[1])), root_dir_list.items())
     )
 
     mlora.server.set_root_dir_list(root_dir_list)
@@ -171,7 +170,18 @@ if __name__ == "__main__":
     config = mlora.config.MLoRAServerConfig(
         {"name": "backend", "concurrency_num": args.concurrency_num}
     )
-    executor = mlora.executor.Executor(model, tokenizer, config)
+    if args.pipeline:
+        executor = mlora.executor.PipeExecutor(
+            model,
+            tokenizer,
+            config,
+            args.device,
+            args.rank,
+            args.balance,
+            args.recompute,
+        )
+    else:
+        executor = mlora.executor.Executor(model, tokenizer, config)
     executor.register_hook("done", task_done_callback_fn)
     executor.register_hook("step", task_step_callback_fn)
     executor.register_hook("terminate", task_terminate_callback_fn)

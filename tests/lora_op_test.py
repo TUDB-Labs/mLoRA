@@ -43,6 +43,8 @@ class TestLoraFunction(unittest.TestCase):
             batch_mask_=[],
             data_config_=[ModelDataConfig("", "", 0, 2)],
             enable_checkpoint_=False,
+            random_id_=0,
+            task_name_=[""],
         )
 
         weight = LoRAFunction.apply(

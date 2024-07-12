@@ -25,7 +25,7 @@ class TaskConfig(DictConfig):
         self.init(self.__params_map, config)
 
         self.adapter_ = adapters[config["adapter"]]
-        self.dataset_ = datasets[config["dataset"]]
+        self.dataset_: DatasetConfig | None = datasets[config["dataset"]]
 
 
 class TrainTaskConfig(TaskConfig):

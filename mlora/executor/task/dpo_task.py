@@ -185,6 +185,7 @@ class DPOTask(TrainTask):
             ref_end_idx,
             self._expand_batch_tokens,
             lambda *_: None,
+            self.task_name(),
         )
 
         policy_model_config = MLoRADataConfig(
@@ -194,6 +195,7 @@ class DPOTask(TrainTask):
             policy_end_idx,
             self._expand_batch_tokens,
             loss_fn,
+            self.task_name(),
         )
 
         return ret_tokens, [ref_model_config, policy_model_config]

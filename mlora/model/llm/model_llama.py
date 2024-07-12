@@ -3,6 +3,7 @@ from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
 
 import torch
+from torch.nn.modules import Sequential
 from transformers import AutoConfig, AutoModelForCausalLM
 
 from mlora.model.args import LinearInfo, LLMModelArgs, Masks, ModelData
@@ -327,3 +328,7 @@ class LlamaModel(LLMModel):
                 continue
             ret_val.update(module.wrapper_module_.linears_info())
         return ret_val
+
+    @override
+    def sequential(self) -> Sequential:
+        return self.seq_module_

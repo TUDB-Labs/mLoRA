@@ -58,6 +58,43 @@ For further detailed usage information, please use `--help` option:
 python mlora_train.py --help
 ```
 
+## Deployment using pipeline parallelism
+Similar to Quickstart, the command to start in a two-node environment is as follows:
+
+NOTE1: Use environment variables `MASTER_ADDR/MASTER_PORT` to set the master node.
+
+NOTE2: Set balance, indicating the number of decoder layers allocated to each rank.
+
+
+```bash
+# in the first node
+export MASTER_ADDR=master.svc.cluster.local
+export MASTER_PORT=12355
+python mlora_pp_train.py \
+  --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
+  --config demo/lora/lora_case_1.yaml \
+  --pipeline \
+  --device "cuda:0" \
+  --rank 0 \
+  --balance 12 13 \
+  --recompute False \
+  --precision fp32
+
+# in the second node
+export MASTER_ADDR=master.svc.cluster.local
+export MASTER_PORT=12355
+python mlora_pp_train.py \
+  --base_model TinyLlama/TinyLlama-1.1B-Chat-v0.4 \
+  --config demo/lora/lora_case_1.yaml \
+  --pipeline \
+  --device "cuda:1" \
+  --rank 1 \
+  --balance 12 13 \
+  --recompute False \
+  --precision fp32
+```
+
+
 ## Quickstart with Docker
 mLoRA offers an official Docker image for quick start and development, The image is available on Dockerhub Packages registry.
 

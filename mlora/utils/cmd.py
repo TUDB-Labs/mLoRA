@@ -34,6 +34,9 @@ def _add_base_cmd(parser):
     )
     parser.add_argument("--rank", type=int, default=-1, help="The device's rank number")
     parser.add_argument("--balance", type=int, nargs="+", help="The model's balance")
+    parser.add_argument(
+        "--recompute", type=bool, default=True, help="Enable recompute to save memory"
+    )
     # configuration about log
     parser.add_argument(
         "--log_level", type=str, default="INFO", help="Set the log level."

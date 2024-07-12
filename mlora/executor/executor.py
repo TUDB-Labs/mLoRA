@@ -99,7 +99,8 @@ class Executor:
         mm_collect_step = 0
 
         while not self.dispatcher_.is_done():
-            data: MLoRAData = self.dispatcher_.data()
+            data: MLoRAData | None = self.dispatcher_.data()
+            assert data is not None
 
             torch.cuda.reset_peak_memory_stats(device=self.model_.device_)
 

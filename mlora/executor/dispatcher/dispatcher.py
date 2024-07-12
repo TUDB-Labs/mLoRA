@@ -131,7 +131,7 @@ class Dispatcher:
 
         return batch_tokens, batch_masks
 
-    def data(self) -> MLoRAData:
+    def data(self) -> MLoRAData | None:
         self._dispatch_task_in()
 
         batch_tokens: List[Tokens] = []
