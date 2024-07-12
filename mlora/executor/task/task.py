@@ -33,8 +33,6 @@ class Task:
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         self.config_ = config
 
-        self.prompter_ = PrompterFactory.create(config.dataset_)
-
         self.data_ = []
         self.now_data_idx_ = 0
         self.now_step_ = 1
@@ -78,6 +76,14 @@ class Task:
             "shuffle": lambda data: data.shuffle(),
             "sort": lambda data: data.sort(),
         }
+
+        if self.config_.dataset_ is None:
+            logging.info(
+                "Task dataset is empty, maybe in pipeline we do not load dataset."
+            )
+            return
+
+        self.prompter_ = PrompterFactory.create(self.config_.dataset_)
 
         logging.info(f"Task load data from {self.config_.dataset_.data_path_}")
         data = load_dataset(

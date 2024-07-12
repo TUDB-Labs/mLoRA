@@ -108,6 +108,7 @@ class CITTask(TrainTask):
             end_idx,
             self._expand_batch_tokens,
             loss_fn,
+            self.task_name(),
         )
 
         return ret_tokens, [data_config]

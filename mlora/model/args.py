@@ -1,4 +1,5 @@
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
@@ -87,6 +88,10 @@ class ModelData:
 
     enable_checkpoint_: bool
 
+    # the flag for serialize
+    random_id_: int
+    task_name_: List[str]
+
 
 class MLoRADataConfig:
     adapter_name_: str
@@ -102,6 +107,8 @@ class MLoRADataConfig:
         [torch.Tensor, torch.Tensor, torch.Tensor], Optional[torch.Tensor]
     ]
 
+    task_name_: str
+
     def __init__(
         self,
         adapter_name: str,
@@ -110,6 +117,7 @@ class MLoRADataConfig:
         end_idx: int,
         expand_fn: Callable,
         loss_fn: Callable,
+        task_name: str,
     ) -> None:
         self.adapter_name_ = adapter_name
         self.adapter_type_ = adapter_type
@@ -118,6 +126,8 @@ class MLoRADataConfig:
 
         self.expand_fn_ = expand_fn
         self.loss_fn_ = loss_fn
+
+        self.task_name_ = task_name
 
     def model_data_config(self) -> ModelDataConfig:
         return ModelDataConfig(
@@ -134,6 +144,9 @@ class MLoRAData:
     batch_mask_: List[Masks]
     data_config_: List[MLoRADataConfig]
 
+    # the flag for serialize
+    random_id_: int
+
     def __init__(
         self,
         batch_tokens: List[Tokens],
@@ -143,6 +156,7 @@ class MLoRAData:
         self.batch_tokens_ = batch_tokens
         self.batch_mask_ = batch_mask
         self.data_config_ = data_config
+        self.random_id_ = uuid.uuid4().int
 
     def model_data(self) -> ModelData:
         return ModelData(
@@ -150,6 +164,8 @@ class MLoRAData:
             batch_mask_=self.batch_mask_,
             data_config_=[config.model_data_config() for config in self.data_config_],
             enable_checkpoint_=True,
+            task_name_=[config.task_name_ for config in self.data_config_],
+            random_id_=self.random_id_,
         )
 
     def batch_size(self) -> int:

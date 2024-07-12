@@ -100,7 +100,9 @@ class CPOTask(TrainTask):
                 self.context_.path_ + "_loss", loss.item(), self.now_step_
             )
             mlora.profiler.metric_log(
-                self.context_.path_ + "_loss_prefer", loss_prefer.item(), self.now_step_
+                self.context_.path_ + "_loss_prefer",
+                loss_prefer.mean().item(),
+                self.now_step_,
             )
             logging.info(f"Adapter {self.context_.name_} loss: {loss}")
             return loss
@@ -112,6 +114,7 @@ class CPOTask(TrainTask):
             end_idx,
             self._expand_batch_tokens,
             loss_fn,
+            self.task_name(),
         )
 
         return ret_tokens, [data_config]

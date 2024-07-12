@@ -2,6 +2,8 @@ from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 from typing import List, Optional
 
+import torch
+
 from mlora.model.args import LinearInfo, ModelData
 from mlora.model.modules import AdapterModel
 
@@ -33,3 +35,6 @@ class LLMModel(metaclass=ABCMeta):
 
     @abstractmethod
     def linears_info(self) -> OrderedDict[str, LinearInfo]: ...
+
+    @abstractmethod
+    def sequential(self) -> torch.nn.Sequential: ...
