@@ -1,12 +1,13 @@
-import datasets
-import logging
-import mlora
-import torch
-import json
-import fire
 import csv
-
+import json
+import logging
 from typing import List
+
+import datasets
+import fire
+import torch
+
+import mlora
 
 choices_map = ["A", "B", "C", "D"]
 
@@ -22,8 +23,10 @@ def format_subject(subject):
 def format_prompt(data_point, with_answer=True):
     question = data_point["question"].strip()
     choices = "".join(
-        [f"{key}. {choice}\n" for key, choice in zip(
-            choices_map, data_point["choices"])]
+        [
+            f"{key}. {choice}\n"
+            for key, choice in zip(choices_map, data_point["choices"])
+        ]
     )
     prompt = f"{question}\n{choices}Answer:"
     if with_answer:
@@ -31,13 +34,15 @@ def format_prompt(data_point, with_answer=True):
     return prompt
 
 
-def prepare_data(tokenizer: mlora.Tokenizer,
-                 subject: str,
-                 dev_data: datasets.Dataset,
-                 test_data: datasets.Dataset,
-                 k_shots=5,
-                 max_seq_len=2048,
-                 batch_padding=True):
+def prepare_data(
+    tokenizer: mlora.Tokenizer,
+    subject: str,
+    dev_data: datasets.Dataset,
+    test_data: datasets.Dataset,
+    k_shots=5,
+    max_seq_len=2048,
+    batch_padding=True,
+):
 
     sequence_lengths = []
     batch_tokens = []
@@ -86,18 +91,21 @@ def prepare_data(tokenizer: mlora.Tokenizer,
 
 
 @torch.inference_mode()
-def evaluate(subject: str,
-             tokenizer: mlora.Tokenizer,
-             model: mlora.LLMModel,
-             adapter_names: List[str],
-             batch_size: int = 2,
-             max_seq_len: int = 2048):
+def evaluate(
+    subject: str,
+    tokenizer: mlora.Tokenizer,
+    model: mlora.LLMModel,
+    adapter_names: List[str],
+    batch_size: int = 2,
+    max_seq_len: int = 2048,
+):
     # prepare data
 
     mmlu = datasets.load_dataset("cais/mmlu", subject)
 
     sequence_lengths, batch_tokens, atten_masks, batch_labels = prepare_data(
-        tokenizer, subject, mmlu["dev"], mmlu["test"], 5, max_seq_len, batch_size > 1)
+        tokenizer, subject, mmlu["dev"], mmlu["test"], 5, max_seq_len, batch_size > 1
+    )
 
     # load adapters
 
@@ -108,14 +116,14 @@ def evaluate(subject: str,
 
     # prepare for evaluate
     sequence_lengths = torch.tensor(
-        sequence_lengths, dtype=torch.long, device=model.device_)
+        sequence_lengths, dtype=torch.long, device=model.device_
+    )
 
     label_indices = [0] * len(choices_map)
     for idx, text in enumerate(choices_map):
         ids = tokenizer.encode(text)
         label_indices[idx] = ids[-1]
-    label_indices = torch.tensor(
-        label_indices, dtype=torch.long, device=model.device_)
+    label_indices = torch.tensor(label_indices, dtype=torch.long, device=model.device_)
 
     start_pos = 0
     while start_pos < len(batch_tokens):
@@ -125,30 +133,34 @@ def evaluate(subject: str,
         batch_data_config = []
         batch_start_idx = 0
         for name in adapter_names:
-            batch_data_config.append(mlora.LLMBatchConfig(
-                adapter_name_=name,
-                batch_start_idx_=batch_start_idx,
-                batch_end_idx_=batch_start_idx + bsz,
-            ))
+            batch_data_config.append(
+                mlora.LLMBatchConfig(
+                    adapter_name_=name,
+                    batch_start_idx_=batch_start_idx,
+                    batch_end_idx_=batch_start_idx + bsz,
+                )
+            )
             batch_start_idx += bsz
 
         input_args = mlora.LLMModelInput(
             batch_configs_=batch_data_config,
             batch_tokens_=batch_tokens[start_pos:end_pos] * len(adapter_names),
-            batch_masks_=atten_masks[start_pos:end_pos] *
-            len(adapter_names),
+            batch_masks_=atten_masks[start_pos:end_pos] * len(adapter_names),
             inference_mode_=True,
         )
 
         outputs = model.forward(input_args)
 
         labels = torch.tensor(
-            batch_labels[start_pos:end_pos], dtype=torch.long, device=model.device_)
+            batch_labels[start_pos:end_pos], dtype=torch.long, device=model.device_
+        )
 
         for output in outputs:
             logits = output.logits
-            logits = logits[torch.arange(
-                bsz, device=logits.device), sequence_lengths[start_pos:end_pos]]
+            logits = logits[
+                torch.arange(bsz, device=logits.device),
+                sequence_lengths[start_pos:end_pos],
+            ]
             logits = logits[:, label_indices]
             logits = logits.softmax(-1).argmax(-1)
             result = (logits == labels).int().tolist()
@@ -225,7 +237,14 @@ mmlu_subcategories = {
 
 
 mmlu_categories = {
-    "STEM": ["physics", "chemistry", "biology", "computer science", "math", "engineering"],
+    "STEM": [
+        "physics",
+        "chemistry",
+        "biology",
+        "computer science",
+        "math",
+        "engineering",
+    ],
     "humanities": ["history", "philosophy", "law"],
     "social sciences": ["politics", "culture", "economics", "geography", "psychology"],
     "other (business, health, misc.)": ["other", "business", "health"],
@@ -239,25 +258,36 @@ model_dtypes = {
 }
 
 
-def do_evaluate(model_name: str,
-                model_dtype: str,
-                adapter_names: List[str],
-                batch_size: int = 2,
-                device: str = mlora.get_backend().default_device_name(),
-                output: str = "mmlu_scores.csv"):
+def do_evaluate(
+    model_name: str,
+    model_dtype: str,
+    adapter_names: List[str],
+    batch_size: int = 2,
+    device: str = mlora.get_backend().default_device_name(),
+    output: str = "mmlu_scores.csv",
+):
     tokenizer = mlora.Tokenizer(model_name)
     model = mlora.LLMModel.from_pretrained(
-        model_name, device=device, **model_dtypes[model_dtype])
+        model_name, device=device, **model_dtypes[model_dtype]
+    )
     for name in adapter_names:
         logging.info(f"Loading adapter {name}")
-        model.load_adapter_weight(name)
+        if name == "default":
+            model.init_adapter(mlora.AdapterConfig(adapter_name=name))
+        else:
+            model.load_adapter(name)
 
-    csv_data = [["mmlu_categories", "mmlu_subcategories",
-                 "adapter_name", "acc_score"]]
+    csv_data = [["mmlu_categories", "mmlu_subcategories", "adapter_name", "acc_score"]]
     for subject, subcategory in mmlu_subcategories.items():
         logging.info(f"Performing MMLU/{subject} Benchmark")
-        results = evaluate(subject, tokenizer, model,
-                           adapter_names, batch_size, model.config_.max_seq_len_)
+        results = evaluate(
+            subject,
+            tokenizer,
+            model,
+            adapter_names,
+            batch_size,
+            model.config_.max_seq_len_,
+        )
         category = None
         for category_name, subcategory_names in mmlu_categories.items():
             if subcategory[-1] in subcategory_names:
@@ -265,7 +295,7 @@ def do_evaluate(model_name: str,
         for name, result in results.items():
             acc = sum(result) / len(result)
             csv_data.append([category, subject, name, acc])
-        with open(output, "w", newline='') as csvfile:
+        with open(output, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerows(csv_data)
 
@@ -275,7 +305,7 @@ def main(config: str):
     mlora.setup_logging("INFO")
     if not mlora.get_backend().check_available():
         exit(-1)
-    with open(config, 'r', encoding='utf8') as fp:
+    with open(config, "r", encoding="utf8") as fp:
         mmlu_config = json.load(fp)
     do_evaluate(**mmlu_config)
 

@@ -1,15 +1,15 @@
-import fire
-import mlora
-import torch
 import traceback
-import gradio as gr
-
 from queue import Queue
 from threading import Thread
 
+import fire
+import gradio as gr
+import torch
+
+import mlora
+
 
 class Iteratorize:
-
     """
     Transforms a function that takes a callback
     into a lazy iterator (generator).
@@ -64,28 +64,32 @@ class Iteratorize:
 placeholder_text = "Could you provide an introduction to m-LoRA?"
 
 
-def main(base_model: str,
-         template: str = None,
-         lora_weights: str = "",
-         load_16bit: bool = True,
-         load_8bit: bool = False,
-         load_4bit: bool = False,
-         flash_attn: bool = False,
-         device: str = mlora.get_backend().default_device_name(),
-         server_name: str = "0.0.0.0",
-         share_gradio: bool = False):
+def main(
+    base_model: str,
+    template: str = None,
+    lora_weights: str = "",
+    load_16bit: bool = True,
+    load_8bit: bool = False,
+    load_4bit: bool = False,
+    flash_attn: bool = False,
+    device: str = mlora.get_backend().default_device_name(),
+    server_name: str = "0.0.0.0",
+    share_gradio: bool = False,
+):
 
-    model = mlora.LLMModel.from_pretrained(base_model, device=device,
-                                           attn_impl="flash_attn" if flash_attn else "eager",
-                                           bits=(8 if load_8bit else (
-                                                 4 if load_4bit else None)),
-                                           load_dtype=torch.bfloat16 if load_16bit else torch.float32)
+    model = mlora.LLMModel.from_pretrained(
+        base_model,
+        device=device,
+        attn_impl="flash_attn" if flash_attn else "eager",
+        bits=(8 if load_8bit else (4 if load_4bit else None)),
+        load_dtype=torch.bfloat16 if load_16bit else torch.float32,
+    )
     tokenizer = mlora.Tokenizer(base_model)
 
     if lora_weights:
-        model.load_adapter_weight(lora_weights, "default")
+        model.load_adapter(lora_weights, "default")
     else:
-        model.load_adapter_weight("default")
+        model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
 
     generation_config = mlora.GenerateConfig(
         adapter_name="default",
@@ -130,9 +134,7 @@ def main(base_model: str,
                 mlora.generate(stream_callback=callback, **kwargs)
 
             def generate_with_streaming(**kwargs):
-                return Iteratorize(
-                    generate_with_callback, kwargs, callback=None
-                )
+                return Iteratorize(generate_with_callback, kwargs, callback=None)
 
             with generate_with_streaming(**generate_params) as generator:
                 for output in generator:
@@ -152,9 +154,7 @@ def main(base_model: str,
                 placeholder=placeholder_text,
             ),
             gr.components.Textbox(lines=2, label="Input", placeholder="none"),
-            gr.components.Slider(
-                minimum=0, maximum=1, value=1, label="Temperature"
-            ),
+            gr.components.Slider(minimum=0, maximum=1, value=1, label="Temperature"),
             gr.components.Slider(
                 minimum=0, maximum=1, value=0.9, label="Sampling Top-P"
             ),
@@ -165,11 +165,13 @@ def main(base_model: str,
                 minimum=0, maximum=2, value=1.1, label="Repetition Penalty"
             ),
             gr.components.Slider(
-                minimum=1, maximum=model.config_.max_seq_len_, step=1, value=128, label="Max Tokens"
+                minimum=1,
+                maximum=model.config_.max_seq_len_,
+                step=1,
+                value=128,
+                label="Max Tokens",
             ),
-            gr.components.Checkbox(
-                label="Stream Output", value=True
-            ),
+            gr.components.Checkbox(label="Stream Output", value=True),
         ],
         outputs=[
             gr.components.Textbox(

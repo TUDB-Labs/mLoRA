@@ -110,9 +110,13 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 
 ## Installation
 
-Please refer to [Install Guide](./Install.md).
+Please refer to [m-LoRA Install Guide](./Install.md).
 
-## Quickstart
+## Quickstart using Jupiter Notebook
+
+Please refer to [m-LoRA Demo Notebook](./mlora.ipynb).
+
+## Quickstart using m-LoRA Launcher
 
 You can conveniently utilize m-LoRA via `launch.py`. The following example demonstrates a streamlined approach to training a dummy model with m-LoRA.
 

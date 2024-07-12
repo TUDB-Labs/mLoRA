@@ -1,5 +1,5 @@
-import pandas as pd
 import fire
+import pandas as pd
 
 
 def main(file_name: str):
@@ -7,8 +7,9 @@ def main(file_name: str):
     print("\n### All Average ###")
     print(df.groupby("adapter_name").aggregate({"acc_score": "mean"}))
     print("\n### Category Average ###")
-    print(df.groupby(["adapter_name", "mmlu_categories"]
-                     ).aggregate({"acc_score": "mean"}))
+    print(
+        df.groupby(["adapter_name", "mmlu_categories"]).aggregate({"acc_score": "mean"})
+    )
 
 
 if __name__ == "__main__":

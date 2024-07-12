@@ -35,6 +35,7 @@ from .model import LLMAttention, LLMDecoder, LLMFeedForward, LLMForCausalLM, LLM
 
 # Model Arguments
 from .modelargs import (
+    AdapterConfig,
     DataClass,
     Labels,
     LLMBatchConfig,
@@ -86,6 +87,7 @@ __all__ = [
     "LLMModelOutput",
     "LLMBatchConfig",
     "LLMModelInput",
+    "AdapterConfig",
     "LoraConfig",
     "MixConfig",
     "lora_config_factory",

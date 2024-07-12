@@ -10,6 +10,7 @@ from transformers import AutoModelForCausalLM
 
 from mlora.backends import get_backend
 from mlora.common import (
+    AdapterConfig,
     LLMDecoder,
     LLMForCausalLM,
     LLMModelArgs,
@@ -126,7 +127,7 @@ class ClassificationOutputLayer(LLMOutput):
 class OutputLayer(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.layers_: torch.ModuleDict = {}
+        self.layers_: Dict[str, torch.nn.Module] = {}
 
     def forward(
         self, data: torch.Tensor, input_args: LLMModelInput
@@ -342,35 +343,8 @@ class LLMModel(torch.nn.Module):
 
         return output
 
-    def init_lora_layer_weight(
-        self, config: LoraConfig, weight: Optional[Dict[str, torch.Tensor]]
-    ):
-        self.adapter_configs_[config.adapter_name] = config
-        # init output layer
-        if config.task_name in task_dict and isinstance(
-            task_dict[config.task_name], SequenceClassificationTask
-        ):
-            output_layer = ClassificationOutputLayer(
-                **task_dict[config.task_name].init_kwargs(),
-                hidden_size=self.config_.dim_,
-                pad_token_id=self.config_.pad_token_id_,
-                device=self.device_,
-                weight=weight,
-            )
-        else:
-            output_layer = CasualOutputLayer(
-                vocab_size=self.config_.vocab_size_, weight=self.model_.lm_head_
-            )
-
-        self.output_.layers_[config.adapter_name] = output_layer
-        if config.adapter_name == "default" and weight is None:
-            return
-        # init transformer layers
-        for transformer_layer in self.model_.layers_:
-            init_lora_layer_weight(transformer_layer, self.config_, config, weight)
-
     def from_pretrained(
-        path: str,
+        name_or_path: str,
         device: str,
         bits: int = None,
         attn_impl: str = "eager",
@@ -379,7 +353,7 @@ class LLMModel(torch.nn.Module):
         compute_dtype: torch.dtype = torch.bfloat16,
         double_quant: bool = True,
         quant_type: str = "nf4",
-    ):
+    ) -> "LLMModel":
         # load_dtype will change the precision of LLaMA pre-trained model
         # when loading with quantization (bits = 8 or bits = 4), load_dtype will only influence the actual computing precision
         if load_dtype not in [torch.bfloat16, torch.float16, torch.float32]:
@@ -404,7 +378,7 @@ class LLMModel(torch.nn.Module):
         if bits in [4, 8]:
             logging.info(f"Loading model with quantization, bits = {bits}.")
             llm_model = AutoModelForCausalLM.from_pretrained(
-                path,
+                name_or_path,
                 device_map=device,
                 trust_remote_code=True,
                 quantization_config=BitsAndBytesConfig(
@@ -420,7 +394,10 @@ class LLMModel(torch.nn.Module):
             )
         else:
             llm_model = AutoModelForCausalLM.from_pretrained(
-                path, device_map=device, trust_remote_code=True, torch_dtype=load_dtype
+                name_or_path,
+                device_map=device,
+                trust_remote_code=True,
+                torch_dtype=load_dtype,
             )
 
         llm_model.requires_grad_(False)
@@ -436,11 +413,42 @@ class LLMModel(torch.nn.Module):
 
         return LLMModel(model)
 
-    def get_lora_weight_dict(self, lora_name: str) -> Dict[str, torch.Tensor]:
+    def init_adapter(
+        self, config: AdapterConfig, weight: Optional[Dict[str, torch.Tensor]] = None
+    ):
+        self.adapter_configs_[config.adapter_name] = config
+        # init output layer
+        if config.task_name in task_dict and isinstance(
+            task_dict[config.task_name], SequenceClassificationTask
+        ):
+            output_layer = ClassificationOutputLayer(
+                **task_dict[config.task_name].init_kwargs(),
+                hidden_size=self.config_.dim_,
+                pad_token_id=self.config_.pad_token_id_,
+                device=self.device_,
+                weight=weight,
+            )
+        else:
+            output_layer = CasualOutputLayer(
+                vocab_size=self.config_.vocab_size_, weight=self.model_.lm_head_
+            )
+
+        self.output_.layers_[config.adapter_name] = output_layer
+        if type(config) is AdapterConfig:
+            assert weight is None, "can not load basic adapter with weight"
+            return
+
+        # init transformer layers
+        for transformer_layer in self.model_.layers_:
+            init_lora_layer_weight(transformer_layer, self.config_, config, weight)
+
+        return config.adapter_name
+
+    def get_adapter_weight_dict(self, adapter_name: str) -> Dict[str, torch.Tensor]:
         # return the lora weight and target_module's name
-        lora_weight_dict = self.output_.layers_[lora_name].state_dict()
+        lora_weight_dict = self.output_.layers_[adapter_name].state_dict()
         for idx, transformer_layer in enumerate(self.model_.layers_):
-            if isinstance(self.adapter_configs_[lora_name], MixConfig):
+            if isinstance(self.adapter_configs_[adapter_name], MixConfig):
                 layer_prefix_name = f"mixlora.layers.{idx}.self_attn."
             else:
                 layer_prefix_name = f"base_model.model.model.layers.{idx}.self_attn."
@@ -452,22 +460,22 @@ class LLMModel(torch.nn.Module):
                 lora_layer_name_list.append(name)
 
             for idx, lora_layer in enumerate(lora_layer_list):
-                if lora_name in lora_layer.loras_:
+                if adapter_name in lora_layer.loras_:
                     prefix_name = layer_prefix_name + lora_layer_name_list[idx]
                     lora_weight_dict[f"{prefix_name}.lora_A.weight"] = (
-                        lora_layer.loras_[lora_name].lora_a_.weight
+                        lora_layer.loras_[adapter_name].lora_a_.weight
                     )
                     lora_weight_dict[f"{prefix_name}.lora_B.weight"] = (
-                        lora_layer.loras_[lora_name].lora_b_.weight
+                        lora_layer.loras_[adapter_name].lora_b_.weight
                     )
-                elif lora_name in transformer_layer.mlp_.moes_:
+                elif adapter_name in transformer_layer.mlp_.moes_:
                     moe_layer_prefix_name = (
                         f"mixlora.layers.{transformer_layer.layer_id_}."
                     )
                     for expert_idx in range(
-                        transformer_layer.mlp_.moes_[lora_name].experts_
+                        transformer_layer.mlp_.moes_[adapter_name].experts_
                     ):
-                        moe_lora_name = f"moe.{lora_name}.experts.{expert_idx}"
+                        moe_lora_name = f"moe.{adapter_name}.experts.{expert_idx}"
                         if moe_lora_name in lora_layer.loras_:
                             lora_weight_dict[
                                 moe_layer_prefix_name
@@ -481,27 +489,51 @@ class LLMModel(torch.nn.Module):
                             ] = lora_layer.loras_[moe_lora_name].lora_b_.weight
 
                     lora_weight_dict[moe_layer_prefix_name + "gate.weight"] = (
-                        transformer_layer.mlp_.moes_[lora_name].gate_.weight
+                        transformer_layer.mlp_.moes_[adapter_name].gate_.weight
                     )
 
         return lora_weight_dict
 
-    def load_adapter_weight(self, path: str, adapter_name: str = None):
+    def unload_adapter(
+        self, adapter_name: str
+    ) -> Tuple[LoraConfig, Dict[str, torch.Tensor]]:
+        assert adapter_name in self.adapter_configs_, "adapter not exist"
+        lora_weight = self.get_adapter_weight_dict(adapter_name)
+        self.output_.layers_.pop(adapter_name)
+        for transformer_layer in self.model_.layers_:
+            lora_layer_list = []
+            for layer in transformer_layer.state_dict().values():
+                lora_layer_list.append(layer)
+
+            for lora_layer in lora_layer_list:
+                if adapter_name in lora_layer.loras_:
+                    lora_layer.loras_.pop(adapter_name, None)
+                elif adapter_name in transformer_layer.mlp_.moes_:
+                    for expert_idx in range(
+                        transformer_layer.mlp_.moes_[adapter_name].experts_
+                    ):
+                        moe_lora_name = f"moe.{adapter_name}.experts.{expert_idx}"
+                        lora_layer.loras_.pop(moe_lora_name, None)
+
+                    transformer_layer.mlp_.moes_.pop(adapter_name)
+
+        lora_config = self.adapter_configs_.pop(adapter_name)
+        return lora_config, lora_weight
+
+    def load_adapter(self, name_or_path: str, adapter_name: str = None):
         if adapter_name is None:
-            adapter_name = path
-        if path != "default":
-            if not os.path.exists(path):
-                path = snapshot_download(repo_id=path, repo_type="model")
-            with open(
-                path + os.sep + "adapter_config.json", "r", encoding="utf8"
-            ) as fp:
-                lora_config = lora_config_factory(json.load(fp))
-            lora_config.adapter_name = adapter_name
-            lora_weight = torch.load(
-                path + os.sep + "adapter_model.bin", map_location=self.device_
-            )
-        else:
-            lora_config = LoraConfig(adapter_name=path)
-            lora_weight = None
-        self.init_lora_layer_weight(lora_config, lora_weight)
+            adapter_name = name_or_path
+
+        if not os.path.exists(name_or_path):
+            name_or_path = snapshot_download(repo_id=name_or_path, repo_type="model")
+        with open(
+            name_or_path + os.sep + "adapter_config.json", "r", encoding="utf8"
+        ) as fp:
+            lora_config = lora_config_factory(json.load(fp))
+        lora_config.adapter_name = adapter_name
+        lora_weight = torch.load(
+            name_or_path + os.sep + "adapter_model.bin", map_location=self.device_
+        )
+
+        self.init_adapter(lora_config, lora_weight)
         return adapter_name

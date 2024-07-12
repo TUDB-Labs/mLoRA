@@ -1,6 +1,7 @@
 import logging
 import random
 import sys
+from abc import abstractmethod
 from typing import Callable, Dict, List, Union
 
 import datasets
@@ -152,6 +153,12 @@ class TrainTask:
         return ret_data
 
 
+class DispatcherConfig:
+    @abstractmethod
+    def dispatcher_context(self) -> Dict[str, any]:
+        return {}
+
+
 class Dispatcher:
     config_ = None
     tokenizer_: Tokenizer = None
@@ -173,9 +180,18 @@ class Dispatcher:
 
     strategy_: str = ""
 
-    def __init__(self, config: Dict[str, any], tokenizer: Tokenizer) -> None:
+    def __init__(
+        self,
+        tokenizer: Tokenizer,
+        configs: List[DispatcherConfig],
+        max_concurrent_jobs: int = None,
+        strategy: str = "optim",
+        cutoff_len: int = 256,
+    ) -> None:
+        if max_concurrent_jobs is None:
+            max_concurrent_jobs = len(configs)
+
         self.tokenizer_ = tokenizer
-        self.config_ = config
 
         self.ready_train_task_ = []
         self.running_train_task_ = []
@@ -184,23 +200,16 @@ class Dispatcher:
         self.train_task_in_event_ = Event()
         self.train_task_out_event_ = Event()
 
-        self.train_lora_candidate_num_ = config["train_lora_candidate_num"]
-        self.train_lora_simultaneously_num_ = config["train_lora_simultaneously_num"]
-        self.strategy_ = config["train_strategy"]
+        self.train_lora_candidate_num_ = sys.maxsize
+        self.train_lora_simultaneously_num_ = max_concurrent_jobs
+        self.strategy_ = strategy
 
         # create ready task
-        for lora in config["lora"]:
+        for config_class in configs:
+            kwargs = config_class.dispatcher_context()
             self.ready_train_task_.append(
                 TrainTask(
-                    tokenzer=self.tokenizer_,
-                    adapter_name=lora["name"],
-                    dataload_function=lora["dataloader"],
-                    total_epoch_num=lora["num_epochs"],
-                    max_train_batch_size=lora["batch_size"],
-                    max_train_micro_batch_size=lora["micro_batch_size"],
-                    max_test_batch_size=lora.get("test_batch_size", -1),
-                    train_cutoff_len=config["cutoff_len"],
-                    group_by_length=lora.get("group_by_length", True),
+                    tokenzer=self.tokenizer_, train_cutoff_len=cutoff_len, **kwargs
                 )
             )
 
@@ -322,12 +331,7 @@ class Dispatcher:
             adapter_end_idx: int = adapter_start_idx + len(all_train_data[adapter])
             for data in all_train_data[adapter]:
                 tokens: Tokens = data.tokens_.copy()
-                # get the pad token from lora config
-                lora_config = None
-                for ilora_conf in self.config_["lora"]:
-                    if ilora_conf["name"] == adapter:
-                        lora_config = ilora_conf
-                pad_side = lora_config.get("expand_side", "right")
+                pad_side = self.tokenizer_.padding_side_
                 assert pad_side == "right" or pad_side == "left"
                 # pad the tokens to align
                 while len(tokens) < batch_seq_len:

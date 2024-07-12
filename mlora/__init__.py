@@ -1,5 +1,6 @@
 from .backends import get_backend
 from .common import (
+    AdapterConfig,
     LLMBatchConfig,
     LLMForCausalLM,
     LLMModelArgs,
@@ -32,6 +33,7 @@ __all__ = [
     "LLMForCausalLM",
     "LLMBatchConfig",
     "LLMModelInput",
+    "AdapterConfig",
     "LoraConfig",
     "MixConfig",
     "lora_config_factory",

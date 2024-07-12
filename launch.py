@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
-import tempfile
 import json
-import fire
 import os
+import tempfile
+
+import fire
 
 file_path = ".launcher"
 work_path = os.path.dirname(os.path.abspath(__file__))
 
 
-def compose_command(base_model: str,
-                    config: str = "mlora.json",
-                    load_adapter: bool = False,
-                    random_seed: int = 42,
-                    cuda_device: int = None,
-                    log_file: str = "mlora.log",
-                    overwrite: bool = False,
-                    attn_impl: str = None,
-                    quantize: str = None,
-                    dtype: str = "bf16",
-                    tf32: bool = False):
+def compose_command(
+    base_model: str,
+    config: str = "mlora.json",
+    load_adapter: bool = False,
+    random_seed: int = 42,
+    cuda_device: int = None,
+    log_file: str = "mlora.log",
+    overwrite: bool = False,
+    attn_impl: str = None,
+    quantize: str = None,
+    dtype: str = "bf16",
+    tf32: bool = False,
+):
     assert quantize in (None, "4bit", "8bit")
     assert dtype in ("fp32", "fp16", "bf16")
     command = "python mlora.py"
@@ -57,7 +60,7 @@ def train(**kwargs):
 
 def run(config: str = "mlora.json", **kwargs):
     config = f"{work_path}{os.sep}{config}"
-    with open(config, 'r', encoding='utf8') as fp:
+    with open(config, "r", encoding="utf8") as fp:
         config_obj = json.load(fp)
     evaluate_config = config_obj.copy()
     evaluate_config["lora"] = []
@@ -81,30 +84,32 @@ def update_record(dict_: dict, key_, value_):
 
 
 def gen_config(
-        # essential
-        template: str,
-        tasks: str,
-        # optional
-        adapter_name: str = None,
-        file_name: str = "mlora.json",
-        # default value provided by template
-        cutoff_len: int = None,
-        save_step: int = None,
-        lr_scheduler: str = None,
-        warmup_steps: float = None,
-        learning_rate: float = None,
-        batch_size: int = None,
-        micro_batch_size: int = None,
-        test_batch_size: int = None,
-        num_epochs: int = None,
-        loraplus_lr_ratio: float = None,
-        use_dora: bool = None,
-        use_rslora: bool = None,
-        multi_task: bool = None,
-        group_by_length: bool = None):
+    # essential
+    template: str,
+    tasks: str,
+    # optional
+    adapter_name: str = None,
+    file_name: str = "mlora.json",
+    # default value provided by template
+    cutoff_len: int = None,
+    save_step: int = None,
+    lr_scheduler: str = None,
+    warmup_steps: float = None,
+    learning_rate: float = None,
+    batch_size: int = None,
+    micro_batch_size: int = None,
+    test_batch_size: int = None,
+    num_epochs: int = None,
+    loraplus_lr_ratio: float = None,
+    use_dora: bool = None,
+    use_rslora: bool = None,
+    multi_task: bool = None,
+    group_by_length: bool = None,
+):
     import mlora
+
     template = f"{work_path}{os.sep}{file_path}{os.sep}{template}.json"
-    with open(template, 'r', encoding='utf8') as fp:
+    with open(template, "r", encoding="utf8") as fp:
         template_obj = json.load(fp)
     update_record(template_obj, "cutoff_len", cutoff_len)
     update_record(template_obj, "save_step", save_step)
@@ -114,20 +119,21 @@ def gen_config(
     if multi_task:
         tasks = [tasks]
     else:
-        tasks = tasks.split(';')
+        tasks = tasks.split(";")
 
     for lora_template in lora_templates:
         for task_name in tasks:
             lora_config = lora_template.copy()
-            casual_task = (
-                not multi_task and task_name not in mlora.tasks.task_dict)
+            casual_task = not multi_task and task_name not in mlora.tasks.task_dict
             if casual_task:
                 lora_config["name"] = f"casual_{index}"
                 lora_config["task_name"] = "casual"
                 lora_config["data"] = task_name
                 lora_config["prompt"] = "template/alpaca.json"
             else:
-                lora_config["name"] = f"{task_name.split(':')[-1].replace('-', '_')}_{index}"
+                lora_config["name"] = (
+                    f"{task_name.split(':')[-1].replace('-', '_')}_{index}"
+                )
                 lora_config["task_name"] = task_name
 
             if adapter_name is not None:
@@ -155,6 +161,7 @@ def gen_config(
 
 def avail_tasks():
     import mlora
+
     print("Available task names:")
     for name in mlora.tasks.task_dict.keys():
         print(f"    {name}")
@@ -162,7 +169,8 @@ def avail_tasks():
 
 
 def show_help():
-    print("""
+    print(
+        """
     Launcher of m-LoRA
     Usage: python launch.py COMMAND [ARGS...]
     Command:
@@ -204,7 +212,8 @@ def show_help():
         --quantize     [none], 4bit, 8bit
         --dtype        [bf16], fp16, fp32
         --tf32         [false]
-    """)
+    """
+    )
 
 
 command_map = {
