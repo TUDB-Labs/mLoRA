@@ -434,13 +434,12 @@ class LLMModel(torch.nn.Module):
             )
 
         self.output_.layers_[config.adapter_name] = output_layer
-        if type(config) is AdapterConfig:
+        if type(config) is not AdapterConfig:
+            # init transformer layers
+            for transformer_layer in self.model_.layers_:
+                init_lora_layer_weight(transformer_layer, self.config_, config, weight)
+        else:
             assert weight is None, "can not load basic adapter with weight"
-            return
-
-        # init transformer layers
-        for transformer_layer in self.model_.layers_:
-            init_lora_layer_weight(transformer_layer, self.config_, config, weight)
 
         return config.adapter_name
 
