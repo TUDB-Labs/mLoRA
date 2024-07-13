@@ -1,10 +1,10 @@
 # m-LoRA: An Efficient "Factory" to Build Multiple LoRA Adapters
-[![](https://github.com/scukdde-llm/mlora/actions/workflows/python-test.yml/badge.svg)](https://github.com/scukdde-llm/mlora/actions/workflows/python-test.yml)
-[![](https://img.shields.io/github/stars/scukdde-llm/mlora?logo=GitHub&style=flat)](https://github.com/scukdde-llm/mlora/stargazers)
-[![](https://img.shields.io/github/v/release/scukdde-llm/mlora?logo=Github)](https://github.com/scukdde-llm/mlora/releases/latest)
+[![](https://github.com/mikecovlee/mLoRA/actions/workflows/python-test.yml/badge.svg)](https://github.com/mikecovlee/mLoRA/actions/workflows/python-test.yml)
+[![](https://img.shields.io/github/stars/mikecovlee/mLoRA?logo=GitHub&style=flat)](https://github.com/mikecovlee/mLoRA/stargazers)
+[![](https://img.shields.io/github/v/release/mikecovlee/mLoRA?logo=Github)](https://github.com/mikecovlee/mLoRA/releases/latest)
 [![](https://img.shields.io/pypi/v/mlora?logo=pypi)](https://pypi.org/project/mlora/)
 [![](https://img.shields.io/docker/v/mikecovlee/mlora?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/mlora/tags)
-[![](https://img.shields.io/github/license/scukdde-llm/mlora)](http://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/github/license/mikecovlee/mLoRA)](http://www.apache.org/licenses/LICENSE-2.0)
 
 mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for efficient fine-tuning of multiple Large Language Models (LLMs) using LoRA and its variants. Key features of mLoRA include:
 
@@ -16,7 +16,7 @@ mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for effi
 
 - Exclusive Mo-LoRA (Mixture of LoRAs) optimization for MixLoRA and its variants.
 
-You can try m-LoRA with [Google Colab](https://githubtocolab.com/scukdde-llm/mLoRA/blob/main/mlora.ipynb) before local installation.
+You can try m-LoRA with [Google Colab](https://githubtocolab.com/mikecovlee/mLoRA/blob/main/mlora.ipynb) before local installation.
 
 ## Note from the maintainer of this repository
 
@@ -169,6 +169,6 @@ You can check all available tags from: [mikecovlee/mlora/tags](https://hub.docke
 Please note that this container only provides a proper environment to run m-LoRA. The codes of m-LoRA are not included.
 
 ## Copyright
-Copyright © 2023-2024 KDDE Lab, Sichuan University
+Copyright © 2023-2024 IDs Lab, Sichuan University
 
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).

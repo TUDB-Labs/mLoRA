@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlora"
-version = "0.3.5"
+version = "0.3.5.post1"
 description = "An Efficient Factory to Build Multiple LoRA Adapters"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -26,8 +26,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/scukdde-llm/mlora"
-"Bug Tracker" = "https://github.com/scukdde-llm/mlora/issues"
+"Homepage" = "https://github.com/mikecovlee/mLoRA"
+"Bug Tracker" = "https://github.com/mikecovlee/mLoRA/issues"
 
 [tool.setuptools.packages.find]
 include = ["mlora*"]

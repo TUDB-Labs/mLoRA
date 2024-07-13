@@ -41,7 +41,7 @@ RUN /usr/bin/echo -e '#!/bin/bash\neval "$(pyenv init -)"\neval "$(pyenv virtual
 RUN . ~/.bashrc \
     && pyenv install $PYTHON_VERSION \
     && pyenv global $PYTHON_VERSION \
-    && git clone https://github.com/scukdde-llm/mLoRA /mLoRA \
+    && git clone https://github.com/mikecovlee/mLoRA /mLoRA \
     && cd /mLoRA \
     && pyenv virtualenv $PYTHON_VERSION mlora \
     && pyenv local mlora \
