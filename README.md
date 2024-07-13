@@ -16,6 +16,8 @@ mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for effi
 
 - Exclusive Mo-LoRA (Mixture of LoRAs) optimization for MixLoRA and its variants.
 
+You can try m-LoRA with [Google Colab](https://githubtocolab.com/scukdde-llm/mLoRA/blob/main/mlora.ipynb) before local installation.
+
 ## Note from the maintainer of this repository
 
 This is an actively developing fork of the official m-LoRA repository, focusing on PEFT algorithm and its related improvements, maintained by the authors of m-LoRA. Please note that the functions, interfaces, and performance of this fork are slightly different from the original m-LoRA. We cannot guarantee compatibility. For production use, please prefer the [original m-LoRA](https://github.com/TUDB-Labs/mLoRA).
@@ -112,11 +114,7 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 
 Please refer to [m-LoRA Install Guide](./Install.md).
 
-## Quickstart using Jupiter Notebook
-
-Please refer to [m-LoRA Demo Notebook](./mlora.ipynb).
-
-## Quickstart using m-LoRA Launcher
+## Quickstart
 
 You can conveniently utilize m-LoRA via `launch.py`. The following example demonstrates a streamlined approach to training a dummy model with m-LoRA.
 
