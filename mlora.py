@@ -211,7 +211,7 @@ def init_adapter_config(
                 )
         else:
             config_list.append(
-                mlora.TrainConfig().from_config(lora_config).init(config_class)
+                mlora.TrainConfig().from_config(lora_config).init_for(config_class)
             )
 
     return config_list

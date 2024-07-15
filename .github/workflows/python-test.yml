@@ -27,7 +27,7 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint with flake8
       run: |
-        flake8 ./mlora --count --show-source --statistics --max-line-length=128 --max-complexity 15 --ignore=E203,W503
+        flake8 . --show-source --statistics --max-line-length=128 --max-complexity 15 --ignore=E203,W503,E722
     - name: Test with pytest
       run: |
         pytest

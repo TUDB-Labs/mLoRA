@@ -40,7 +40,7 @@ def main(
         micro_batch_size=8,
         learning_rate=1e-4,
         casual_train_data=train_data,
-    ).init(lora_config)
+    ).init_for(lora_config)
 
     mlora.train(model=model, tokenizer=tokenizer, configs=[train_config])
 

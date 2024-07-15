@@ -1,7 +1,4 @@
 #!/bin/bash
-black ./mlora
-black ./*.py
-black ./tests/*.py
-isort ./mlora --profile black
-isort ./*.py --profile black
-isort ./tests/*.py --profile black
+black .
+isort . --profile black
+flake8 . --show-source --statistics --max-line-length=128 --max-complexity 15 --ignore=E203,W503,E722

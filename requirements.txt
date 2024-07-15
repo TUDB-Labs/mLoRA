@@ -12,6 +12,8 @@ peft==0.11.1
 pandas
 fire
 black
+black[jupyter]
 isort
+flake8
 notebook
 ipywidgets

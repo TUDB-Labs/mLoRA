@@ -45,7 +45,7 @@ class TrainConfig(DispatcherConfig):
     casual_prompt_template: str = None
     casual_validation_size: int = None
 
-    def init(self, config: AdapterConfig):
+    def init_for(self, config: AdapterConfig):
         self.adapter_name = config.adapter_name
         self.task_name = config.task_name
         if self.task_name == "casual":
