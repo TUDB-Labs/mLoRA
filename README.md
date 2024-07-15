@@ -1,12 +1,10 @@
-# m-LoRA: An Efficient "Factory" to Build Multiple LoRA Adapters
+# m-LoRA: An Efficient LLM Fine-tuning Framework
 [![](https://github.com/mikecovlee/mLoRA/actions/workflows/python-test.yml/badge.svg)](https://github.com/mikecovlee/mLoRA/actions/workflows/python-test.yml)
 [![](https://img.shields.io/github/stars/mikecovlee/mLoRA?logo=GitHub&style=flat)](https://github.com/mikecovlee/mLoRA/stargazers)
 [![](https://img.shields.io/github/v/release/mikecovlee/mLoRA?logo=Github)](https://github.com/mikecovlee/mLoRA/releases/latest)
 [![](https://img.shields.io/pypi/v/mlora?logo=pypi)](https://pypi.org/project/mlora/)
 [![](https://img.shields.io/docker/v/mikecovlee/mlora?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/mlora/tags)
 [![](https://img.shields.io/github/license/mikecovlee/mLoRA)](http://www.apache.org/licenses/LICENSE-2.0)
-
-# m-LoRA: An Efficient LLM Fine-tuning Framework
 
 m-LoRA (short for Multi-LoRA) is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others. Key features of mLoRA include:
 
