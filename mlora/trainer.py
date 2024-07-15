@@ -41,7 +41,7 @@ class TrainConfig(DispatcherConfig):
     task_: BasicTask = None
     group_by_length: bool = False
     # casual task settings
-    casual_data_path: str = None
+    casual_train_data: str = None
     casual_prompt_template: str = None
     casual_validation_size: int = None
 
@@ -50,7 +50,7 @@ class TrainConfig(DispatcherConfig):
         self.task_name = config.task_name
         if self.task_name == "casual":
             self.task_ = CasualTask(
-                data_path=self.casual_data_path,
+                data_path=self.casual_train_data,
                 prompt_template=self.casual_prompt_template,
                 validation_size=self.casual_validation_size,
             )
@@ -73,7 +73,7 @@ class TrainConfig(DispatcherConfig):
         self.scheduler_type = config.get("scheduler_type", "constant")
         self.warmup_ratio = config.get("warmup_ratio", 0)
         self.group_by_length = config.get("group_by_length", False)
-        self.casual_data_path = config.get("data", None)
+        self.casual_train_data = config.get("data", None)
         self.casual_prompt_template = config.get("prompt", None)
         self.casual_validation_size = config.get("val_set_size", None)
 
@@ -206,7 +206,7 @@ def train(
     strategy: str = "optim",
     cutoff_len: int = None,
     save_step: int = None,
-    save_dir: str = ".",
+    save_dir: str = None,
 ) -> None:
     if cutoff_len is None:
         cutoff_len = model.config_.max_seq_len_
@@ -258,9 +258,10 @@ def train(
             config = config_dict[output.adapter_name]
             config.step()
 
-            if save_step is not None and config.accumulation_step_cnt_ % save_step == 0:
+            if save_step and config.accumulation_step_cnt_ % save_step == 0:
                 save_adapter_weight(model, config, save_dir, f"{step_cnt}")
 
     for config in configs:
         config.finish()
-        save_adapter_weight(model, config, save_dir)
+        if save_dir:
+            save_adapter_weight(model, config, save_dir)

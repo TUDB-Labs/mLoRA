@@ -6,21 +6,21 @@
 [![](https://img.shields.io/docker/v/mikecovlee/mlora?logo=Docker&label=docker)](https://hub.docker.com/r/mikecovlee/mlora/tags)
 [![](https://img.shields.io/github/license/mikecovlee/mLoRA)](http://www.apache.org/licenses/LICENSE-2.0)
 
-mLoRA (a.k.a Multi-LoRA Fine-Tune) is an open-source framework designed for efficient fine-tuning of multiple Large Language Models (LLMs) using LoRA and its variants. Key features of mLoRA include:
+# m-LoRA: An Efficient LLM Fine-tuning Framework
 
-- Concurrent fine-tuning of multiple LoRA adapters.
+m-LoRA (short for Multi-LoRA) is an open-source LLMOps framework developed by the IDs Lab at Sichuan University. It is designed for high-throughput fine-tuning, evaluation, and inference of Large Language Models (LLMs) using techniques such as LoRA, DoRA, MixLoRA, and others. Key features of mLoRA include:
 
-- Shared base model among multiple LoRA adapters.
+- Concurrent fine-tuning of multiple adapters with a shared pre-trained model.
 
-- Support for multiple LoRA variant algorithms and various base models.
+- Support for multiple PEFT algorithms and various pre-trained models.
 
-- Exclusive Mo-LoRA (Mixture of LoRAs) optimization for MixLoRA and its variants.
+- Exclusive Mo-LoRA (Mixture of LoRAs) optimization for [MixLoRA](https://github.com/TUDB-Labs/MixLoRA).
 
-You can try m-LoRA with [Google Colab](https://githubtocolab.com/mikecovlee/mLoRA/blob/main/mlora.ipynb) before local installation.
+You can try m-LoRA with [Google Colab](https://githubtocolab.com/mikecovlee/mLoRA/blob/main/misc/finetune-demo.ipynb) before local installation.
 
 ## Note from the maintainer of this repository
 
-This is an actively developing fork of the official m-LoRA repository, focusing on PEFT algorithm and its related improvements, maintained by the authors of m-LoRA. Please note that the functions, interfaces, and performance of this fork are slightly different from the original m-LoRA. We cannot guarantee compatibility. For production use, please prefer the [original m-LoRA](https://github.com/TUDB-Labs/mLoRA).
+This is an actively developing fork of the official m-LoRA repository, focusing on the PEFT algorithm and its related improvements. It is maintained by the authors of m-LoRA. Currently, this fork **does not support pipeline parallelism** and can only utilize a single compute device, such as a GPU or NPU, for each m-LoRA process. Please note that the functions, interfaces, and performance of this fork differ from those of the original m-LoRA. Compatibility is not guaranteed. For production use, please prefer the [original m-LoRA](https://github.com/TUDB-Labs/mLoRA).
 
 ## Supported Platform
 
@@ -46,9 +46,9 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 | &check; | [ChatGLM 1/2/3/4](https://huggingface.co/THUDM)  | 6B                 |
 
 
-## Supported LoRA Variants
+## Supported PEFT Methods
 
-|         | LoRA Variants                                            | Arguments*                                          |
+|         | PEFT Methods                                             | Arguments*                                          |
 |---------|----------------------------------------------------------|-----------------------------------------------------|
 | &check; | [QLoRA](https://arxiv.org/abs/2402.12354)                | See *Quantize Methods*                              |
 | &check; | [LoRA+](https://arxiv.org/abs/2402.12354)                | `loraplus_lr_ratio: 20.0`                           |

@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import List, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 import torch
 
@@ -16,6 +16,7 @@ class GenerateConfig:
     prompts: List[Union[str, Tuple[str, str]]] = None
     prompt_template: str = None
     # Generate Arguments
+    stop_token: str = None
     temperature: float = 1
     top_p: float = 0.9
     top_k: float = 50
@@ -23,17 +24,13 @@ class GenerateConfig:
     repetition_penalty: float = 1.1
     renormalize_logits: bool = True
     # Do not set these manually
+    stop_token_: torch.Tensor = None
     batch_start_idx_: int = -1
     batch_end_idx_: int = -1
     prompter_: Prompter = None
 
     # Set prompt_template_ to enable the prompter
     def generate_prompt(self, instruction: str, input: str = None) -> str:
-        if self.prompt_template is None:
-            if input is not None:
-                logging.warn("Drop input when prompt template is not set.")
-            return instruction
-
         if self.prompter_ is None:
             self.prompter_ = Prompter(self.prompt_template)
 
@@ -152,8 +149,8 @@ def generate(
     model: LLMModel,
     tokenizer: Tokenizer,
     configs: List[GenerateConfig],
-    max_gen_len=128,
-    stream_callback=None,
+    max_gen_len: int = 128,
+    stream_callback: Callable = None,
 ):
 
     device = torch.device(model.device_)
@@ -162,6 +159,13 @@ def generate(
     config_dict = {}
     for config in configs:
         config_dict[config.adapter_name] = config
+        if config.stop_token:
+            stop_token = tokenizer.encode(" " + config.stop_token, False)[-1]
+        else:
+            stop_token = tokenizer.eos_id_
+        config.stop_token_ = torch.tensor(
+            [stop_token], dtype=torch.int64, device=device
+        )
         tokens = [tokenizer.encode(prompt) for prompt in config.get_prompts()]
         config.batch_start_idx_ = len(raw_prompts)
         config.batch_end_idx_ = config.batch_start_idx_ + len(tokens)
@@ -215,18 +219,17 @@ def generate(
                 input_text_mask[start_idx:end_idx, cur_pos],
                 tokens[start_idx:end_idx, cur_pos],
                 next_token,
-            )
+            ).to(torch.int64)
             tokens[start_idx:end_idx, cur_pos] = next_token
+            stop_reached |= (~input_text_mask[:, cur_pos]) & (
+                next_token == config.stop_token_
+            )
 
         if stream_callback is not None:
             stream_callback(
                 cur_pos,
                 gen_outputs(configs, tokenizer, raw_prompts, tokens, max_gen_len),
             )
-
-        stop_reached |= (~input_text_mask[:, cur_pos]) & (
-            next_token == tokenizer.eos_id_
-        )
 
         if all(stop_reached):
             break
