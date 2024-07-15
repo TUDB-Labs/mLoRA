@@ -23,6 +23,7 @@ from mlora.common import (
     get_unpad_data,
     prepare_4d_causal_attention_mask,
 )
+from mlora.common.mix_lora import _mixtral_slice_tensor
 from mlora.utils import copy_parameters
 
 if is_flash_attn_2_available():
@@ -646,6 +647,43 @@ class GLMMLP(LLMFeedForward):
             hidden_states = self.dense_4h_to_h.base_layer_.forward(hidden_states)
 
         return hidden_states
+
+    def _mixlora_forward(
+        self, moe_name, act_fn, expert_mask, hidden_states, input_dtype
+    ):
+        common_dense_h_to_4h = self.dense_h_to_4h.base_layer_.forward(
+            hidden_states.to(input_dtype)
+        ).to(hidden_states.dtype)
+        final_expert_states = []
+        for expert_idx in range(expert_mask.shape[0]):
+            _, top_x = torch.where(expert_mask[expert_idx])
+
+            lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+            if lora_name in self.dense_h_to_4h.loras_:
+                lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
+                act_result = self.activation_func(
+                    self.dense_h_to_4h.loras_[lora_name].forward(
+                        _mixtral_slice_tensor(common_dense_h_to_4h, top_x, input_dtype),
+                        lora_data,
+                    )
+                )
+            else:
+                act_result = self.activation_func(
+                    _mixtral_slice_tensor(common_dense_h_to_4h, top_x, input_dtype)
+                )
+
+            if lora_name in self.dense_4h_to_h.loras_:
+                final_expert_states.append(
+                    self.dense_4h_to_h.loras_[lora_name].forward(
+                        self.dense_4h_to_h.base_layer_.forward(act_result), act_result
+                    )
+                )
+            else:
+                final_expert_states.append(
+                    self.dense_4h_to_h.base_layer_.forward(act_result)
+                )
+
+        return final_expert_states
 
 
 class GLMBlock(LLMDecoder):

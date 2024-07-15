@@ -25,8 +25,7 @@
                 "dense_h_to_4h": true,
                 "dense_4h_to_h": true
             },
-            "group_by_length": false,
-            "expand_side": "right"
+            "group_by_length": false
         }
     ]
 }

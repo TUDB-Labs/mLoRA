@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlora"
-version = "0.3.5.post1"
+version = "0.3.5.post2"
 description = "An Efficient Factory to Build Multiple LoRA Adapters"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -18,7 +18,7 @@ dependencies = [
     "datasets",
     "evaluate",
     "accelerate",
-    "transformers==4.42.3",
+    "transformers==4.42.4",
     "sentencepiece",
     "huggingface_hub",
     "scikit-learn",

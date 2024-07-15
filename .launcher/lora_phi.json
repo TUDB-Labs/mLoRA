@@ -27,8 +27,7 @@
                 "fc1": true,
                 "fc2": true
             },
-            "group_by_length": false,
-            "expand_side": "right"
+            "group_by_length": false
         }
     ]
 }

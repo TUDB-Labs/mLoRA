@@ -28,8 +28,7 @@
                 "w2_proj": true,
                 "w3_proj": true
             },
-            "group_by_length": false,
-            "expand_side": "right"
+            "group_by_length": false
         }
     ]
 }

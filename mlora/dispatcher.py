@@ -60,8 +60,6 @@ class TrainTask:
 
     train_cutoff_len_: int = -1
     group_by_length_: bool = False
-    expand_side_: str = "left"
-    expand_token_id_: int = -1
 
     # count the stat of train and test data
     epoch_cnt_: int = 1
@@ -79,8 +77,6 @@ class TrainTask:
         max_test_batch_size: int,
         train_cutoff_len: int = 256,
         group_by_length: bool = True,
-        expand_side: str = "right",
-        expand_token_id: int = 0,
     ):
         self.tokenizer_ = tokenzer
         self.adapter_name_ = adapter_name
@@ -91,8 +87,6 @@ class TrainTask:
         self.max_test_batch_size_ = max_test_batch_size
         self.train_cutoff_len_ = train_cutoff_len
         self.group_by_length_ = group_by_length
-        self.expand_side_ = expand_side
-        self.expand_token_id_ = expand_token_id
 
     def load_data(self):
         self.train_token_data_ = self.dataload_function_(self.tokenizer_, True)

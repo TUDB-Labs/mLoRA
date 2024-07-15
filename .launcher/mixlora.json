@@ -31,8 +31,7 @@
             "routing_strategy": "mixtral",
             "num_experts": 8,
             "top_k": 2,
-            "group_by_length": false,
-            "expand_side": "right"
+            "group_by_length": false
         }
     ]
 }

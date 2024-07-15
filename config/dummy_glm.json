@@ -29,8 +29,7 @@
             "top_k": 2,
             "data": "data/dummy_data.json",
             "prompt": "template/template_demo.json",
-            "group_by_length": false,
-            "expand_side": "right"
+            "group_by_length": false
         },
         {
             "name": "lora",
@@ -52,8 +51,7 @@
             },
             "data": "data/dummy_data.json",
             "prompt": "template/template_demo.json",
-            "group_by_length": false,
-            "expand_side": "right"
+            "group_by_length": false
         }
     ]
 }

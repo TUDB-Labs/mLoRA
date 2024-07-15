@@ -109,6 +109,8 @@ def _mixtral_slice_tensor(
     last_value: torch.Tensor = None,
 ):
     if last_value is None:
+        # for macOS debugging, please uncomment this line
+        # assert data.dtype in (torch.float, torch.int, torch.bool)
         return data[None, slice].reshape(-1, data.shape[-1]).to(dtype)
     else:
         return last_value

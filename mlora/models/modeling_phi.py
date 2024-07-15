@@ -400,7 +400,9 @@ class PhiMLP(LLMFeedForward):
     def _mixlora_forward(
         self, moe_name, act_fn, expert_mask, hidden_states, input_dtype
     ):
-        common_fc1 = self.fc1_.base_layer_.forward(hidden_states.to(input_dtype))
+        common_fc1 = self.fc1_.base_layer_.forward(hidden_states.to(input_dtype)).to(
+            hidden_states.dtype
+        )
         final_expert_states = []
         for expert_idx in range(expert_mask.shape[0]):
             _, top_x = torch.where(expert_mask[expert_idx])
