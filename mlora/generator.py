@@ -182,10 +182,10 @@ def generate(
     min_tokens_len = min(len(t) for t in raw_prompts)
     max_tokens_len = max(len(t) for t in raw_prompts)
     assert max_tokens_len <= model.config_.max_seq_len_
-    if max_gen_len is not None:
-        total_len = min(model.config_.max_seq_len_, max_gen_len + max_tokens_len)
-    else:
-        total_len = model.config_.max_seq_len_
+    if max_gen_len is None:
+        max_gen_len = model.config_.max_seq_len_ - max_tokens_len
+
+    total_len = min(model.config_.max_seq_len_, max_gen_len + max_tokens_len)
 
     if cache_implementation is not None:
         use_cache = True
