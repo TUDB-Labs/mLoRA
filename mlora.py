@@ -36,9 +36,19 @@ parser.add_argument(
     "--attn_impl", type=str, help="Specify the implementation of attention"
 )
 parser.add_argument(
-    "--use_swa",
+    "--sliding_window",
     action="store_true",
     help="Use sliding window attention (requires flash attention)",
+)
+parser.add_argument(
+    "--disable_cache",
+    action="store_true",
+    help="Disable cache when inference",
+)
+parser.add_argument(
+    "--cache_implementation",
+    type=str,
+    help="Specify the implementation of cache",
 )
 parser.add_argument(
     "--fp16", action="store_true", help="Load base model in float16 precision"
@@ -65,7 +75,7 @@ parser.add_argument(
 parser.add_argument(
     "--dir", type=str, default=".", help="Path to read or save checkpoints"
 )
-parser.add_argument("--disable_log", action="store_true", help="Disable logging.")
+parser.add_argument("--disable_log", action="store_true", help="Disable logging")
 parser.add_argument("--log_file", type=str, help="Save log to specific file")
 parser.add_argument(
     "--verbose", action="store_true", help="Show extra informations such as parameters"
@@ -113,7 +123,7 @@ def load_base_model() -> Tuple[mlora.Tokenizer, mlora.LLMModel]:
         name_or_path=args.base_model,
         device=args.device,
         attn_impl=args.attn_impl,
-        use_sliding_window=args.use_swa,
+        use_sliding_window=args.sliding_window,
         bits=(8 if args.load_8bit else (4 if args.load_4bit else None)),
         load_dtype=(
             torch.bfloat16
@@ -236,7 +246,12 @@ def inference(
             config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
         outputs = mlora.generate(
-            llm_model, tokenizer, adapters, stream_callback=callback
+            llm_model,
+            tokenizer,
+            adapters,
+            use_cache=args.disable_cache,
+            cache_implementation=args.cache_implementation,
+            stream_callback=callback,
         )
         print(f"\n{'='*10}\n")
         print(f"PROMPT: {input_raw}")

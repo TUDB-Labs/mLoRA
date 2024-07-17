@@ -1,13 +1,10 @@
-from collections import OrderedDict
-from typing import Tuple
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import transformers.models.gemma.modeling_gemma as modeling_gemma
+from transformers.models.gemma import modeling_gemma
 
 from mlora.backends import get_backend
-from mlora.common import CHECKPOINT_CLASSES, FeedForward
+from mlora.common import FeedForward
 from mlora.models.modeling_llama import (
     LLAMA_ATTENTION_CLASSES as GEMMA_ATTENTION_CLASSES,
 )
@@ -53,55 +50,16 @@ class GemmaEmbedding(nn.Module):
         return data * normalizer
 
 
-class GemmaSequentialWrapper(nn.Module):
-    def __init__(self, module: nn.Module):
-        super().__init__()
-        self.wrapper_module_ = module
-
-    def name(self) -> str:
-        return type(self.wrapper_module_).__name__
-
-    def forward(self, input: Tuple) -> Tuple:
-        module_name = self.name()
-
-        if module_name == "GemmaEmbedding":
-            output = self.wrapper_module_.forward(input[0])
-            if input[-1].gradient_checkpoint_ != "none":
-                output = output.requires_grad_(True)
-            return (output,) + input[1:]
-        elif module_name == "GemmaRMSNorm":
-            output = self.wrapper_module_.forward(input[0])
-            return (output,) + input[1:]
-        elif module_name == "LlamaDecoderLayer":
-            outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
-                self.wrapper_module_.forward, *input
-            )
-            if len(outputs) > 1:
-                self.router_probs_ = outputs[1:]
-            return (outputs[0],) + input[1:]
-        else:
-            raise f"module invalid: {module_name}"
+def _patch_hidden_act(config: modeling_gemma.GemmaConfig) -> str:
+    if hasattr(config, "hidden_activation") and config.hidden_activation is not None:
+        return config.hidden_activation
+    else:
+        return config.hidden_act
 
 
 class GemmaForCausalLM(LlamaForCausalLM):
     def __init__(self, config: LlamaConfig) -> None:
         super().__init__(config)
-
-    def sequential_module(self) -> OrderedDict:
-        seq_module = OrderedDict()
-
-        seq_module.update({"embedding": GemmaSequentialWrapper(self.embed_tokens_)})
-        seq_module.move_to_end("embedding")
-
-        for index, layer in enumerate(self.layers_):
-            layer_name = f"layer{index}"
-            seq_module.update({layer_name: GemmaSequentialWrapper(layer)})
-            seq_module.move_to_end(layer_name)
-
-        seq_module.update({"norm": GemmaSequentialWrapper(self.norm_)})
-        seq_module.move_to_end("norm")
-
-        return seq_module
 
     @staticmethod
     def from_pretrained(
@@ -120,7 +78,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
             n_layers_=llm_config.num_hidden_layers,
             n_heads_=llm_config.num_attention_heads,
             n_kv_heads_=llm_config.num_key_value_heads,
-            hidden_act_=llm_config.hidden_activation,
+            hidden_act_=_patch_hidden_act(llm_config),
             rms_norm_eps_=llm_config.rms_norm_eps,
             max_seq_len_=llm_config.max_position_embeddings,
             rope_theta_=llm_config.rope_theta,
@@ -150,6 +108,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
                 layer.self_attn.o_proj,
+                idx,
                 llm_args,
             )
             decoder.mlp_ = FeedForward(

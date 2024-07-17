@@ -10,10 +10,12 @@ from transformers import AutoModelForCausalLM
 
 from mlora.backends import get_backend
 from mlora.common import (
+    CHECKPOINT_CLASSES,
     AdapterConfig,
+    Cache,
     LLMDecoder,
     LLMForCausalLM,
-    LLMModelArgs,
+    LLMModelConfig,
     LLMModelInput,
     LLMModelOutput,
     LLMOutput,
@@ -153,7 +155,7 @@ class OutputLayer(torch.nn.Module):
 
 def init_lora_layer_weight(
     layer: LLMDecoder,
-    args: LLMModelArgs,
+    args: LLMModelConfig,
     config: LoraConfig,
     weight: Optional[Dict[str, torch.Tensor]],
 ):
@@ -223,23 +225,10 @@ def init_lora_layer_weight(
                 linear_layer_list[idx].init_lora_weight(config, (lora_a, lora_b))
 
 
-class OutputSequentialWrapper(torch.nn.Module):
-    def __init__(self, module: torch.nn.Module):
-        super().__init__()
-        self.wrapper_module_ = module
-
-    def name(self) -> str:
-        return type(self.wrapper_module_).__name__
-
-    def forward(self, input: Tuple) -> Tuple:
-        output = self.wrapper_module_.forward(input[0], input[2])
-        return (output,) + input[1:]
-
-
 class LLMModel(torch.nn.Module):
     def __init__(self, model: LLMForCausalLM):
         super().__init__()
-        args: LLMModelArgs = model.config_
+        args: LLMModelConfig = model.config_
         if args.vocab_size_ >= torch.finfo(args.dtype_).max:
             logging.warn(
                 f"vocab_size >= max({args.dtype_}), consider load model with higher precision."
@@ -253,70 +242,102 @@ class LLMModel(torch.nn.Module):
         self.dtype_ = args.dtype_
 
         self.output_ = OutputLayer()
-        seq_module = model.sequential_module()
-        seq_module.update({"output": OutputSequentialWrapper(self.output_)})
-        seq_module.move_to_end("output")
-        self.seq_module_ = torch.nn.Sequential(seq_module)
         # adapter configs
         self.adapter_configs_: Dict[str, LoraConfig] = {}
 
     # compute the model: output probs
-    def forward(self, input_args: LLMModelInput) -> List[LLMModelOutput]:
-        assert input_args.batch_tokens_ is not None
-
-        labels = input_args.batch_labels_
+    def forward(
+        self, input_args: LLMModelInput, past_key_values: Optional[Cache] = None
+    ) -> List[LLMModelOutput]:
+        assert input_args.batch_tokens_ is not None, "Model have no input."
+        assert (
+            input_args.gradient_checkpoint_ == "none" or past_key_values is None
+        ), "Cache is incompatible with gradient checkpointing."
+        assert (
+            not input_args.inference_mode_ or input_args.gradient_checkpoint_ == "none"
+        ), "Can not use gradient checkpoint when inference."
 
         # prepare inputs
         if isinstance(input_args.batch_tokens_, torch.Tensor):
-            tokens = input_args.batch_tokens_.to(dtype=torch.int64, device=self.device_)
+            input_ids = input_args.batch_tokens_.to(
+                dtype=torch.int64, device=self.device_
+            )
         else:
-            tokens = torch.tensor(
+            input_ids = torch.tensor(
                 input_args.batch_tokens_, dtype=torch.int64, device=self.device_
             )
+
+        inputs_embeds = self.model_.embed_tokens(input_ids)
+        if input_args.gradient_checkpoint_ != "none":
+            inputs_embeds.requires_grad_(True)
+
+        # prepare cache
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
+
+        cache_position = torch.arange(
+            past_seen_tokens,
+            past_seen_tokens + inputs_embeds.shape[1],
+            device=inputs_embeds.device,
+        )
 
         # prepare mask
         if input_args.batch_masks_ is not None and 0 in input_args.batch_masks_:
             # 2d mask is passed through the layers
             if isinstance(input_args.batch_masks_, torch.Tensor):
-                attn_mask = input_args.batch_masks_.to(
+                attention_mask = input_args.batch_masks_.to(
                     dtype=torch.int64, device=self.device_
                 )
             else:
-                attn_mask = torch.tensor(
+                attention_mask = torch.tensor(
                     input_args.batch_masks_, dtype=torch.int64, device=self.device_
                 )
         else:
-            attn_mask = None
+            attention_mask = None
 
         if self.config_.attn_implementation_ != "flash_attn":
             causal_mask = self.model_.causal_mask(
-                input_tokens=tokens,
-                additional_mask=input_args.batch_masks_,
-                diagonal=input_args.diagonal_pos_,
+                attention_mask, inputs_embeds, cache_position, past_key_values
             )
         else:
-            causal_mask = attn_mask
+            causal_mask = attention_mask
+
+        labels = input_args.batch_labels_
 
         input_args.batch_labels_ = None
         input_args.batch_tokens_ = None
         input_args.batch_masks_ = None
 
-        data = (tokens, causal_mask, input_args)
+        # embed positions
+        hidden_states = inputs_embeds
 
-        for seq_layer in self.seq_module_:
-            data = seq_layer.forward(data)
+        # decoder layers
+        num_adapters = len(input_args.batch_configs_)
+        all_router_logits = [[] for _ in range(num_adapters)]
+        gradient_checkpoint = CHECKPOINT_CLASSES[input_args.gradient_checkpoint_]
 
-        # collecting router logits
-        router_logits = [[] for _ in range(len(input_args.batch_configs_))]
-        for seq_layer in self.seq_module_:
-            if not hasattr(seq_layer, "router_probs_"):
+        for decoder_layer in self.model_.decoder_stack():
+            hidden_states, *router_logits = gradient_checkpoint(
+                decoder_layer.forward,
+                hidden_states,
+                input_args,
+                causal_mask,
+                cache_position,
+                past_key_values,
+            )
+            if len(router_logits) == 0:
                 continue
-            for idx in range(len(input_args.batch_configs_)):
-                if seq_layer.router_probs_[idx] is not None:
-                    router_logits[idx].append(seq_layer.router_probs_[idx])
+            # collecting router logits
+            assert len(router_logits) == num_adapters
+            for idx in range(num_adapters):
+                if router_logits[idx] is not None:
+                    all_router_logits[idx].append(router_logits[idx])
+
+        hidden_states = self.model_.norm(hidden_states)
 
         # calculate loss
-        output = data[0]
+        output = self.output_(hidden_states, input_args)
         assert isinstance(output, List)
         for idx, lora_config in enumerate(input_args.batch_configs_):
             output_data = output[idx]
@@ -329,17 +350,19 @@ class LLMModel(torch.nn.Module):
                 continue
             # compute loss when labels provided
             output_data.loss = output_data.loss_fn_(
-                tokens[start_idx:end_idx], output_data.logits, labels[start_idx:end_idx]
+                input_ids[start_idx:end_idx],
+                output_data.logits,
+                labels[start_idx:end_idx],
             )
             output_data.loss_fn_ = None
-            if not input_args.output_router_logits_ or len(router_logits[idx]) == 0:
+            if not input_args.output_router_logits_ or len(all_router_logits[idx]) == 0:
                 continue
             # compute router loss when router logits is available
             loss_fn = router_loss_factory(
                 self.adapter_configs_[output_data.adapter_name]
             )
             if loss_fn is not None:
-                output_data.aux_loss = loss_fn(router_logits[idx], attn_mask)
+                output_data.aux_loss = loss_fn(all_router_logits[idx], attention_mask)
 
         return output
 

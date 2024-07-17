@@ -1,31 +1,31 @@
-from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import transformers.models.llama.modeling_llama as modeling_llama
 from transformers.activations import ACT2FN
+from transformers.models.llama import modeling_llama
+from transformers.models.llama.modeling_llama import (
+    LlamaRotaryEmbedding,
+    _get_unpad_data,
+    apply_rotary_pos_emb,
+    repeat_kv,
+)
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import _backend, get_backend
 from mlora.common import (
-    CHECKPOINT_CLASSES,
+    Cache,
     FeedForward,
     Linear,
     LLMAttention,
     LLMDecoder,
     LLMFeedForward,
     LLMForCausalLM,
-    LLMModelArgs,
+    LLMModelConfig,
     LLMModelInput,
-    Masks,
-    apply_rotary_emb,
-    get_unpad_data,
-    precompute_rope_angle,
     prepare_4d_causal_attention_mask,
-    repeat_kv,
     scaled_dot_product_attention,
 )
 from mlora.common.mix_lora import _mixtral_slice_tensor
@@ -37,7 +37,7 @@ if is_flash_attn_2_available():
 
 
 @dataclass
-class LlamaConfig(LLMModelArgs):
+class LlamaConfig(LLMModelConfig):
     rms_norm_eps_: float = 1e-6
 
 
@@ -49,6 +49,7 @@ class LlamaAttention(LLMAttention):
         wk: nn.Module,
         wv: nn.Module,
         wo: nn.Module,
+        idx: int,
         args: LlamaConfig,
     ):
         super().__init__()
@@ -58,13 +59,14 @@ class LlamaAttention(LLMAttention):
         self.wv_: Linear = Linear(wv, args.device_)  # dim * dim
         self.wo_: Linear = Linear(wo, args.device_)  # dim * dim
         # cos and sin
-        self.cos_, self.sin_ = precompute_rope_angle(
+        self.rotary_emb = LlamaRotaryEmbedding(
             args.dim_ // args.n_heads_,
-            args.max_seq_len_,
-            args.rope_theta_,
-            args.device_,
+            max_position_embeddings=args.max_seq_len_,
+            base=args.rope_theta_,
+            device=args.device_,
         )
         # config
+        self.layer_idx_ = idx
         self.dim_ = args.dim_
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
@@ -86,6 +88,8 @@ class LlamaAttention(LLMAttention):
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
@@ -105,8 +109,16 @@ class LlamaAttention(LLMAttention):
         ).transpose(1, 2)
 
         # apply rotary embedding
-        assert xq.dtype == xk.dtype
-        xq, xk = apply_rotary_emb(xq, xk, max_seq_len, self.cos_, self.sin_)
+        cos, sin = self.rotary_emb(xv, cache_position.unsqueeze(0))
+        xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
+
+        if past_key_value is not None:
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "cache_position": cache_position,
+            }
+            xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
 
         # for llama2 need to repeat the heads
         # before dim: batch_size, n_kv_head, seq_len, head_dim
@@ -115,7 +127,6 @@ class LlamaAttention(LLMAttention):
         xv = repeat_kv(xv, self.n_rep_)
 
         attention_score = scaled_dot_product_attention(xq, xk, xv, attention_mask)
-
         attention_score = attention_score.reshape(batch_size, max_seq_len, -1)
 
         # get output attention score
@@ -129,10 +140,11 @@ class LlamaFlashAttention(LlamaAttention):
         wk: nn.Module,
         wv: nn.Module,
         wo: nn.Module,
+        idx: int,
         args: LlamaConfig,
     ):
         assert is_flash_attn_2_available(), "Flash Attention is not available"
-        super().__init__(wq, wk, wv, wo, args)
+        super().__init__(wq, wk, wv, wo, idx, args)
 
     def _flash_attention_forward(
         self,
@@ -144,6 +156,7 @@ class LlamaFlashAttention(LlamaAttention):
         dropout=0.0,
         softmax_scale=None,
     ):
+        causal = self.is_causal_
 
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
@@ -172,7 +185,7 @@ class LlamaFlashAttention(LlamaAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal_,
+                causal=causal,
             )
 
             attn_output = pad_input(
@@ -185,7 +198,7 @@ class LlamaFlashAttention(LlamaAttention):
                 value_states,
                 dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal_,
+                causal=causal,
             )
 
         return attn_output
@@ -193,7 +206,7 @@ class LlamaFlashAttention(LlamaAttention):
     def _upad_input(
         self, query_layer, key_layer, value_layer, attention_mask, query_length
     ):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
@@ -240,6 +253,8 @@ class LlamaFlashAttention(LlamaAttention):
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
@@ -259,8 +274,20 @@ class LlamaFlashAttention(LlamaAttention):
         ).transpose(1, 2)
 
         # apply rotary embedding
-        assert xq.dtype == xk.dtype
-        xq, xk = apply_rotary_emb(xq, xk, max_seq_len, self.cos_, self.sin_)
+        cos, sin = self.rotary_emb(xv, cache_position.unsqueeze(0))
+        xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
+
+        if past_key_value is not None:
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "cache_position": cache_position,
+            }
+            xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
+
+        xq = xq.transpose(1, 2)
+        xk = xk.transpose(1, 2)
+        xv = xv.transpose(1, 2)
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
@@ -272,10 +299,6 @@ class LlamaFlashAttention(LlamaAttention):
             xk = xk.to(target_dtype)
             xv = xv.to(target_dtype)
 
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
-
         attn_output = self._flash_attention_forward(
             xq,
             xk,
@@ -284,9 +307,7 @@ class LlamaFlashAttention(LlamaAttention):
             max_seq_len,
         ).to(input_dtype)
 
-        attn_output = attn_output.reshape(
-            batch_size, max_seq_len, self.dim_
-        ).contiguous()
+        attn_output = attn_output.reshape(batch_size, max_seq_len, -1).contiguous()
         attn_output = self.wo_.forward(attn_output, input_args)
 
         return attn_output
@@ -424,15 +445,21 @@ class LlamaDecoderLayer(LLMDecoder):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
         input_args: LLMModelInput,
+        attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
     ):
 
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
         # Self Attention
         hidden_states = self.self_attn_.forward(
-            hidden_states, input_args, attention_mask
+            hidden_states,
+            input_args,
+            attention_mask,
+            cache_position,
+            past_key_value,
         )
         hidden_states = residual + hidden_states
         # Fully Connected
@@ -455,36 +482,6 @@ class LlamaEmbedding(nn.Module):
         return data
 
 
-class LlamaSequentialWrapper(nn.Module):
-    def __init__(self, module: nn.Module):
-        super().__init__()
-        self.wrapper_module_ = module
-
-    def name(self) -> str:
-        return type(self.wrapper_module_).__name__
-
-    def forward(self, input: Tuple) -> Tuple:
-        module_name = self.name()
-
-        if module_name == "LlamaEmbedding":
-            output = self.wrapper_module_.forward(input[0])
-            if input[-1].gradient_checkpoint_ != "none":
-                output = output.requires_grad_(True)
-            return (output,) + input[1:]
-        elif module_name == "LlamaRMSNorm":
-            output = self.wrapper_module_.forward(input[0])
-            return (output,) + input[1:]
-        elif module_name == "LlamaDecoderLayer":
-            outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
-                self.wrapper_module_.forward, *input
-            )
-            if len(outputs) > 1:
-                self.router_probs_ = outputs[1:]
-            return (outputs[0],) + input[1:]
-        else:
-            raise f"module invalid: {module_name}"
-
-
 class LlamaForCausalLM(LLMForCausalLM):
     def __init__(self, config: LlamaConfig) -> None:
         self.config_ = config
@@ -501,40 +498,32 @@ class LlamaForCausalLM(LLMForCausalLM):
         )
         self.layers_: List[LlamaDecoderLayer] = []
 
+    def embed_tokens(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.embed_tokens_(input_ids)
+
     def decoder_stack(self) -> List[LLMDecoder]:
         return self.layers_
 
-    def sequential_module(self) -> OrderedDict:
-        seq_module = OrderedDict()
-
-        seq_module.update({"embedding": LlamaSequentialWrapper(self.embed_tokens_)})
-        seq_module.move_to_end("embedding")
-
-        for index, layer in enumerate(self.layers_):
-            layer_name = f"layer{index}"
-            seq_module.update({layer_name: LlamaSequentialWrapper(layer)})
-            seq_module.move_to_end(layer_name)
-
-        seq_module.update({"norm": LlamaSequentialWrapper(self.norm_)})
-        seq_module.move_to_end("norm")
-
-        return seq_module
+    def norm(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.norm_(hidden_states)
 
     def causal_mask(
         self,
-        input_tokens: torch.Tensor,
-        additional_mask: List[Masks] = None,
-        diagonal: int = 1,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Optional[Cache],
     ) -> torch.Tensor:
 
         return prepare_4d_causal_attention_mask(
-            input_tokens=input_tokens,
-            n_heads=1,
-            additional_mask=additional_mask,
-            diagonal=diagonal,
-            dtype=self.config_.dtype_,
-            device=self.config_.device_,
+            attention_mask,
+            input_tensor,
+            cache_position,
+            past_key_values,
         )
+
+    def model_config(self) -> LlamaConfig:
+        return self.config_
 
     @staticmethod
     def from_pretrained(
@@ -581,6 +570,7 @@ class LlamaForCausalLM(LLMForCausalLM):
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
                 layer.self_attn.o_proj,
+                idx,
                 llm_args,
             )
             decoder.mlp_ = FeedForward(

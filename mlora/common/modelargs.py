@@ -19,15 +19,7 @@ class DataClass:
 
 
 @dataclass
-class TokenizerArgs:
-    vocab_size_: int = -1
-    bos_id_: int = -1
-    eos_id_: int = -1
-    pad_id_: int = -1
-
-
-@dataclass
-class LLMModelArgs:
+class LLMModelConfig:
     name_or_path_: str = ""
     device_: str = ""
     dim_: int = 4096
@@ -79,7 +71,6 @@ class LLMModelInput:
     gradient_checkpoint_: str = "none"
     efficient_operator_: bool = True
     inference_mode_: bool = False
-    diagonal_pos_: int = 1
 
 
 @dataclass

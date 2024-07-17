@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from transformers.activations import ACT2FN
 
 from .model import LLMFeedForward
-from .modelargs import LLMModelArgs, MixConfig
+from .modelargs import LLMModelConfig, MixConfig
 
 
 def _mixtral_load_balancing_loss_func(
@@ -130,7 +130,7 @@ def _mixtral_compatible_forward(
 
 
 class MixtralSparseMoe(torch.nn.Module):
-    def __init__(self, args: LLMModelArgs, config: MixConfig) -> None:
+    def __init__(self, args: LLMModelConfig, config: MixConfig) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
@@ -326,7 +326,7 @@ class SwitchRouterLoss(torch.nn.Module):
 
 
 class SwitchSparseMoe(torch.nn.Module):
-    def __init__(self, args: LLMModelArgs, config: MixConfig) -> None:
+    def __init__(self, args: LLMModelConfig, config: MixConfig) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
@@ -439,7 +439,7 @@ def router_loss_factory(config: MixConfig) -> torch.nn.Module:
 moe_layer_dict = {"mixtral": MixtralSparseMoe, "switch": SwitchSparseMoe}
 
 
-def moe_layer_factory(args: LLMModelArgs, config: MixConfig) -> torch.nn.Module:
+def moe_layer_factory(args: LLMModelConfig, config: MixConfig) -> torch.nn.Module:
     if config.routing_strategy_ not in router_loss_dict:
         raise ValueError(f"Unknown routing strategy {config.routing_strategy_}")
     return moe_layer_dict[config.routing_strategy_](args, config)

@@ -7,7 +7,7 @@ from mlora.backends import _backend
 from .lora_linear import Linear, get_range_tensor
 from .mix_lora import moe_layer_factory
 from .model import LLMFeedForward
-from .modelargs import LLMModelArgs, LLMModelInput, MixConfig
+from .modelargs import LLMModelConfig, LLMModelInput, MixConfig
 
 
 class FeedForward(torch.nn.Module):
@@ -30,7 +30,10 @@ class FeedForward(torch.nn.Module):
 
     # MixLoRA
     def init_moe_weight(
-        self, args: LLMModelArgs, config: MixConfig, gate: Optional[torch.Tensor] = None
+        self,
+        args: LLMModelConfig,
+        config: MixConfig,
+        gate: Optional[torch.Tensor] = None,
     ):
         self.moes_[config.adapter_name] = moe_layer_factory(args, config)
         if gate is None:

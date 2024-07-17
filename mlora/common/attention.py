@@ -1,135 +1,76 @@
 import math
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
 
-from .modelargs import Masks
+from .cache import Cache, StaticCache
 
 
-# input_tokens shape is: batch_size * seq_len
-#   default: upper triangular matrix like below, i.e. diagonal = 1
-#            0 -inf -inf
-#            0    0 -inf
-#            0    0    0
-# additional_mask: batch_size * seq_len
-#   default: is None the matrix like default, if set true, the mask metric will be -inf
-#   example: [[True, False, False]]
-#           -inf -inf -inf
-#           -inf    0 -inf
-#           -inf    0    0
 def prepare_4d_causal_attention_mask(
-    input_tokens: torch.Tensor,
-    n_heads: int,
-    device: str,
-    additional_mask: List[Masks] = None,
-    diagonal: int = 1,
-    dtype: torch.dtype = torch.float32,
+    attention_mask: torch.Tensor,
+    input_tensor: torch.Tensor,
+    cache_position: torch.Tensor,
+    past_key_values: Cache,
 ) -> torch.Tensor:
-    batch_size, seq_len = input_tokens.shape
-
-    TORCH_MIN_VALUE = torch.finfo(torch.float32).min
-    mask = torch.full(
-        (batch_size, n_heads, seq_len, seq_len),
-        TORCH_MIN_VALUE,
-        device=device,
-        dtype=torch.float32,
+    past_seen_tokens = (
+        past_key_values.get_seq_length() if past_key_values is not None else 0
     )
-    mask = torch.triu(mask, diagonal=diagonal)
+    using_static_cache = isinstance(past_key_values, StaticCache)
 
-    if additional_mask is not None:
-        masks_metric = ~torch.tensor(additional_mask, dtype=torch.bool, device=device)
-        masks_metric = masks_metric.view(batch_size, 1, 1, seq_len)
-        masks_metric = masks_metric.expand(-1, n_heads, seq_len, -1)
-        mask = torch.masked_fill(mask, masks_metric, TORCH_MIN_VALUE)
-
-    mask.requires_grad_(False)
-
-    return mask.to(device=device, dtype=dtype)
-
-
-def precompute_rope_angle(
-    dim: int, seq_len: int, theta: float = 10000.0, device: str = None
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    inv_freq = 1.0 / (
-        theta
-        ** (
-            torch.arange(0, dim, 2, dtype=torch.int64).to(
-                device=device, dtype=torch.float32
-            )
-            / dim
+    dtype, device = input_tensor.dtype, input_tensor.device
+    min_dtype = torch.finfo(dtype).min
+    sequence_length = input_tensor.shape[1]
+    if using_static_cache:
+        target_length = past_key_values.get_max_length()
+    else:
+        target_length = (
+            attention_mask.shape[-1]
+            if isinstance(attention_mask, torch.Tensor)
+            else past_seen_tokens + sequence_length + 1
         )
+
+    causal_mask = torch.full(
+        (sequence_length, target_length),
+        fill_value=min_dtype,
+        dtype=dtype,
+        device=device,
     )
-    t = torch.arange(seq_len, dtype=torch.int64).to(device=device, dtype=torch.float32)
-    freqs = torch.outer(t, inv_freq)
-    emb = torch.cat((freqs, freqs), dim=-1)
-    emb.requires_grad_(False)
-
-    # cos(angle), sin(angle)
-    return (emb.cos(), emb.sin())
-
-
-@torch.jit.script
-def rotate_half(x: torch.Tensor):
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@torch.jit.script
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch, num_key_value_heads, n_rep, slen, head_dim
+    if sequence_length != 1:
+        causal_mask = torch.triu(causal_mask, diagonal=1)
+    causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(
+        -1, 1
     )
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+    causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+    if attention_mask is not None:
+        causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+        mask_length = attention_mask.shape[-1]
+        padding_mask = (
+            causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+        )
+        padding_mask = padding_mask == 0
+        causal_mask[:, :, :, :mask_length] = causal_mask[
+            :, :, :, :mask_length
+        ].masked_fill(padding_mask, min_dtype)
+
+    return causal_mask
 
 
-@torch.jit.script
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    seq_len: int,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    cos = cos[:seq_len].to(xq.dtype)
-    sin = sin[:seq_len].to(xq.dtype)
-
-    q_embed = (xq * cos) + (rotate_half(xq) * sin)
-    k_embed = (xk * cos) + (rotate_half(xk) * sin)
-    return q_embed, k_embed
-
-
-def get_unpad_data(attention_mask: torch.Tensor):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
-@torch.jit.script
 def scaled_dot_product_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
     attention_mask: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    attention_score = torch.matmul(query, key.transpose(2, 3)) / math.sqrt(
-        query.size(-1)
-    )
+    attention_score = torch.matmul(
+        query_states, key_states.transpose(2, 3)
+    ) / math.sqrt(query_states.size(-1))
     if attention_mask is not None:
-        attention_score = attention_score + attention_mask
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attention_score = attention_score + causal_mask
     attention_score = F.softmax(attention_score, dim=-1, dtype=torch.float32).to(
-        value.dtype
+        query_states.dtype
     )
-    attention_score = torch.matmul(attention_score, value)
+    attention_score = torch.matmul(attention_score, value_states)
     attention_score = attention_score.transpose(1, 2).contiguous()
     return attention_score

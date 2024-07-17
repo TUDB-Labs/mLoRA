@@ -1,20 +1,15 @@
+import inspect
 from dataclasses import dataclass
 from typing import Optional
 
 import torch
 import torch.nn as nn
-import transformers.models.mistral.modeling_mistral as modeling_mistral
-import transformers.models.qwen2.modeling_qwen2 as modeling_qwen2
+from transformers.models.mistral import modeling_mistral
+from transformers.models.qwen2 import modeling_qwen2
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import _backend, get_backend
-from mlora.common import (
-    FeedForward,
-    LLMModelInput,
-    apply_rotary_emb,
-    get_unpad_data,
-    repeat_kv,
-)
+from mlora.common import Cache, FeedForward, LLMModelInput
 from mlora.models.modeling_llama import (
     LlamaAttention,
     LlamaConfig,
@@ -23,12 +18,19 @@ from mlora.models.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaRMSNorm,
+    _get_unpad_data,
+    apply_rotary_pos_emb,
+    repeat_kv,
 )
 from mlora.utils import copy_parameters
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+
+    _flash_supports_window_size = "window_size" in list(
+        inspect.signature(flash_attn_func).parameters
+    )
 
 
 @dataclass
@@ -45,10 +47,11 @@ class MistralFlashAttention(LlamaAttention):
         wk: nn.Module,
         wv: nn.Module,
         wo: nn.Module,
+        idx: int,
         args: MistralConfig,
     ):
         assert is_flash_attn_2_available(), "Flash Attention is not available"
-        super().__init__(wq, wk, wv, wo, args)
+        super().__init__(wq, wk, wv, wo, idx, args)
         # Qwen2
         self.use_sliding_window_ = args.use_sliding_window_
         self.max_window_layers_ = args.max_window_layers_
@@ -66,6 +69,8 @@ class MistralFlashAttention(LlamaAttention):
         softmax_scale=None,
         use_sliding_windows=False,
     ):
+        causal = self.is_causal_
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -94,7 +99,7 @@ class MistralFlashAttention(LlamaAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal_,
+                    causal=causal,
                 )
             else:
                 attn_output_unpad = flash_attn_varlen_func(
@@ -107,8 +112,11 @@ class MistralFlashAttention(LlamaAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal_,
-                    window_size=(self.sliding_window_, self.sliding_window_),
+                    causal=causal,
+                    window_size=(
+                        self.sliding_window_,
+                        self.sliding_window_,
+                    ),
                 )
 
             attn_output = pad_input(
@@ -122,7 +130,7 @@ class MistralFlashAttention(LlamaAttention):
                     value_states,
                     dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal_,
+                    causal=causal,
                 )
             else:
                 attn_output = flash_attn_func(
@@ -131,8 +139,11 @@ class MistralFlashAttention(LlamaAttention):
                     value_states,
                     dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal_,
-                    window_size=(self.sliding_window_, self.sliding_window_),
+                    causal=causal,
+                    window_size=(
+                        self.sliding_window_,
+                        self.sliding_window_,
+                    ),
                 )
 
         return attn_output
@@ -148,7 +159,7 @@ class MistralFlashAttention(LlamaAttention):
             attention_mask_num_tokens = attention_mask.shape[-1]
             attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
 
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
 
         key_layer = index_first_axis(
             key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
@@ -193,6 +204,8 @@ class MistralFlashAttention(LlamaAttention):
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
@@ -212,19 +225,54 @@ class MistralFlashAttention(LlamaAttention):
         ).transpose(1, 2)
 
         kv_seq_len = xk.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += cache_position[0]
 
         # apply rotary embedding
-        assert xq.dtype == xk.dtype
-        xq, xk = apply_rotary_emb(xq, xk, max_seq_len, self.cos_, self.sin_)
+        cos, sin = self.rotary_emb(xv, cache_position.unsqueeze(0))
+        xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
 
         use_sliding_windows = (
-            (self.use_sliding_window_ is None or self.use_sliding_window_)
+            _flash_supports_window_size
+            and (self.use_sliding_window_ is None or self.use_sliding_window_)
             and (self.sliding_window_ is not None and kv_seq_len > self.sliding_window_)
             and (
                 self.max_window_layers_ is None
                 or self.layer_id_ < self.max_window_layers_
             )
         )
+
+        if past_key_value is not None:
+            # Activate slicing cache only if the config has a value `sliding_windows` attribute
+            cache_has_contents = past_key_value.get_seq_length(self.layer_idx_) > 0
+            if (
+                self.sliding_window_ is not None
+                and kv_seq_len > self.sliding_window_
+                and cache_has_contents
+            ):
+                slicing_tokens = 1 - self.sliding_window_
+
+                past_key = past_key_value[self.layer_idx_][0]
+                past_value = past_key_value[self.layer_idx_][1]
+
+                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
+                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
+
+                if past_key.shape[-2] != self.sliding_window_ - 1:
+                    raise ValueError(
+                        f"past key must have a shape of (`batch_size, num_heads, self.sliding_window - 1, head_dim`), got"
+                        f" {past_key.shape}"
+                    )
+
+                if attention_mask is not None:
+                    attention_mask = attention_mask[:, slicing_tokens:]
+                    attention_mask = torch.cat(
+                        [attention_mask, torch.ones_like(attention_mask[:, -1:])],
+                        dim=-1,
+                    )
+
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
 
         # for llama2 need to repeat the heads
         # before dim: batch_size, n_kv_head, seq_len, head_dim
@@ -270,7 +318,7 @@ MISTRAL_ATTENTION_CLASSES = {
 
 
 class MistralForCausalLM(LlamaForCausalLM):
-    def __init__(self, config: LlamaConfig) -> None:
+    def __init__(self, config: MistralConfig) -> None:
         super().__init__(config)
 
     @staticmethod
@@ -330,6 +378,7 @@ class MistralForCausalLM(LlamaForCausalLM):
                 layer.self_attn.k_proj,
                 layer.self_attn.v_proj,
                 layer.self_attn.o_proj,
+                idx,
                 llm_args,
             )
             decoder.mlp_ = FeedForward(

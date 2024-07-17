@@ -1,10 +1,10 @@
 import logging
 from dataclasses import dataclass
-from typing import Callable, List, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 
-from mlora.common import LLMBatchConfig, LLMModelInput, Tokens
+from mlora.common import LLMBatchConfig, LLMModelInput, Tokens, cache_factory
 from mlora.model import LLMModel
 from mlora.prompter import Prompter
 from mlora.tokenizer import Tokenizer
@@ -149,8 +149,10 @@ def generate(
     model: LLMModel,
     tokenizer: Tokenizer,
     configs: List[GenerateConfig],
-    max_gen_len: int = 128,
-    stream_callback: Callable = None,
+    max_gen_len: int = None,
+    use_cache: bool = True,
+    cache_implementation: Optional[str] = None,
+    stream_callback: Optional[Callable] = None,
 ):
 
     device = torch.device(model.device_)
@@ -180,7 +182,27 @@ def generate(
     min_tokens_len = min(len(t) for t in raw_prompts)
     max_tokens_len = max(len(t) for t in raw_prompts)
     assert max_tokens_len <= model.config_.max_seq_len_
-    total_len = min(model.config_.max_seq_len_, max_gen_len + max_tokens_len)
+    if max_gen_len is not None:
+        total_len = min(model.config_.max_seq_len_, max_gen_len + max_tokens_len)
+    else:
+        total_len = model.config_.max_seq_len_
+
+    if cache_implementation is not None:
+        use_cache = True
+
+    if use_cache and cache_implementation is None:
+        cache_implementation = model.model_.cache_implementation()
+
+    past_key_values = (
+        cache_factory(
+            cache_implementation=cache_implementation,
+            config=model.model_.model_config(),
+            max_batch_size=batch_size,
+            max_cache_len=total_len,
+        )
+        if cache_implementation is not None
+        else None
+    )
 
     tokens = torch.full(
         (batch_size, total_len), tokenizer.pad_id_, dtype=torch.int64, device=device
@@ -195,10 +217,9 @@ def generate(
         input_data = LLMModelInput(
             batch_configs_=batch_data_config,
             batch_tokens_=tokens[:, prev_pos:cur_pos].tolist(),
-            diagonal_pos_=prev_pos + 1,
             inference_mode_=True,
         )
-        outputs = model.forward(input_data)
+        outputs = model.forward(input_data, past_key_values)
         for output in outputs:
             config = config_dict[output.adapter_name]
             start_idx = output.batch_start_idx_
@@ -233,5 +254,8 @@ def generate(
 
         if all(stop_reached):
             break
+
+        if use_cache:
+            prev_pos = cur_pos
 
     return gen_outputs(configs, tokenizer, raw_prompts, tokens, max_gen_len)

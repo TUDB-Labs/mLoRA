@@ -1,31 +1,31 @@
-from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import transformers.models.phi.modeling_phi as modeling_phi
 from transformers.activations import ACT2FN
+from transformers.models.phi import modeling_phi
+from transformers.models.phi.modeling_phi import (
+    PhiRotaryEmbedding,
+    _get_unpad_data,
+    apply_rotary_pos_emb,
+    repeat_kv,
+)
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import _backend, get_backend
 from mlora.common import (
-    CHECKPOINT_CLASSES,
+    Cache,
     FeedForward,
     Linear,
     LLMAttention,
     LLMDecoder,
     LLMFeedForward,
     LLMForCausalLM,
-    LLMModelArgs,
+    LLMModelConfig,
     LLMModelInput,
-    Masks,
-    apply_rotary_emb,
-    get_unpad_data,
-    precompute_rope_angle,
     prepare_4d_causal_attention_mask,
-    repeat_kv,
     scaled_dot_product_attention,
 )
 from mlora.common.mix_lora import _mixtral_slice_tensor
@@ -37,7 +37,7 @@ if is_flash_attn_2_available():
 
 
 @dataclass
-class PhiConfig(LLMModelArgs):
+class PhiConfig(LLMModelConfig):
     partial_rotary_factor_: float = 0.5
     layer_norm_eps_: float = 1e-05
     resid_pdrop_: float = 0.0
@@ -45,14 +45,13 @@ class PhiConfig(LLMModelArgs):
     qk_layernorm_: bool = False
 
 
-@torch.jit.script
 def apply_partial_rotary_emb(
     xq: torch.Tensor,
     xk: torch.Tensor,
     rotary_emb_dim: int,
-    seq_len: int,
     cos: torch.Tensor,
     sin: torch.Tensor,
+    position_ids: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     q_rot, q_pass = (
         xq[..., :rotary_emb_dim],
@@ -63,7 +62,7 @@ def apply_partial_rotary_emb(
         xk[..., rotary_emb_dim:],
     )
     # [batch_size, seq_length, num_heads, head_dim // partial_rotary_factor]
-    q_rot, k_rot = apply_rotary_emb(q_rot, k_rot, seq_len, cos, sin)
+    q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, position_ids)
 
     # [batch_size, seq_length, num_heads, head_dim]
     xq = torch.cat((q_rot, q_pass), dim=-1)
@@ -80,6 +79,7 @@ class PhiAttention(LLMAttention):
         k_proj: nn.Module,
         v_proj: nn.Module,
         dense: nn.Module,
+        idx: int,
         args: PhiConfig,
     ):
         super().__init__()
@@ -89,6 +89,7 @@ class PhiAttention(LLMAttention):
         self.wv_: Linear = Linear(v_proj, args.device_)
         self.dense_: Linear = Linear(dense, args.device_)
         # config
+        self.layer_idx_ = idx
         self.dim_ = args.dim_
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
@@ -97,9 +98,11 @@ class PhiAttention(LLMAttention):
         self.dtype_ = args.dtype_
         self.is_causal_ = True
         # cos and sin
-        self.rotary_emb_dim_ = int(args.partial_rotary_factor_ * self.head_dim_)
-        self.cos_, self.sin_ = precompute_rope_angle(
-            self.rotary_emb_dim_, args.max_seq_len_, args.rope_theta_, args.device_
+        self.rotary_emb_ = PhiRotaryEmbedding(
+            int(args.partial_rotary_factor_ * self.head_dim_),
+            max_position_embeddings=args.max_seq_len_,
+            base=args.rope_theta_,
+            device=args.device_,
         )
         # qk norm
         self.qk_layernorm_: bool = args.qk_layernorm_
@@ -131,6 +134,8 @@ class PhiAttention(LLMAttention):
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
@@ -152,11 +157,29 @@ class PhiAttention(LLMAttention):
             batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
         ).transpose(1, 2)
 
+        kv_seq_len = xk.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx_)
+        cos, sin = self.rotary_emb_(xv, seq_len=kv_seq_len)
+
         # partial rotary embedding
-        assert xq.dtype == xk.dtype
         xq, xk = apply_partial_rotary_emb(
-            xq, xk, self.rotary_emb_dim_, max_seq_len, self.cos_, self.sin_
+            xq,
+            xk,
+            self.rotary_emb_.dim,
+            cos,
+            sin,
+            cache_position.unsqueeze(0),
         )
+
+        if past_key_value is not None:
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "partial_rotation_size": self.rotary_emb_.dim,
+                "cache_position": cache_position,
+            }
+            xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
 
         # before dim: batch_size, n_kv_head, seq_len, head_dim
         # after dim: batch_size, n_head, seq_len, head_dim
@@ -180,10 +203,11 @@ class PhiFlashAttention2(PhiAttention):
         k_proj: nn.Module,
         v_proj: nn.Module,
         dense: nn.Module,
+        idx: int,
         args: PhiConfig,
     ):
         assert is_flash_attn_2_available(), "Flash Attention is not available"
-        super().__init__(q_proj, k_proj, v_proj, dense, args)
+        super().__init__(q_proj, k_proj, v_proj, dense, idx, args)
 
     def _flash_attention_forward(
         self,
@@ -195,6 +219,7 @@ class PhiFlashAttention2(PhiAttention):
         dropout=0.0,
         softmax_scale=None,
     ):
+        causal = self.is_causal_
 
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
@@ -223,7 +248,7 @@ class PhiFlashAttention2(PhiAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal_,
+                causal=causal,
             )
 
             attn_output = pad_input(
@@ -236,7 +261,7 @@ class PhiFlashAttention2(PhiAttention):
                 value_states,
                 dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal_,
+                causal=causal,
             )
 
         return attn_output
@@ -244,7 +269,7 @@ class PhiFlashAttention2(PhiAttention):
     def _upad_input(
         self, query_layer, key_layer, value_layer, attention_mask, query_length
     ):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
@@ -291,6 +316,8 @@ class PhiFlashAttention2(PhiAttention):
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
         attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
     ):
         batch_size, max_seq_len, _ = hidden_states.shape
 
@@ -312,11 +339,33 @@ class PhiFlashAttention2(PhiAttention):
             batch_size, max_seq_len, self.n_kv_heads_, self.head_dim_
         ).transpose(1, 2)
 
+        kv_seq_len = xk.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx_)
+        cos, sin = self.rotary_emb_(xv, seq_len=kv_seq_len)
+
         # partial rotary embedding
-        assert xq.dtype == xk.dtype
         xq, xk = apply_partial_rotary_emb(
-            xq, xk, self.rotary_emb_dim_, max_seq_len, self.cos_, self.sin_
+            xq,
+            xk,
+            self.rotary_emb_.dim,
+            cos,
+            sin,
+            cache_position.unsqueeze(0),
         )
+
+        if past_key_value is not None:
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "partial_rotation_size": self.rotary_emb_.dim,
+                "cache_position": cache_position,
+            }
+            xk, xv = past_key_value.update(xk, xv, self.layer_idx_, cache_kwargs)
+
+        xq = xq.transpose(1, 2)
+        xk = xk.transpose(1, 2)
+        xv = xv.transpose(1, 2)
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
@@ -327,10 +376,6 @@ class PhiFlashAttention2(PhiAttention):
             xq = xq.to(target_dtype)
             xk = xk.to(target_dtype)
             xv = xv.to(target_dtype)
-
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
 
         attn_output = self._flash_attention_forward(
             xq,
@@ -453,14 +498,20 @@ class PhiDecoderLayer(LLMDecoder):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
         input_args: LLMModelInput,
+        attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
     ):
         residual = hidden_states
         hidden_states = self.input_layernorm_(hidden_states)
         # Self Attention
         attn_outputs = self.self_attn_.forward(
-            hidden_states, input_args, attention_mask
+            hidden_states,
+            input_args,
+            attention_mask,
+            cache_position,
+            past_key_value,
         )
         attn_outputs = F.dropout(
             attn_outputs, self.resid_pdrop_, not input_args.inference_mode_
@@ -508,36 +559,6 @@ class PhiLayerNorm(nn.Module):
         return self.layernorm_(data)
 
 
-class PhiSequentialWrapper(nn.Module):
-    def __init__(self, module: nn.Module):
-        super().__init__()
-        self.wrapper_module_ = module
-
-    def name(self) -> str:
-        return type(self.wrapper_module_).__name__
-
-    def forward(self, input: Tuple) -> Tuple:
-        module_name = self.name()
-
-        if module_name == "PhiEmbedding":
-            output = self.wrapper_module_.forward(input[0])
-            if input[-1].gradient_checkpoint_ != "none":
-                output = output.requires_grad_(True)
-            return (output,) + input[1:]
-        elif module_name == "PhiLayerNorm":
-            output = self.wrapper_module_.forward(input[0])
-            return (output,) + input[1:]
-        elif module_name == "PhiDecoderLayer":
-            outputs = CHECKPOINT_CLASSES[input[-1].gradient_checkpoint_](
-                self.wrapper_module_.forward, *input
-            )
-            if len(outputs) > 1:
-                self.router_probs_ = outputs[1:]
-            return (outputs[0],) + input[1:]
-        else:
-            raise f"module invalid: {module_name}"
-
-
 class PhiForCausalLM(LLMForCausalLM):
     def __init__(self, config: PhiConfig) -> None:
         self.config_ = config
@@ -554,40 +575,32 @@ class PhiForCausalLM(LLMForCausalLM):
         )
         self.layers_: List[PhiDecoderLayer] = []
 
+    def embed_tokens(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.embed_tokens_(input_ids)
+
     def decoder_stack(self) -> List[LLMDecoder]:
         return self.layers_
 
-    def sequential_module(self) -> OrderedDict:
-        seq_module = OrderedDict()
-
-        seq_module.update({"embedding": PhiSequentialWrapper(self.embed_tokens_)})
-        seq_module.move_to_end("embedding")
-
-        for index, layer in enumerate(self.layers_):
-            layer_name = f"layer{index}"
-            seq_module.update({layer_name: PhiSequentialWrapper(layer)})
-            seq_module.move_to_end(layer_name)
-
-        seq_module.update({"norm": PhiSequentialWrapper(self.final_layernorm_)})
-        seq_module.move_to_end("norm")
-
-        return seq_module
+    def norm(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.final_layernorm_(hidden_states)
 
     def causal_mask(
         self,
-        input_tokens: torch.Tensor,
-        additional_mask: List[Masks] = None,
-        diagonal: int = 1,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Optional[Cache],
     ) -> torch.Tensor:
 
         return prepare_4d_causal_attention_mask(
-            input_tokens=input_tokens,
-            n_heads=1,
-            additional_mask=additional_mask,
-            diagonal=diagonal,
-            dtype=self.config_.dtype_,
-            device=self.config_.device_,
+            attention_mask,
+            input_tensor,
+            cache_position,
+            past_key_values,
         )
+
+    def model_config(self) -> PhiConfig:
+        return self.config_
 
     @staticmethod
     def from_pretrained(
@@ -639,6 +652,7 @@ class PhiForCausalLM(LLMForCausalLM):
                     layer.self_attn.k_proj,
                     layer.self_attn.v_proj,
                     layer.self_attn.dense,
+                    idx,
                     llm_args,
                 ),
                 FeedForward(
