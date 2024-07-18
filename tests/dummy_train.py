@@ -12,7 +12,7 @@ def main(
 ):
     mlora.setup_logging("INFO")
 
-    model = mlora.LLMModel.from_pretrained(
+    model: mlora.LLMModel = mlora.LLMModel.from_pretrained(
         base_model,
         device=mlora.get_backend().default_device_name(),
         load_dtype=torch.bfloat16,
@@ -47,23 +47,34 @@ def main(
     lora_config, lora_weight = model.unload_adapter(adapter_name)
 
     model.init_adapter(lora_config, lora_weight)
+    model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
 
-    generate_config = mlora.GenerateConfig(
-        adapter_name=adapter_name,
-        prompts=[test_prompt],
-        stop_token="\n",
-    )
+    generate_configs = [
+        mlora.GenerateConfig(
+            adapter_name=adapter_name,
+            prompts=[test_prompt],
+            stop_token="\n",
+        ),
+        mlora.GenerateConfig(
+            adapter_name="default",
+            prompts=[test_prompt],
+            stop_token="\n",
+        ),
+    ]
 
-    output = mlora.generate(
+    outputs = mlora.generate(
         model=model,
         tokenizer=tokenizer,
-        configs=[generate_config],
+        configs=generate_configs,
+        max_gen_len=128,
     )
 
-    for prompt in output[adapter_name]:
-        print(f"\n{'='*10}\n")
-        print(prompt)
-        print(f"\n{'='*10}\n")
+    print(f"\n{'='*10}\n")
+    print(f"PROMPT: {test_prompt}")
+    for adapter_name, output in outputs.items():
+        print(f"{adapter_name} OUTPUT:")
+        print(output[0])
+    print(f"\n{'='*10}\n")
 
 
 if __name__ == "__main__":

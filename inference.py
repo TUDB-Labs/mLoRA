@@ -168,7 +168,7 @@ def main(
                 minimum=1,
                 maximum=model.config_.max_seq_len_,
                 step=1,
-                value=128,
+                value=1024,
                 label="Max Tokens",
             ),
             gr.components.Checkbox(label="Stream Output", value=True),

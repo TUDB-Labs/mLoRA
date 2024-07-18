@@ -80,11 +80,7 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
             if len(tokens) > max_seq_len:
                 tokens = tokens[:max_seq_len]
             max_tokens_len = max(len(tokens), max_tokens_len)
-            # sequence_lengths.append(len(tokens))
-            # while len(tokens) < max_seq_len:
-            #     tokens.append(tokenizer.pad_id_)
             batch_tokens.append(tokens)
-            # atten_masks.append(tokenizer.mask_from(tokens))
             batch_labels.append(labels.copy())
 
         config.batch_start_idx_ = config.batch_end_idx_

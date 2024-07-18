@@ -234,22 +234,25 @@ def inference_callback(cur_pos, outputs):
 
 
 def inference(
-    llm_model: mlora.LLMModel,
+    model: mlora.LLMModel,
     tokenizer: mlora.Tokenizer,
-    adapters: List[mlora.GenerateConfig],
+    configs: List[mlora.GenerateConfig],
+    concurrent_jobs: int,
 ):
     while True:
         input_raw = input("INPUT WITHOUT PROMPT: ")
         if input_raw == "QUIT":
             return
-        for config in adapters:
+        for config in configs:
             config.prompts = [input_raw]
         callback = None if args.disable_log else inference_callback
         outputs = mlora.generate(
-            llm_model,
+            model,
             tokenizer,
-            adapters,
+            configs,
+            max_gen_len=128,
             use_cache=args.disable_cache,
+            concurrent_jobs=concurrent_jobs,
             cache_implementation=args.cache_implementation,
             stream_callback=callback,
         )
@@ -298,7 +301,12 @@ if __name__ == "__main__":
     mlora_backend.empty_cache()
 
     if args.inference:
-        inference(model, tokenizer, adapters)
+        inference(
+            model=model,
+            tokenizer=tokenizer,
+            configs=adapters,
+            concurrent_jobs=config.get("inference_lora_simultaneously_num", 2),
+        )
     elif args.evaluate:
         mlora.evaluate(
             model=model,

@@ -45,9 +45,6 @@ def main(
         prompts=[(instruction, input)],
     )
 
-    if max_seq_len is None:
-        max_seq_len = model.config_.max_seq_len_
-
     output = mlora.generate(
         model,
         tokenizer,
