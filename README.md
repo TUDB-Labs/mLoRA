@@ -39,6 +39,7 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 | &check; | [TinyLLaMA](https://huggingface.co/TinyLlama)    | 1.1B               |
 | &check; | [Qwen 1.5/2](https://qwenlm.github.io)           | 1.5B/4B/7B/57B/72B |
 | &check; | [Gemma](https://ai.google.dev/gemma/docs)        | 2B/7B              |
+| &check; | [Gemma 2](https://ai.google.dev/gemma/docs)      | 9B/27B             |
 | &check; | [Mistral](https://mistral.ai)                    | 7B                 |
 | &check; | [Phi 2](https://huggingface.co/microsoft/phi-2)  | 2.7B               |
 | &check; | [ChatGLM 1/2/3/4](https://huggingface.co/THUDM)  | 6B                 |
@@ -58,10 +59,11 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 
 ## Supported Attention Methods
 
-|         | Attention Methods                                        | Name           | Arguments*               |
-|---------|----------------------------------------------------------|----------------|--------------------------|
-| &check; | [Scaled Dot Product](https://arxiv.org/abs/1706.03762)   | `"eager"`      | `--attn_impl eager`      |
-| &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)    | `"flash_attn"` | `--attn_impl flash_attn` |
+|         | Attention Methods                                            | Name           | Arguments*               |
+|---------|--------------------------------------------------------------|----------------|--------------------------|
+| &check; | [Scaled Dot Product](https://arxiv.org/abs/1706.03762)       | `"eager"`      | `--attn_impl eager`      |
+| &check; | [Flash Attention 2](https://arxiv.org/abs/2307.08691)        | `"flash_attn"` | `--attn_impl flash_attn` |
+| &check; | [Sliding Window Attention](https://arxiv.org/abs/2004.05150) | -              | `--sliding_window`       |
 
 *: Arguments of `mlora.py`
 
@@ -71,7 +73,7 @@ For flash attention, manual installation of the following dependencies is requir
 
 ```bash
 pip3 install ninja
-pip3 install flash-attn==2.5.8 --no-build-isolation
+pip3 install flash-attn==2.6.1 --no-build-isolation
 ```
 
 If any attention method is not specified, flash attention is used if available.

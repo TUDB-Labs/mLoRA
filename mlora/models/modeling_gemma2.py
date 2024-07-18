@@ -26,7 +26,7 @@ from mlora.common import (
 )
 from mlora.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
 from mlora.models.modeling_llama import LlamaMLP
-from mlora.utils import copy_parameters
+from mlora.utils import copy_parameters, is_package_available
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -35,6 +35,10 @@ if is_flash_attn_2_available():
     _flash_supports_window_size = "window_size" in list(
         inspect.signature(flash_attn_func).parameters
     )
+
+    assert is_package_available(
+        "flash_attn", "2.6.0"
+    ), "Gemma2 requires flash_attn>=2.6.0"
 
 
 @dataclass
