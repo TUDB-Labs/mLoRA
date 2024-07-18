@@ -251,7 +251,7 @@ def inference(
             tokenizer,
             configs,
             max_gen_len=128,
-            use_cache=args.disable_cache,
+            use_cache=not args.disable_cache,
             concurrent_jobs=concurrent_jobs,
             cache_implementation=args.cache_implementation,
             stream_callback=callback,

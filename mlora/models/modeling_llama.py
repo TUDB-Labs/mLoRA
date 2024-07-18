@@ -59,8 +59,8 @@ class LlamaAttention(LLMAttention):
         self.wv_: Linear = Linear(wv, args.device_)  # dim * dim
         self.wo_: Linear = Linear(wo, args.device_)  # dim * dim
         # cos and sin
-        self.rotary_emb = LlamaRotaryEmbedding(
-            args.dim_ // args.n_heads_,
+        self.rotary_emb_ = LlamaRotaryEmbedding(
+            args.head_dim_,
             max_position_embeddings=args.max_seq_len_,
             base=args.rope_theta_,
             device=args.device_,
@@ -71,7 +71,7 @@ class LlamaAttention(LLMAttention):
         self.n_heads_ = args.n_heads_
         self.n_kv_heads_ = args.n_kv_heads_
         self.n_rep_ = self.n_heads_ // self.n_kv_heads_
-        self.head_dim_ = args.dim_ // args.n_heads_
+        self.head_dim_ = args.head_dim_
         self.dtype_ = args.dtype_
         self.is_causal_ = True
 
@@ -109,7 +109,7 @@ class LlamaAttention(LLMAttention):
         ).transpose(1, 2)
 
         # apply rotary embedding
-        cos, sin = self.rotary_emb(xv, cache_position.unsqueeze(0))
+        cos, sin = self.rotary_emb_(xv, cache_position.unsqueeze(0))
         xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
 
         if past_key_value is not None:
@@ -274,7 +274,7 @@ class LlamaFlashAttention(LlamaAttention):
         ).transpose(1, 2)
 
         # apply rotary embedding
-        cos, sin = self.rotary_emb(xv, cache_position.unsqueeze(0))
+        cos, sin = self.rotary_emb_(xv, cache_position.unsqueeze(0))
         xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
 
         if past_key_value is not None:
@@ -484,11 +484,12 @@ class LlamaEmbedding(nn.Module):
 
 class LlamaForCausalLM(LLMForCausalLM):
     def __init__(self, config: LlamaConfig) -> None:
+        super().__init__()
         self.config_ = config
         self.padding_idx_ = config.pad_token_id_
         self.vocab_size_ = config.vocab_size_
         self.embed_tokens_: LlamaEmbedding = None
-        self.norm_: LlamaEmbedding = None
+        self.norm_: LlamaRMSNorm = None
         self.lm_head_ = nn.Linear(
             config.dim_,
             config.vocab_size_,
@@ -538,6 +539,7 @@ class LlamaForCausalLM(LLMForCausalLM):
             name_or_path_=llm_config.name_or_path,
             vocab_size_=llm_config.vocab_size,
             dim_=llm_config.hidden_size,
+            head_dim_=llm_config.hidden_size // llm_config.num_attention_heads,
             intermediate_=llm_config.intermediate_size,
             n_layers_=llm_config.num_hidden_layers,
             n_heads_=llm_config.num_attention_heads,

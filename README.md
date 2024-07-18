@@ -107,6 +107,8 @@ For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can
 
  + Quantization with Qwen2 have no effect (same with transformers).
  + Applying quantization with DoRA will result in higher memory and computation cost (same with PEFT).
+ + Sliding window attention with generate cache may product abnormal output.
+ + ChatGLM models with generate cache may product abnormal output.
 
 ## Installation
 

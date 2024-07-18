@@ -160,7 +160,7 @@ class StaticCache(Cache):
             config.max_seq_len_ if max_cache_len is None else max_cache_len
         )
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = config.dim_ // config.n_heads_
+        self.head_dim = config.head_dim_
 
         self.dtype = dtype if dtype is not None else torch.float32
         self.num_key_value_heads = config.n_kv_heads_
@@ -327,7 +327,7 @@ class HybridCache(Cache):
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = config.dim_ // config.n_heads_
+        self.head_dim = config.head_dim_
 
         self.dtype = dtype if dtype is not None else torch.float32
         self.num_key_value_heads = config.n_kv_heads_
@@ -461,7 +461,7 @@ class HybridCache(Cache):
         return self.max_cache_len
 
     def get_seq_length(self, layer_idx: Optional[int] = 0):
-        return None
+        return 0
 
     def reset(self):
         """Resets the cache values while preserving the objects"""

@@ -38,7 +38,7 @@ class CasualOutputLayer(LLMOutput):
     def __init__(self, vocab_size: int, weight: torch.nn.Linear):
         super().__init__()
         self.vocab_size_: int = vocab_size
-        self.lm_head_: torch.nn.Linear = weight
+        self.lm_head_: torch.nn.Module = weight
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         return self.lm_head_(data).float()

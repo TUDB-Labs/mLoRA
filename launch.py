@@ -18,6 +18,8 @@ def compose_command(
     log_file: str = "mlora.log",
     overwrite: bool = False,
     attn_impl: str = None,
+    sliding_window: bool = False,
+    use_cache: bool = True,
     quantize: str = None,
     dtype: str = "bf16",
     tf32: bool = False,
@@ -37,6 +39,10 @@ def compose_command(
         command += " --overwrite"
     if attn_impl is not None:
         command += f" --attn_impl {attn_impl}"
+    if sliding_window:
+        command += " --sliding_window"
+    if not use_cache:
+        command += " --disable_cache"
     if quantize is not None:
         command += f" --load_{quantize}"
     if dtype in ("fp16", "bf16"):
@@ -201,17 +207,19 @@ def show_help():
         --group_by_length
 
     Arguments of run, train, inference and evaluate:
-        --base_model   model name or path
-        --config       [mlora.json]
-        --load_adapter [false]
-        --random_seed  [42]
-        --cuda_device  [0]
-        --log_file     [mlora.log]
-        --overwrite    [false]
-        --attn_impl    [eager]
-        --quantize     [none], 4bit, 8bit
-        --dtype        [bf16], fp16, fp32
-        --tf32         [false]
+        --base_model     model name or path
+        --config         [mlora.json]
+        --load_adapter   [false]
+        --random_seed    [42]
+        --cuda_device    [0]
+        --log_file       [mlora.log]
+        --overwrite      [false]
+        --attn_impl      [eager]
+        --sliding_window [false]
+        --use_cache      [true]
+        --quantize       [none], 4bit, 8bit
+        --dtype          [bf16], fp16, fp32
+        --tf32           [false]
     """
     )
 

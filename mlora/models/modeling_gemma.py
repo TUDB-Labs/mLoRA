@@ -74,6 +74,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
             name_or_path_=llm_config.name_or_path,
             vocab_size_=llm_config.vocab_size,
             dim_=llm_config.hidden_size,
+            head_dim_=llm_config.head_dim,
             intermediate_=llm_config.intermediate_size,
             n_layers_=llm_config.num_hidden_layers,
             n_heads_=llm_config.num_attention_heads,

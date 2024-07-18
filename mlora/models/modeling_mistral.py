@@ -229,7 +229,7 @@ class MistralFlashAttention(LlamaAttention):
             kv_seq_len += cache_position[0]
 
         # apply rotary embedding
-        cos, sin = self.rotary_emb(xv, cache_position.unsqueeze(0))
+        cos, sin = self.rotary_emb_(xv, cache_position.unsqueeze(0))
         xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
 
         use_sliding_windows = (
@@ -333,6 +333,7 @@ class MistralForCausalLM(LlamaForCausalLM):
             name_or_path_=llm_config.name_or_path,
             vocab_size_=llm_config.vocab_size,
             dim_=llm_config.hidden_size,
+            head_dim_=llm_config.hidden_size // llm_config.num_attention_heads,
             intermediate_=llm_config.intermediate_size,
             n_layers_=llm_config.num_hidden_layers,
             n_heads_=llm_config.num_attention_heads,

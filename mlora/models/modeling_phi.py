@@ -561,6 +561,7 @@ class PhiLayerNorm(nn.Module):
 
 class PhiForCausalLM(LLMForCausalLM):
     def __init__(self, config: PhiConfig) -> None:
+        super().__init__()
         self.config_ = config
         self.padding_idx_ = config.pad_token_id_
         self.vocab_size_ = config.vocab_size_
