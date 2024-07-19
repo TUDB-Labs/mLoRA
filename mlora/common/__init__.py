@@ -1,5 +1,9 @@
 # Attention and Feed Forward
-from .attention import prepare_4d_causal_attention_mask, scaled_dot_product_attention
+from .attention import (
+    eager_attention_forward,
+    flash_attention_forward,
+    prepare_4d_causal_attention_mask,
+)
 from .cache import (
     DynamicCache,
     HybridCache,
@@ -58,7 +62,8 @@ from .modelargs import (
 
 __all__ = [
     "prepare_4d_causal_attention_mask",
-    "scaled_dot_product_attention",
+    "eager_attention_forward",
+    "flash_attention_forward",
     "Cache",
     "DynamicCache",
     "HybridCache",

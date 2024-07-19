@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 from transformers import get_scheduler
@@ -204,12 +204,18 @@ def train(
     configs: List[TrainConfig],
     max_concurrent_jobs: int = None,
     strategy: str = "optim",
-    cutoff_len: int = None,
-    save_step: int = None,
-    save_dir: str = None,
+    cutoff_len: Optional[int] = None,
+    save_step: Optional[int] = None,
+    save_dir: Optional[str] = None,
 ) -> None:
     if cutoff_len is None:
         cutoff_len = model.config_.max_seq_len_
+
+    if model.config_.attn_implementation_ != "eager":
+        logging.warn(
+            "It is strongly recommended to train models with the `eager` attention implementation "
+            f"instead of `{model.config_.attn_implementation_}`."
+        )
 
     dispatcher = Dispatcher(
         tokenizer, configs, max_concurrent_jobs, strategy, cutoff_len

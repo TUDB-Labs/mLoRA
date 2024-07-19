@@ -271,6 +271,9 @@ if __name__ == "__main__":
 
     if args.inference or args.evaluate:
         args.load_adapter = True
+        inference_mode = True
+    else:
+        inference_mode = False
 
     mlora.setup_logging("INFO", args.log_file)
 
@@ -280,7 +283,11 @@ if __name__ == "__main__":
         exit(-1)
 
     if args.attn_impl is None:
-        if mlora_backend.device_name() == "cuda" and is_flash_attn_2_available():
+        if (
+            inference_mode
+            and mlora_backend.device_name() == "cuda"
+            and is_flash_attn_2_available()
+        ):
             args.attn_impl = "flash_attn"
         else:
             args.attn_impl = "eager"

@@ -276,6 +276,9 @@ class LLMModel(torch.nn.Module):
             past_key_values.get_seq_length() if past_key_values is not None else 0
         )
 
+        if past_seen_tokens is None:
+            past_seen_tokens = 0
+
         cache_position = torch.arange(
             past_seen_tokens,
             past_seen_tokens + inputs_embeds.shape[1],

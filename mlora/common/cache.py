@@ -216,8 +216,12 @@ class StaticCache(Cache):
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        if cache_position is None:
+            k_out.copy_(key_states)
+            v_out.copy_(value_states)
+        else:
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
@@ -309,9 +313,14 @@ class SlidingWindowCache(StaticCache):
         return k_out, v_out
 
     def get_max_length(self) -> Optional[int]:
-        # in theory there is no limit because the sliding window size is fixed
-        # no matter how long the sentence is
+        # in theory there is no limit because the sliding window size is fixed no matter how long the sentence is
         return None
+
+    def reset(self):
+        for layer_idx in range(len(self.key_cache)):
+            # In-place ops prevent breaking the static address
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
 
 
 class HybridCache(Cache):
@@ -323,7 +332,12 @@ class HybridCache(Cache):
         device="cpu",
         dtype=None,
     ) -> None:
-        assert hasattr(config, "sliding_window_")
+        if not hasattr(config, "sliding_window_") or config.sliding_window_ is None:
+            raise ValueError(
+                "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
+                "sliding window attention, please check if there is a `sliding_window` field in the model "
+                "config and it's not set to None."
+            )
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
@@ -461,7 +475,7 @@ class HybridCache(Cache):
         return self.max_cache_len
 
     def get_seq_length(self, layer_idx: Optional[int] = 0):
-        return 0
+        return None
 
     def reset(self):
         """Resets the cache values while preserving the objects"""

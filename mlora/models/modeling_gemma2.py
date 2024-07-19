@@ -1,15 +1,10 @@
-import inspect
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
 from transformers.models.gemma2 import modeling_gemma2
-from transformers.models.gemma2.modeling_gemma2 import (
-    _get_unpad_data,
-    apply_rotary_pos_emb,
-    repeat_kv,
-)
+from transformers.models.gemma2.modeling_gemma2 import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
 from mlora.backends import _backend, get_backend
@@ -22,23 +17,12 @@ from mlora.common import (
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
+    flash_attention_forward,
     prepare_4d_causal_attention_mask,
 )
 from mlora.models.modeling_gemma import GemmaEmbedding, GemmaRMSNorm
 from mlora.models.modeling_llama import LlamaMLP
 from mlora.utils import copy_parameters, is_package_available
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
-
-    _flash_supports_window_size = "window_size" in list(
-        inspect.signature(flash_attn_func).parameters
-    )
-
-    assert is_package_available(
-        "flash_attn", "2.6.0"
-    ), "Gemma2 requires flash_attn>=2.6.0"
 
 
 @dataclass
@@ -277,137 +261,28 @@ class Gemma2FlashAttention2(Gemma2Attention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
+        attn_output = flash_attention_forward(
             query_states,
             key_states,
             value_states,
             attention_mask,
             q_len,
+            is_causal=self.is_causal_,
             softmax_scale=self.scaling_,
-            softcap=self.config_.attn_logit_softcapping_,
-        )
+            sliding_window=(
+                self.sliding_window_ if self.config_.use_sliding_window_ else None
+            ),
+            softcap=(
+                self.config_.attn_logit_softcapping_
+                if is_package_available("flash_attn", "2.6.0")
+                else None
+            ),
+        ).to(input_dtype)
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj_(attn_output, input_args)
 
         return attn_output
-
-    def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
-        cache_position=0,
-        softcap=None,
-    ):
-        causal = self.is_causal_
-
-        # TODO this is not compile compatible
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and self.config_.use_sliding_window_
-            and self.sliding_window_ is not None
-            and cache_position > self.sliding_window_
-        )
-        flash_kwargs = {"softcap": softcap}
-        if use_sliding_windows:
-            flash_kwargs.update(
-                {"window_size": (self.sliding_window_, self.sliding_window_)}
-            )
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            (
-                query_states,
-                key_states,
-                value_states,
-                indices_q,
-                cu_seq_lens,
-                max_seq_lens,
-            ) = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-                **flash_kwargs,
-            )
-
-            attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length
-            )
-        else:
-            attn_output = flash_attn_func(
-                query_states,
-                key_states,
-                value_states,
-                dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
-
-        return attn_output
-
-    def _upad_input(
-        self, query_layer, key_layer, value_layer, attention_mask, query_length
-    ):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.n_heads_, head_dim),
-                indices_k,
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask
-            )
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 GEMMA2_ATTENTION_CLASSES = {

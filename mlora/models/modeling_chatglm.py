@@ -19,13 +19,10 @@ from mlora.common import (
     LLMForCausalLM,
     LLMModelConfig,
     LLMModelInput,
+    flash_attention_forward,
 )
 from mlora.common.mix_lora import _mixtral_slice_tensor
 from mlora.utils import copy_parameters
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
 
 @dataclass
@@ -34,7 +31,6 @@ class GLMConfig(LLMModelConfig):
     rmsnorm: bool = True
     layernorm_epsilon: float = 1e-5
     apply_residual_connection_post_layernorm: bool = False
-    attention_dropout: float = 0.0
     fp32_residual_connection: bool = False
     kv_channels: int = 128
     multi_query_attention: bool = False
@@ -174,9 +170,7 @@ class CoreAttention(torch.nn.Module):
             self.norm_factor *= coeff
         self.coeff = coeff
 
-        self.attention_dropout = torch.nn.Dropout(config.attention_dropout)
-
-    def forward(self, query_layer, key_layer, value_layer, attention_mask, is_training):
+    def forward(self, query_layer, key_layer, value_layer, attention_mask):
         # [b, np, sq, sk]
         output_size = (
             query_layer.size(0),
@@ -213,10 +207,6 @@ class CoreAttention(torch.nn.Module):
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
 
-        # ===========================
-        # Attention probs and dropout
-        # ===========================
-
         # attention scores and attention mask [b, np, sq, sk]
         if self.attention_softmax_in_fp32:
             attention_scores = attention_scores.float()
@@ -242,10 +232,6 @@ class CoreAttention(torch.nn.Module):
             )
         attention_probs = F.softmax(attention_scores, dim=-1)
         attention_probs = attention_probs.type_as(value_layer)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.attention_dropout(attention_probs)
 
         # query layer shape: [b * np, sq, hn]
         # value layer shape: [b, np, sk, hn]
@@ -280,125 +266,32 @@ class CoreAttention(torch.nn.Module):
         return context_layer
 
 
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
 class FlashAttention2(CoreAttention):
     def __init__(self, *args, **kwargs):
+        assert is_flash_attn_2_available(), "Flash Attention is not available"
         super().__init__(*args, **kwargs)
 
-    def forward(
-        self, query_states, key_states, value_states, attention_mask, is_training
-    ):
+    def forward(self, query_states, key_states, value_states, attention_mask):
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
+
         batch_size, query_length = query_states.shape[:2]
-        causal = self.is_causal
-        dropout = self.config.attention_dropout if is_training else 0.0
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            (
-                query_states,
-                key_states,
-                value_states,
-                indices_q,
-                cu_seq_lens,
-                max_seq_lens,
-            ) = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
 
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+        attn_output = flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            query_length,
+            is_causal=self.is_causal,
+        )
 
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=None,
-                causal=causal,
-            )
-
-            attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length
-            )
-        else:
-            attn_output = flash_attn_func(
-                query_states,
-                key_states,
-                value_states,
-                dropout,
-                softmax_scale=None,
-                causal=causal,
-            )
         attn_output = attn_output.reshape(
             batch_size, query_length, self.hidden_size_per_partition
         ).contiguous()
+
         return attn_output
-
-    def _upad_input(
-        self, query_layer, key_layer, value_layer, attention_mask, query_length
-    ):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(
-                    batch_size * kv_seq_len,
-                    self.num_attention_heads_per_partition,
-                    head_dim,
-                ),
-                indices_k,
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask
-            )
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
 
 
 CORE_ATTENTION_CLASSES = {
@@ -422,9 +315,7 @@ class GLMSelfAttention(LLMAttention):
         self.projection_size = config.kv_channels * config.n_heads_
 
         # Per attention head and per-partition values.
-        self.hidden_size_per_attention_head = (
-            config.kv_channels * config.n_heads_ // config.n_heads_
-        )
+        self.hidden_size_per_attention_head = self.projection_size // config.n_heads_
         self.num_attention_heads_per_partition = config.n_heads_
         self.multi_query_attention = config.multi_query_attention
         self.qkv_hidden_size = 3 * self.projection_size
@@ -522,7 +413,10 @@ class GLMSelfAttention(LLMAttention):
 
         if past_key_value is not None:
             key_layer, value_layer = past_key_value.update(
-                key_layer, value_layer, self.layer_idx
+                key_layer,
+                value_layer,
+                self.layer_idx,
+                {"cache_position": cache_position},
             )
 
         if self.multi_query_attention:
@@ -560,7 +454,6 @@ class GLMSelfAttention(LLMAttention):
             key_layer,
             value_layer,
             attention_mask,
-            not input_args.inference_mode_,
         )
 
         output = self.dense(context_layer, input_args)
@@ -855,6 +748,9 @@ class GLMForCausalLM(LLMForCausalLM):
     ) -> torch.Tensor:
         return self.get_masks(input_tensor, past_key_values, attention_mask)
 
+    def cache_implementation(self) -> str:
+        return None
+
     def model_config(self) -> GLMConfig:
         return self.config_
 
@@ -873,7 +769,9 @@ class GLMForCausalLM(LLMForCausalLM):
             name_or_path_=llm_config._name_or_path,
             device_=device,
             dim_=llm_config.hidden_size,
+            head_dim_=llm_config.hidden_size // llm_config.num_attention_heads,
             n_heads_=llm_config.num_attention_heads,
+            n_kv_heads_=llm_config.multi_query_group_num,
             n_layers_=llm_config.num_layers,
             hidden_dropout_=llm_config.hidden_dropout,
             vocab_size_=llm_config.vocab_size,
@@ -886,7 +784,6 @@ class GLMForCausalLM(LLMForCausalLM):
             rmsnorm=llm_config.rmsnorm,
             layernorm_epsilon=llm_config.layernorm_epsilon,
             apply_residual_connection_post_layernorm=llm_config.apply_residual_connection_post_layernorm,
-            attention_dropout=llm_config.attention_dropout,
             fp32_residual_connection=llm_config.fp32_residual_connection,
             apply_query_key_layer_scaling=llm_config.apply_query_key_layer_scaling,
             kv_channels=llm_config.kv_channels,
