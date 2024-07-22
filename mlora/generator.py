@@ -425,16 +425,13 @@ def generate(
                 )
             )
 
-    if cache_implementation is None:
+    if use_cache and cache_implementation is None:
         cache_implementation = model.model_.cache_implementation()
-        if use_cache and cache_implementation is None:
+        if cache_implementation is None:
             logging.warn(
                 "Cache disabled by model, use cache_implementation to force enable."
             )
             use_cache = False
-
-    if use_cache is None and cache_implementation is not None:
-        use_cache = True
 
     packed_outputs: Dict[str, List] = {}
 

@@ -407,7 +407,7 @@ class GLMSelfAttention(LLMAttention):
 
         # apply relative positional encoding (rotary embedding)
         if self.rotary_pos_emb is not None:
-            rotary_pos_emb = self.rotary_pos_emb[None, : hidden_states.shape[1]]
+            rotary_pos_emb = self.rotary_pos_emb[None, cache_position]
             query_layer = apply_rotary_pos_emb(query_layer, rotary_pos_emb)
             key_layer = apply_rotary_pos_emb(key_layer, rotary_pos_emb)
 
@@ -747,9 +747,6 @@ class GLMForCausalLM(LLMForCausalLM):
         past_key_values: Optional[Cache],
     ) -> torch.Tensor:
         return self.get_masks(input_tensor, past_key_values, attention_mask)
-
-    def cache_implementation(self) -> str:
-        return None
 
     def model_config(self) -> GLMConfig:
         return self.config_
