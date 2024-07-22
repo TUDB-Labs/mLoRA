@@ -286,7 +286,7 @@ class LLMModel(torch.nn.Module):
         )
 
         # prepare mask
-        if input_args.batch_masks_ is not None and 0 in input_args.batch_masks_:
+        if input_args.batch_masks_ is not None and 1 in input_args.batch_masks_:
             # 2d mask is passed through the layers
             if isinstance(input_args.batch_masks_, torch.Tensor):
                 attention_mask = input_args.batch_masks_.to(
