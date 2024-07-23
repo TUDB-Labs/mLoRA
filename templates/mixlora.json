@@ -24,9 +24,9 @@
                 "k_proj": true,
                 "v_proj": true,
                 "o_proj": true,
-                "w1_proj": true,
-                "w2_proj": true,
-                "w3_proj": true
+                "gate_proj": true,
+                "down_proj": true,
+                "up_proj": true
             },
             "routing_strategy": "mixtral",
             "num_experts": 8,

@@ -227,9 +227,9 @@ class LlamaMLP(LLMFeedForward):
 
     def state_dict(self) -> Dict[str, nn.Module]:
         return {
-            "w1_proj": self.w1_,
-            "w2_proj": self.w2_,
-            "w3_proj": self.w3_,
+            "gate_proj": self.w1_,
+            "down_proj": self.w2_,
+            "up_proj": self.w3_,
         }
 
     def _batch_forward(

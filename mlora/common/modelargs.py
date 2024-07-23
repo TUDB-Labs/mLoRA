@@ -1,6 +1,6 @@
 import copy
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 import torch
 from transformers.activations import ACT2FN
@@ -124,9 +124,9 @@ class LoraConfig(AdapterConfig):
             "k_proj": False,
             "v_proj": False,
             "o_proj": False,
-            "w1_proj": False,
-            "w2_proj": False,
-            "w3_proj": False,
+            "gate_proj": False,
+            "down_proj": False,
+            "up_proj": False,
             # Phi names
             "dense": False,
             "fc1": False,
@@ -184,7 +184,7 @@ class MixConfig(LoraConfig):
     jitter_noise_: float = None
     router_loss_: bool = True
     num_experts_: int = None
-    act_fn_: str = None
+    act_fn_: Optional[str] = None
     # mixtral config
     top_k_: int = None
     # switch transformers config

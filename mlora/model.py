@@ -442,6 +442,10 @@ class LLMModel(torch.nn.Module):
     def init_adapter(
         self, config: AdapterConfig, weight: Optional[Dict[str, torch.Tensor]] = None
     ):
+        # Patch for MixLoRA
+        if isinstance(config, MixConfig) and config.act_fn_ is None:
+            config.act_fn_ = self.config_.hidden_act_
+
         self.adapter_configs_[config.adapter_name] = config
         # init output layer
         if config.task_name in task_dict and isinstance(

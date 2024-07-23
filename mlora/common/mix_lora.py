@@ -106,7 +106,7 @@ def _mixtral_slice_tensor(
     data: torch.Tensor,
     slice: torch.Tensor,
     dtype: torch.dtype,
-    last_value: torch.Tensor = None,
+    last_value: Optional[torch.Tensor] = None,
 ):
     if last_value is None:
         # for macOS debugging, please uncomment this line
@@ -142,9 +142,7 @@ class MixtralSparseMoe(torch.nn.Module):
             device=config.device,
             dtype=self.dtype_,
         )
-        self.act_ = ACT2FN[
-            args.hidden_act_ if config.act_fn_ is None else config.act_fn_
-        ]
+        self.act_ = ACT2FN[config.act_fn_]
         self.experts_: int = config.num_experts_
         self.topk_: int = config.top_k_
         self.jitter_noise_: float = config.jitter_noise_
@@ -338,9 +336,7 @@ class SwitchSparseMoe(torch.nn.Module):
             device=config.device,
             dtype=self.dtype_,
         )
-        self.act_ = ACT2FN[
-            args.hidden_act_ if config.act_fn_ is None else config.act_fn_
-        ]
+        self.act_ = ACT2FN[config.act_fn_]
         self.experts_: int = config.num_experts_
         self.dropout_ = (
             torch.nn.Dropout(config.ffn_dropout_)
