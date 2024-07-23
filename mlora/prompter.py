@@ -3,11 +3,24 @@ import logging
 import os.path as osp
 from typing import Dict, Optional, Union
 
-default_prompt_template = {
-    "description": "Default Prompt Template Provided by m-LoRA",
-    "prompt_input": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n",
-    "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n",
-    "response_split": "### Output:",
+prompt_templates = {
+    "mlora": {
+        "description": "Default Prompt Template Provided by m-LoRA",
+        "prompt_input": "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Output:\n",
+        "prompt_no_input": "### Instruction:\n{instruction}\n\n### Output:\n",
+        "response_split": "### Output:",
+    },
+    "alpaca": {
+        "description": "Template used by Alpaca-LoRA.",
+        "prompt_input": "Below is an instruction that describes a task, "
+        + "paired with an input that provides further context. "
+        + "Write a response that appropriately completes the request.\n\n"
+        + "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n",
+        "prompt_no_input": "Below is an instruction that describes a task. "
+        + "Write a response that appropriately completes the request.\n\n"
+        + "### Instruction:\n{instruction}\n\n### Response:\n",
+        "response_split": "### Response:",
+    },
 }
 
 
@@ -15,12 +28,13 @@ default_prompt_template = {
 class Prompter:
     def __init__(self, template: Optional[Union[Dict, str]] = None):
         if template is None:
-            self.template = default_prompt_template
+            self.template = prompt_templates["mlora"]
         elif isinstance(template, str):
-            if not osp.exists(template):
-                raise ValueError(f"Can't read {template}")
-            with open(template) as fp:
-                self.template = json.load(fp)
+            if osp.exists(template):
+                with open(template) as fp:
+                    self.template = json.load(fp)
+            else:
+                self.template = prompt_templates[template]
         else:
             self.template = template
 

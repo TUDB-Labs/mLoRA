@@ -121,13 +121,15 @@ You can conveniently utilize m-LoRA via `launch.py`. The following example demon
 
 ```bash
 # Generating configuration
-python launch.py gen --template lora --tasks ./data/dummy_data.json
+python launch.py gen --template lora --tasks ./tests/dummy_data.json
+
 # Running the training task
 python launch.py run --base_model TinyLlama/TinyLlama_v1.1
+
 # Try with gradio web ui
 python inference.py \
   --base_model TinyLlama/TinyLlama_v1.1 \
-  --template ./template/alpaca.json \
+  --template alpaca \
   --lora_weights ./casual_0
 ```
 
@@ -140,15 +142,21 @@ python launch.py help
 ## m-LoRA
 
 The `mlora.py` code is a starting point for finetuning on various datasets.
+
 Basic command for finetuning a baseline model on the [Alpaca Cleaned](https://github.com/gururise/AlpacaDataCleaned) dataset:
 ```bash
+# Generating configuration
+python launch.py gen \
+  --template lora \
+  --tasks yahma/alpaca-cleaned
+
 python mlora.py \
   --base_model meta-llama/Llama-2-7b-hf \
-  --config ./config/alpaca.json \
+  --config mlora.json \
   --bf16
 ```
 
-You can check the template finetune configuration in [template](./template/) folder.
+You can check the template finetune configuration in [templates](./templates/) folder.
 
 For further detailed usage information, please use `--help` option:
 ```bash

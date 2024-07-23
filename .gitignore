@@ -166,15 +166,8 @@ cython_debug/
 __pycache__/
 *.egg-info/
 *.egg
-
-data/*
-!data/AlpacaDataCleaned/
-template/*
-!data/data_demo.json
-!data/dummy_data.json
-!template/test_data_demo.json
-!template/template_demo.json
-data_train.json
+mlora.json
+mlora_train_*.json
 
 # macOS junk files
 .DS_Store

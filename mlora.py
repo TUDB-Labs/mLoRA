@@ -208,7 +208,7 @@ def init_adapter_config(
                         mlora.EvaluateConfig(
                             adapter_name=config_class.adapter_name,
                             task_name=task_name,
-                            batch_size=lora_config["test_batch_size"],
+                            batch_size=lora_config["evaluate_batch_size"],
                         )
                     )
             else:
@@ -216,7 +216,7 @@ def init_adapter_config(
                     mlora.EvaluateConfig(
                         adapter_name=config_class.adapter_name,
                         task_name=config_class.task_name,
-                        batch_size=lora_config["test_batch_size"],
+                        batch_size=lora_config["evaluate_batch_size"],
                     )
                 )
         else:

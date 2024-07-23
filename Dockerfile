@@ -45,7 +45,6 @@ RUN . ~/.bashrc \
     && cd /mLoRA \
     && pyenv virtualenv $PYTHON_VERSION mlora \
     && pyenv local mlora \
-    && pip install torch==2.3.1 \
     && pip install -r ./requirements.txt
 
 WORKDIR /mLoRA

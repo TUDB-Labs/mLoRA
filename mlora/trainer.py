@@ -1,17 +1,32 @@
+import gc
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import torch
 from transformers import get_scheduler
 
-from .common import AdapterConfig
+from .backends import get_backend
+from .common import AdapterConfig, LLMModelOutput
 from .dispatcher import Dispatcher, DispatcherConfig, TrainTask
+from .evaluator import EvaluateConfig, evaluate
 from .model import LLMModel
 from .tasks import BasicTask, CasualTask, MultiTask, task_dict
 from .tokenizer import Tokenizer
+
+
+class TaskContext(object):
+    def __enter__(self):
+        get_backend().empty_cache()
+        gc.collect()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        get_backend().empty_cache()
+        gc.collect()
 
 
 @dataclass
@@ -36,7 +51,7 @@ class TrainConfig(DispatcherConfig):
     warmup_ratio: Union[int, float] = 0
     lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
     accumulation_step_: int = None
-    accumulation_step_cnt_: int = 0
+    training_steps_: int = 0
     task_name: str = None
     task_: BasicTask = None
     group_by_length: bool = False
@@ -44,6 +59,10 @@ class TrainConfig(DispatcherConfig):
     casual_train_data: str = None
     casual_prompt_template: str = None
     casual_validation_size: int = None
+    # on-the-fly evaluation settings
+    evaluate_steps: int = None
+    evaluate_batch_size: int = None
+    evaluate_config_: EvaluateConfig = None
 
     def init_for(self, config: AdapterConfig):
         self.adapter_name = config.adapter_name
@@ -58,6 +77,18 @@ class TrainConfig(DispatcherConfig):
             self.task_ = MultiTask(self.task_name)
         else:
             self.task_ = task_dict[self.task_name]
+
+        if self.evaluate_batch_size is not None:
+            if not isinstance(self.task_, CasualTask):
+                self.evaluate_config_ = EvaluateConfig(
+                    adapter_name=self.adapter_name,
+                    task_name=self.task_name,
+                    batch_size=self.evaluate_batch_size,
+                )
+            else:
+                logging.warn(
+                    "Auto evaluation is not currently available for casual supervised fine-tuning tasks."
+                )
 
         return self
 
@@ -76,6 +107,8 @@ class TrainConfig(DispatcherConfig):
         self.casual_train_data = config.get("data", None)
         self.casual_prompt_template = config.get("prompt", None)
         self.casual_validation_size = config.get("val_set_size", None)
+        self.evaluate_steps = config.get("evaluate_steps", None)
+        self.evaluate_batch_size = config.get("evaluate_batch_size", None)
 
         return self
 
@@ -86,7 +119,6 @@ class TrainConfig(DispatcherConfig):
             "total_epoch_num": self.num_epochs,
             "max_train_batch_size": self.batch_size,
             "max_train_micro_batch_size": self.micro_batch_size,
-            "max_test_batch_size": -1,
             "group_by_length": self.group_by_length,
         }
 
@@ -135,7 +167,7 @@ class TrainConfig(DispatcherConfig):
                 f"error batch_size {self.batch_size} and micro batch size {self.micro_batch_size}"
             )
         self.accumulation_step_ = self.batch_size / self.micro_batch_size
-        self.accumulation_step_cnt_ = 0
+        self.training_steps_ = 0
         # preparing optimizer
         paramas_count = sum(t.numel() for t in train_params.values() if t.requires_grad)
         logging.info(f"{self.adapter_name} total trainable params: {paramas_count}")
@@ -168,8 +200,8 @@ class TrainConfig(DispatcherConfig):
             )
 
     def step(self):
-        self.accumulation_step_cnt_ += 1
-        if self.accumulation_step_cnt_ % self.accumulation_step_ == 0:
+        self.training_steps_ += 1
+        if self.training_steps_ % self.accumulation_step_ == 0:
             self.optimizer_.step()
             self.lr_scheduler_.step()
             self.optimizer_.zero_grad()
@@ -198,6 +230,31 @@ def save_adapter_weight(model: LLMModel, config: TrainConfig, path: str, dir_suf
         json.dump(lora_config_dict, f, indent=4)
 
 
+def _compute_loss(config_dict: Dict[str, TrainConfig], outputs: List[LLMModelOutput]):
+    total_loss = None
+    for output in outputs:
+        adapter_name = output.adapter_name
+        loss = output.loss / config_dict[adapter_name].accumulation_step_
+        logging.info(f"    adapter: {adapter_name} loss: {loss}")
+        if output.aux_loss:
+            aux_loss = output.aux_loss / config_dict[adapter_name].accumulation_step_
+            logging.info(f"    adapter: {adapter_name}  aux: {aux_loss}")
+            loss += aux_loss
+        if total_loss is None:
+            total_loss = loss
+        else:
+            total_loss += loss
+
+    return total_loss
+
+
+def _perform_evaluate(evaluate_configs: List[EvaluateConfig], **kwargs):
+    if len(evaluate_configs) > 0:
+        with TaskContext():
+            return evaluate(configs=evaluate_configs, **kwargs)
+    return []
+
+
 def train(
     model: LLMModel,
     tokenizer: Tokenizer,
@@ -221,7 +278,7 @@ def train(
         tokenizer, configs, max_concurrent_jobs, strategy, cutoff_len
     )
 
-    config_dict = {}
+    config_dict: Dict[str, TrainConfig] = {}
     for config in configs:
         config_dict[config.adapter_name] = config
 
@@ -234,40 +291,68 @@ def train(
 
     dispatcher.train_task_in_event_.register(task_in_callback)
 
-    step_cnt = 0
+    evaluate_results = []
+
     while not dispatcher.check_task_done():
         input_args = dispatcher.get_train_data()
 
-        step_cnt += 1
-
         outputs = model.forward(input_args)
 
-        total_loss = None
-        for output in outputs:
-            adapter_name = output.adapter_name
-            loss = output.loss / config_dict[adapter_name].accumulation_step_
-            logging.info(f"    adapter: {adapter_name} loss: {loss}")
-            if output.aux_loss:
-                aux_loss = (
-                    output.aux_loss / config_dict[adapter_name].accumulation_step_
-                )
-                logging.info(f"    adapter: {adapter_name}  aux: {aux_loss}")
-                loss += aux_loss
-            if total_loss is None:
-                total_loss = loss
-            else:
-                total_loss += loss
+        total_loss = _compute_loss(config_dict, outputs)
 
         total_loss.backward()
+
+        evaluate_configs = []
 
         for output in outputs:
             config = config_dict[output.adapter_name]
             config.step()
 
-            if save_step and config.accumulation_step_cnt_ % save_step == 0:
-                save_adapter_weight(model, config, save_dir, f"{step_cnt}")
+            if save_step is not None and config.training_steps_ % save_step == 0:
+                save_adapter_weight(
+                    model, config, save_dir, f"{config.training_steps_}"
+                )
+
+            if (
+                config.evaluate_steps is not None
+                and config.training_steps_ % config.evaluate_steps == 0
+            ):
+                evaluate_configs.append(config.evaluate_config_)
+
+        evaluate_results.extend(
+            _perform_evaluate(
+                evaluate_configs=evaluate_configs,
+                model=model,
+                tokenizer=tokenizer,
+                max_concurrent_jobs=max_concurrent_jobs,
+                max_seq_len=cutoff_len,
+            )
+        )
+
+    evaluate_configs = []
 
     for config in configs:
         config.finish()
         if save_dir:
             save_adapter_weight(model, config, save_dir)
+        if config.evaluate_config_ is not None:
+            evaluate_configs.append(config.evaluate_config_)
+
+    evaluate_results.extend(
+        _perform_evaluate(
+            evaluate_configs=evaluate_configs,
+            model=model,
+            tokenizer=tokenizer,
+            max_concurrent_jobs=max_concurrent_jobs,
+            max_seq_len=cutoff_len,
+        )
+    )
+
+    if len(evaluate_results) > 0:
+        if save_dir is not None:
+            save_file = f"{save_dir}{os.sep}mlora_train_{int(time.time())}.json"
+            with open(save_file, "w") as f:
+                json.dump(evaluate_results, f, indent=4)
+            logging.info(f"saving evaluation result to {save_file}")
+        else:
+            print(json.dumps(evaluate_results, indent=4))

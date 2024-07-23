@@ -27,6 +27,10 @@ class EvaluateConfig:
     batch_end_idx_: int = 0
 
     def prepare(self, tokenizer: Tokenizer, device: str):
+        self.reset_parameters()
+        assert (
+            self.task_name != "casual"
+        ), "Auto evaluation is not currently available for casual supervised fine-tuning tasks."
         self.task_ = task_dict[self.task_name]
         self.data_ = self.task_.loading_data(tokenizer, False)
         self.metric_ = self.task_.loading_metric()
@@ -41,6 +45,14 @@ class EvaluateConfig:
             )
         else:
             self.label_indices_ = None
+
+    def reset_parameters(self):
+        self.task_ = None
+        self.data_ = None
+        self.metric_ = None
+        self.rollback_start_idx_ = 0
+        self.batch_start_idx_ = 0
+        self.batch_end_idx_ = 0
 
 
 def _prepare_tasks(model, tokenizer, configs):
@@ -161,7 +173,7 @@ def _compute_metrcis(model, current_configs, sequence_lengths, batch_labels, out
         metric.add_batch(
             predictions=pooled_logits.detach().cpu(), references=labels.detach().cpu()
         )
-        logging.info(f"{config.adapter_name}, {config.task_name}")
+        logging.info(f"{config.adapter_name} evaluate data:")
         logging.info(f"    step: {config.batch_start_idx_}/{len(config.data_)}")
 
 
@@ -262,8 +274,7 @@ def evaluate(
                 for config in current_configs:
                     config.batch_start_idx_ = config.rollback_start_idx_
                     logging.info(
-                        f"{config.adapter_name}, {config.task_name}: "
-                        + f"rollback to {config.batch_start_idx_}/{len(config.data_)}"
+                        f"{config.adapter_name}: rollback to {config.batch_start_idx_}/{len(config.data_)}"
                     )
                 continue
             else:

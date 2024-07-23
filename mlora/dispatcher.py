@@ -74,7 +74,6 @@ class TrainTask:
         total_epoch_num: int,
         max_train_batch_size: int,
         max_train_micro_batch_size: int,
-        max_test_batch_size: int,
         train_cutoff_len: int = 256,
         group_by_length: bool = True,
     ):
@@ -84,7 +83,6 @@ class TrainTask:
         self.total_epoch_num_ = total_epoch_num
         self.max_train_batch_size_ = max_train_batch_size
         self.max_train_micro_batch_size_ = max_train_micro_batch_size
-        self.max_test_batch_size_ = max_test_batch_size
         self.train_cutoff_len_ = train_cutoff_len
         self.group_by_length_ = group_by_length
 
