@@ -252,6 +252,40 @@ class WinoGrande(QuestionAnswerTask):
         return ret
 
 
+class CommonSenseQA(QuestionAnswerTask):
+    def __init__(self) -> None:
+        super().__init__(["A", "B", "C", "D", "E"])
+
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset("tau/commonsense_qa")[
+            "train" if is_train else "validation"
+        ]
+        logging.info("Preparing data for CommonSenseQA")
+        ret: List[DataClass] = []
+        for idx, data_point in enumerate(data):
+            prompt = (
+                "Please choose the correct answer to the question: "
+                + data_point["question"]
+            )
+            choices = data_point["choices"]
+            for label, text in zip(choices["label"], choices["text"]):
+                prompt += f" ({label}) {text}"
+            prompt += "\nAnswer:"
+            if is_train:
+                prompt += " " + data_point["answerKey"]
+                labels = None
+            else:
+                labels = [self.labels2id_[data_point["answerKey"]]]
+            tokens = tokenizer.encode(data=prompt)
+            ret.append(DataClass(tokens_=tokens, labels_=labels))
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return ret
+
+
 def update_task_dict(task_dict):
     task_dict.update(
         {
@@ -263,5 +297,6 @@ def update_task_dict(task_dict):
             "siqa": SIQA(),
             "hellaswag": HellaSwag(),
             "winogrande": WinoGrande(),
+            "csqa": CommonSenseQA(),
         }
     )
