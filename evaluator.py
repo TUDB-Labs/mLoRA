@@ -1,5 +1,3 @@
-import json
-
 import fire
 import torch
 
@@ -45,9 +43,7 @@ def main(
         router_profile=router_profile,
     )
 
-    output = mlora.evaluate(model, tokenizer, [evaluate_paramas], save_file=save_file)
-
-    print(json.dumps(output, indent=4))
+    mlora.evaluate(model, tokenizer, [evaluate_paramas], save_file=save_file)
 
 
 if __name__ == "__main__":

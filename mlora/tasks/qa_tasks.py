@@ -286,6 +286,45 @@ class CommonSenseQA(QuestionAnswerTask):
         return ret
 
 
+class PubMedQA(QuestionAnswerTask):
+    def __init__(self) -> None:
+        super().__init__(["yes", "no", "maybe"])
+
+    def loading_data(
+        self, tokenizer: Tokenizer, is_train: bool = True
+    ) -> List[DataClass]:
+        data = hf_datasets.load_dataset(
+            "qiaojin/PubMedQA", "pqa_artificial" if is_train else "pqa_labeled"
+        )["train"]
+        logging.info("Preparing data for PubMedQA")
+        ret: List[DataClass] = []
+        for idx, data_point in enumerate(data):
+            prompt = (
+                "Instruction:\nPlease answer the following question with yes or no "
+                + "based on your medical knowledge and the following context.\n"
+                + f"Question:\n{data_point['question']}\nContext:\n"
+            )
+            context = data_point["context"]
+            for label, text in zip(context["labels"], context["contexts"]):
+                prompt += f"({label}) {text}\n"
+            answer = data_point["final_decision"]
+            assert answer in self.labels2id_
+            if is_train:
+                prompt += f"Long Answer:\n{data_point['long_answer']}\n"
+                prompt += "Answer:"
+                prompt += f" {answer}"
+                labels = None
+            else:
+                prompt += "Answer:"
+                labels = [self.labels2id_[answer]]
+            tokens = tokenizer.encode(data=prompt)
+            ret.append(DataClass(tokens_=tokens, labels_=labels))
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return ret
+
+
 def update_task_dict(task_dict):
     task_dict.update(
         {
@@ -298,5 +337,6 @@ def update_task_dict(task_dict):
             "hellaswag": HellaSwag(),
             "winogrande": WinoGrande(),
             "csqa": CommonSenseQA(),
+            "pubmedqa": PubMedQA(),
         }
     )
