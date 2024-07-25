@@ -1,4 +1,3 @@
-# Attention and Feed Forward
 from .attention import (
     eager_attention_forward,
     flash_attention_forward,
@@ -59,6 +58,7 @@ from .modelargs import (
     Tokens,
     lora_config_factory,
 )
+from .rope import ROPE_INIT_FUNCTIONS
 
 __all__ = [
     "prepare_4d_causal_attention_mask",
@@ -103,4 +103,5 @@ __all__ = [
     "LoraConfig",
     "MixConfig",
     "lora_config_factory",
+    "ROPE_INIT_FUNCTIONS",
 ]

@@ -20,20 +20,21 @@ class DataClass:
 
 @dataclass
 class LLMModelConfig:
-    name_or_path_: str = ""
-    device_: str = ""
-    dim_: int = 4096
-    head_dim_: int = 256
-    intermediate_: int = 11008
-    n_heads_: int = 32
-    n_kv_heads_: int = 32
-    n_layers_: int = 32
-    hidden_act_: str = "silu"
-    hidden_dropout_: float = 0.0
-    vocab_size_: int = -1
-    pad_token_id_: int = -1
-    rope_theta_: float = 10000.0
-    max_seq_len_: int = 2048
+    name_or_path_: str = None
+    device_: str = None
+    dim_: int = None
+    head_dim_: int = None
+    intermediate_: int = None
+    n_heads_: int = None
+    n_kv_heads_: int = None
+    n_layers_: int = None
+    hidden_act_: str = None
+    hidden_dropout_: float = None
+    vocab_size_: int = None
+    pad_token_id_: int = None
+    rope_theta_: float = None
+    partial_rotary_factor_: float = None
+    max_seq_len_: int = None
     # eager or flash_attn
     attn_implementation_: str = "eager"
     # data type

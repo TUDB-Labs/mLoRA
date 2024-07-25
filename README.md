@@ -33,16 +33,19 @@ You can use the `MLORA_BACKEND_TYPE` environment variable to force m-LoRA to use
 
 ## Supported Pre-trained Models
 
-|         | Model                                            | # Parameters       |
-|---------|--------------------------------------------------|--------------------|
-| &check; | [LLaMA 1/2/3](https://huggingface.co/meta-llama) | 7B/8B/13B/70B      |
-| &check; | [TinyLLaMA](https://huggingface.co/TinyLlama)    | 1.1B               |
-| &check; | [Qwen 1.5/2](https://qwenlm.github.io)           | 1.5B/4B/7B/57B/72B |
-| &check; | [Gemma](https://ai.google.dev/gemma/docs)        | 2B/7B              |
-| &check; | [Gemma 2](https://ai.google.dev/gemma/docs)      | 9B/27B             |
-| &check; | [Mistral](https://mistral.ai)                    | 7B                 |
-| &check; | [Phi 2](https://huggingface.co/microsoft/phi-2)  | 2.7B               |
-| &check; | [ChatGLM 1/2/3/4](https://huggingface.co/THUDM)  | 6B                 |
+|         | Model                                            | Model Size |
+|---------|--------------------------------------------------|------------|
+| &check; | [LLaMA 1/2](https://huggingface.co/meta-llama)   | 7B/13B/70B |
+| &check; | [LLaMA 3/3.1](https://huggingface.co/meta-llama) | 8B/70B     |
+| &check; | [Yi 1/1.5](https://huggingface.co/01-ai)         | 6B/9B/34B  |
+| &check; | [TinyLLaMA](https://huggingface.co/TinyLlama)    | 1.1B       |
+| &check; | [Qwen 1.5/2](https://huggingface.co/Qwen)        | 0.5B ~ 72B |
+| &check; | [Gemma](https://huggingface.co/google)           | 2B/7B      |
+| &check; | [Gemma 2](https://huggingface.co/google)         | 9B/27B     |
+| &check; | [Mistral](https://huggingface.co/mistralai)      | 7B         |
+| &check; | [Phi 1.5/2](https://huggingface.co/microsoft)    | 2.7B       |
+| &check; | [ChatGLM 1/2/3](https://huggingface.co/THUDM)    | 6B         |
+| &check; | [GLM 4](https://huggingface.co/THUDM)            | 6B         |
 
 
 ## Supported PEFT Methods

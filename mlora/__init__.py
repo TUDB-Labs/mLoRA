@@ -23,8 +23,8 @@ from .utils import is_package_available, setup_logging
 
 assert is_package_available("torch", "2.3.0"), "m-LoRA requires torch>=2.3.0"
 assert is_package_available(
-    "transformers", "4.42.0"
-), "m-LoRA requires transformers>=4.42.0"
+    "transformers", "4.43.0"
+), "m-LoRA requires transformers>=4.43.0"
 
 
 setup_logging()

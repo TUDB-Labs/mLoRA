@@ -71,6 +71,7 @@ class LLMAttention(metaclass=ABCMeta):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -106,6 +107,7 @@ class LLMDecoder(metaclass=ABCMeta):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -135,6 +137,12 @@ class LLMOutput(metaclass=ABCMeta):
 class LLMForCausalLM(metaclass=ABCMeta):
     @classmethod
     def embed_tokens(self, input_ids: torch.Tensor) -> torch.Tensor:
+        pass
+
+    @classmethod
+    def rotary_embed(
+        self, input_tensor: torch.Tensor, position_ids: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         pass
 
     @classmethod

@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -305,7 +305,6 @@ class GLMSelfAttention(LLMAttention):
         self,
         qkv_layer: torch.nn.Module,
         dense_layer: torch.nn.Module,
-        rotary_pos_emb: torch.Tensor,
         config: GLMConfig,
         layer_idx,
     ):
@@ -339,9 +338,6 @@ class GLMSelfAttention(LLMAttention):
         # Dense layer.
         self.dense = Linear(base_layer=dense_layer, device=config.device_)
 
-        # The rotary position embedding is going to be used for later self-attention mechanism.
-        self.rotary_pos_emb = rotary_pos_emb
-
     def state_dict(self) -> Dict[str, Linear]:
         return {"qkv_proj": self.query_key_value, "dense": self.dense}
 
@@ -349,6 +345,7 @@ class GLMSelfAttention(LLMAttention):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_pos_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -406,10 +403,8 @@ class GLMSelfAttention(LLMAttention):
         ]
 
         # apply relative positional encoding (rotary embedding)
-        if self.rotary_pos_emb is not None:
-            rotary_pos_emb = self.rotary_pos_emb[None, cache_position]
-            query_layer = apply_rotary_pos_emb(query_layer, rotary_pos_emb)
-            key_layer = apply_rotary_pos_emb(key_layer, rotary_pos_emb)
+        query_layer = apply_rotary_pos_emb(query_layer, rotary_pos_emb)
+        key_layer = apply_rotary_pos_emb(key_layer, rotary_pos_emb)
 
         if past_key_value is not None:
             key_layer, value_layer = past_key_value.update(
@@ -595,6 +590,7 @@ class GLMDecoderLayer(LLMDecoder):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_pos_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -604,6 +600,7 @@ class GLMDecoderLayer(LLMDecoder):
         attention_output = self.self_attention.forward(
             layernorm_output,
             input_args,
+            rotary_pos_emb,
             attention_mask,
             cache_position,
             past_key_value,
@@ -675,7 +672,7 @@ class GLMForCausalLM(LLMForCausalLM):
         # Embedding layer.
         self.embed_tokens_ = GLMEmbedding(config)
         # Rotary Position Embedding.
-        self.rotary_emb_layer: torch.Tensor = None
+        self.rotary_emb_layer: RotaryEmbedding = None
         # Encoder(Decoder) layers.
         self.layers_: List[GLMDecoderLayer] = []
         # Final layer norm.
@@ -700,6 +697,13 @@ class GLMForCausalLM(LLMForCausalLM):
 
     def embed_tokens(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens_(input_ids)
+
+    def rotary_embed(
+        self, input_tensor: torch.Tensor, position_ids: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self.rotary_emb_layer(max_seq_len=self.config_.max_seq_len_)[
+            None, position_ids[-1]
+        ]
 
     def decoder_stack(self) -> List[LLMDecoder]:
         return self.layers_
@@ -821,7 +825,6 @@ class GLMForCausalLM(LLMForCausalLM):
             self_attention = GLMSelfAttention(
                 qkv_layer=layer.self_attention.query_key_value,
                 dense_layer=layer.self_attention.dense,
-                rotary_pos_emb=model.rotary_emb_layer(config.max_seq_len_),
                 config=config,
                 layer_idx=idx,
             )

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -52,6 +52,7 @@ class MistralFlashAttention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -78,7 +79,7 @@ class MistralFlashAttention(LlamaAttention):
             kv_seq_len += cache_position[0]
 
         # apply rotary embedding
-        cos, sin = self.rotary_emb_(xv, cache_position.unsqueeze(0))
+        cos, sin = rotary_emb
         xq, xk = apply_rotary_pos_emb(xq, xk, cos, sin)
 
         if past_key_value is not None:

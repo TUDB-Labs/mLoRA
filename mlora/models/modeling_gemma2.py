@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -94,13 +94,6 @@ class Gemma2Attention(LLMAttention):
         self.k_proj_: Linear = Linear(k_proj, config.device_)
         self.v_proj_: Linear = Linear(v_proj, config.device_)
         self.o_proj_: Linear = Linear(o_proj, config.device_)
-        # cos and sin
-        self.rotary_emb_ = Gemma2RotaryEmbedding(
-            config.head_dim_,
-            max_position_embeddings=config.max_seq_len_,
-            base=config.rope_theta_,
-            device=config.device_,
-        )
         # config
         self.layer_idx_ = layer_idx
         self.config_ = config
@@ -131,6 +124,7 @@ class Gemma2Attention(LLMAttention):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -151,7 +145,7 @@ class Gemma2Attention(LLMAttention):
             bsz, q_len, self.n_kv_heads_, self.head_dim_
         ).transpose(1, 2)
 
-        cos, sin = self.rotary_emb_(value_states, cache_position.unsqueeze(0))
+        cos, sin = rotary_emb
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin
         )
@@ -211,6 +205,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -231,7 +226,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
             bsz, q_len, self.n_kv_heads_, self.head_dim_
         ).transpose(1, 2)
 
-        cos, sin = self.rotary_emb_(value_states, cache_position.unsqueeze(0))
+        cos, sin = rotary_emb
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin
         )
@@ -315,6 +310,7 @@ class Gemma2DecoderLayer(LLMDecoder):
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -341,6 +337,7 @@ class Gemma2DecoderLayer(LLMDecoder):
         hidden_states = self.self_attn_.forward(
             hidden_states,
             input_args,
+            rotary_emb,
             attention_mask,
             cache_position,
             past_key_value,
@@ -386,11 +383,22 @@ class Gemma2ForCausalLM(LLMForCausalLM):
         self.vocab_size_ = config.vocab_size_
         self.embed_tokens_: GemmaEmbedding = None
         self.norm_: GemmaRMSNorm = None
+        self.rotary_emb_ = Gemma2RotaryEmbedding(
+            config.head_dim_,
+            max_position_embeddings=config.max_seq_len_,
+            base=config.rope_theta_,
+            device=config.device_,
+        )
         self.lm_head_ = Gemma2OutputLayer(config)
         self.layers_: List[Gemma2DecoderLayer] = []
 
     def embed_tokens(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens_(input_ids)
+
+    def rotary_embed(
+        self, input_tensor: torch.Tensor, position_ids: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self.rotary_emb_(input_tensor, position_ids)
 
     def decoder_stack(self) -> List[LLMDecoder]:
         return self.layers_

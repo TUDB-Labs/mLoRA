@@ -245,10 +245,9 @@ class LLMModel(torch.nn.Module):
         # adapter configs
         self.adapter_configs_: Dict[str, LoraConfig] = {}
 
-    # compute the model: output probs
-    def forward(
+    def _prepare_inputs(
         self, input_args: LLMModelInput, past_key_values: Optional[Cache] = None
-    ) -> List[LLMModelOutput]:
+    ):
         assert input_args.batch_tokens_ is not None, "Model have no input."
         assert (
             input_args.gradient_checkpoint_ == "none" or past_key_values is None
@@ -306,15 +305,17 @@ class LLMModel(torch.nn.Module):
         else:
             causal_mask = attention_mask
 
-        labels = input_args.batch_labels_
+        return input_ids, inputs_embeds, attention_mask, causal_mask, cache_position
 
-        input_args.batch_labels_ = None
-        input_args.batch_tokens_ = None
-        input_args.batch_masks_ = None
-
-        # embed positions
-        hidden_states = inputs_embeds
-
+    def _call_decoder_stack(
+        self,
+        hidden_states: torch.Tensor,
+        input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+    ):
         # decoder layers
         num_adapters = len(input_args.batch_configs_)
         all_router_logits = [[] for _ in range(num_adapters)]
@@ -325,9 +326,10 @@ class LLMModel(torch.nn.Module):
                 decoder_layer.forward,
                 hidden_states,
                 input_args,
-                causal_mask,
+                rotary_emb,
+                attention_mask,
                 cache_position,
-                past_key_values,
+                past_key_value,
             )
             if len(router_logits) == 0:
                 continue
@@ -338,6 +340,38 @@ class LLMModel(torch.nn.Module):
                     all_router_logits[idx].append(router_logits[idx])
 
         hidden_states = self.model_.norm(hidden_states)
+
+        return hidden_states, all_router_logits
+
+    # compute the model: output probs
+    def forward(
+        self, input_args: LLMModelInput, past_key_values: Optional[Cache] = None
+    ) -> List[LLMModelOutput]:
+        input_ids, inputs_embeds, attention_mask, causal_mask, cache_position = (
+            self._prepare_inputs(input_args, past_key_values)
+        )
+
+        labels = input_args.batch_labels_
+
+        input_args.batch_labels_ = None
+        input_args.batch_tokens_ = None
+        input_args.batch_masks_ = None
+
+        # embed positions
+        hidden_states = inputs_embeds
+
+        rotary_emb = self.model_.rotary_embed(
+            hidden_states, cache_position.unsqueeze(0)
+        )
+
+        hidden_states, all_router_logits = self._call_decoder_stack(
+            hidden_states,
+            input_args,
+            rotary_emb,
+            causal_mask,
+            cache_position,
+            past_key_values,
+        )
 
         # calculate loss
         output = self.output_(hidden_states, input_args)
