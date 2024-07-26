@@ -1,4 +1,3 @@
-import gc
 import json
 import logging
 import os
@@ -9,24 +8,14 @@ from typing import Dict, List, Optional, Union
 import torch
 from transformers import get_scheduler
 
-from .backends import get_backend
-from .common import AdapterConfig, LLMModelOutput
+from .backends import no_cache
+from .common import LLMModelOutput, Prompt
 from .dispatcher import Dispatcher, DispatcherConfig, TrainTask
 from .evaluator import EvaluateConfig, evaluate
 from .model import LLMModel
+from .prompter import Prompter
 from .tasks import BasicTask, CasualTask, MultiTask, task_dict
 from .tokenizer import Tokenizer
-
-
-class TaskContext(object):
-    def __enter__(self):
-        get_backend().empty_cache()
-        gc.collect()
-        return self
-
-    def __exit__(self, type, value, traceback):
-        get_backend().empty_cache()
-        gc.collect()
 
 
 @dataclass
@@ -52,70 +41,65 @@ class TrainConfig(DispatcherConfig):
     lr_scheduler_: torch.optim.lr_scheduler.LRScheduler = None
     accumulation_step_: int = None
     training_steps_: int = 0
-    task_name: str = None
+    task_name: str = "casual"
     task_: BasicTask = None
     group_by_length: bool = False
-    # casual task settings
-    casual_train_data: str = None
-    casual_prompt_template: str = None
-    casual_validation_size: int = None
+    # task settings
+    data_path: str = None
+    prompt_template: str = None
     # on-the-fly evaluation settings
     evaluate_steps: int = None
-    evaluate_batch_size: int = None
-    evaluate_config_: EvaluateConfig = None
+    evaluate_configs_: List[EvaluateConfig] = None
 
-    def init_for(self, config: AdapterConfig):
-        self.adapter_name = config.adapter_name
-        self.task_name = config.task_name
-        if self.task_name == "casual":
-            self.task_ = CasualTask(
-                data_path=self.casual_train_data,
-                prompt_template=self.casual_prompt_template,
-                validation_size=self.casual_validation_size,
-            )
-        elif ";" in self.task_name:
-            self.task_ = MultiTask(self.task_name)
-        else:
-            self.task_ = task_dict[self.task_name]
+    @staticmethod
+    def from_config(config: Dict[str, any]):
+        batch_size = config["batch_size"]
+        evaluate_steps = config.get("evaluate_steps", None)
+        return TrainConfig(
+            adapter_name=config["name"],
+            task_name=config.get("task_name", "casual"),
+            num_epochs=config["num_epochs"],
+            batch_size=batch_size,
+            micro_batch_size=config.get("micro_batch_size", batch_size),
+            optimizer_type=config.get("optim", "adamw"),
+            learning_rate=config["lr"],
+            loraplus_lr_ratio=config.get("loraplus_lr_ratio", 1.0),
+            momentum=config.get("momentum", 0),
+            weight_decay=config.get("weight_decay", 0.01),
+            scheduler_type=config.get("scheduler_type", "constant"),
+            warmup_ratio=config.get("warmup_ratio", 0),
+            group_by_length=config.get("group_by_length", False),
+            data_path=config.get("data", None),
+            prompt_template=config.get("prompt", None),
+            evaluate_steps=config.get("evaluate_steps", None),
+            evaluate_configs_=(
+                EvaluateConfig.from_config(config) if evaluate_steps else None
+            ),
+        )
 
-        if self.evaluate_batch_size is not None:
-            if not isinstance(self.task_, CasualTask):
-                self.evaluate_config_ = EvaluateConfig(
-                    adapter_name=self.adapter_name,
-                    task_name=self.task_name,
-                    batch_size=self.evaluate_batch_size,
+    def _dataload_fn(self, tokenizer: Tokenizer, **tokenizer_kwargs):
+        prompter = None
+        data = self.task_.loading_data(True, self.data_path)
+        for idx, data_point in enumerate(data):
+            if isinstance(data_point.inputs, Prompt):
+                if prompter is None:
+                    prompter = Prompter(self.prompt_template)
+                data_point.inputs = prompter.generate_prompt(
+                    instruction=data_point.inputs.instruction,
+                    input=data_point.inputs.input,
+                    label=data_point.inputs.label,
                 )
-            else:
-                logging.warn(
-                    "Auto evaluation is not currently available for casual supervised fine-tuning tasks."
-                )
 
-        return self
+            data_point.tokens = tokenizer.encode(data_point.inputs, **tokenizer_kwargs)
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
 
-    def from_config(self, config: Dict[str, any]):
-        self.num_epochs = config["num_epochs"]
-        self.batch_size = config["batch_size"]
-        self.micro_batch_size = config.get("micro_batch_size", self.batch_size)
-        self.optimizer_type = config.get("optim", "adamw")
-        self.learning_rate = config["lr"]
-        self.loraplus_lr_ratio = config.get("loraplus_lr_ratio", 1.0)
-        self.momentum = config.get("momentum", 0)
-        self.weight_decay = config.get("weight_decay", 0.01)
-        self.scheduler_type = config.get("scheduler_type", "constant")
-        self.warmup_ratio = config.get("warmup_ratio", 0)
-        self.group_by_length = config.get("group_by_length", False)
-        self.casual_train_data = config.get("data", None)
-        self.casual_prompt_template = config.get("prompt", None)
-        self.casual_validation_size = config.get("val_set_size", None)
-        self.evaluate_steps = config.get("evaluate_steps", None)
-        self.evaluate_batch_size = config.get("evaluate_batch_size", None)
-
-        return self
+        return data
 
     def dispatcher_context(self) -> Dict[str, any]:
         return {
             "adapter_name": self.adapter_name,
-            "dataload_function": self.task_.loading_data,
+            "dataload_function": self._dataload_fn,
             "total_epoch_num": self.num_epochs,
             "max_train_batch_size": self.batch_size,
             "max_train_micro_batch_size": self.micro_batch_size,
@@ -158,6 +142,14 @@ class TrainConfig(DispatcherConfig):
         ]
 
     def prepare(self, train_params: Dict[str, torch.Tensor]):
+        # preparing for training task
+        if self.task_name == "casual":
+            self.task_ = CasualTask()
+        elif ";" in self.task_name:
+            self.task_ = MultiTask(self.task_name)
+        else:
+            self.task_ = task_dict[self.task_name]
+
         # preparing batch size and gradient accumulation
         if (
             self.batch_size < self.micro_batch_size
@@ -248,11 +240,23 @@ def _compute_loss(config_dict: Dict[str, TrainConfig], outputs: List[LLMModelOut
     return total_loss
 
 
-def _perform_evaluate(evaluate_configs: List[EvaluateConfig], **kwargs):
+def _perform_evaluate(
+    train_configs: Dict[str, TrainConfig],
+    evaluate_configs: List[EvaluateConfig],
+    **kwargs,
+):
     if len(evaluate_configs) > 0:
-        with TaskContext():
-            return evaluate(configs=evaluate_configs, **kwargs)
-    return []
+        with no_cache():
+            results = evaluate(configs=evaluate_configs, **kwargs)
+    else:
+        results = []
+
+    for dic in results:
+        adapter_name = dic["adapter_name"]
+        config = train_configs[adapter_name]
+        dic["training_steps"] = config.training_steps_
+
+    return results
 
 
 def train(
@@ -281,12 +285,12 @@ def train(
     config_dict: Dict[str, TrainConfig] = {}
     for config in configs:
         config_dict[config.adapter_name] = config
+        config.prepare(model.get_adapter_weight_dict(config.adapter_name))
 
     def task_in_callback(task: TrainTask):
         adapter_name = task.adapter_name_
         logging.info(f"Loading training task {adapter_name}")
         config = config_dict[adapter_name]
-        config.prepare(model.get_adapter_weight_dict(adapter_name))
         config.prepare_lr_scheduler(len(task.train_token_data_))
 
     dispatcher.train_task_in_event_.register(task_in_callback)
@@ -317,10 +321,11 @@ def train(
                 config.evaluate_steps is not None
                 and config.training_steps_ % config.evaluate_steps == 0
             ):
-                evaluate_configs.append(config.evaluate_config_)
+                evaluate_configs.extend(config.evaluate_configs_)
 
         evaluate_results.extend(
             _perform_evaluate(
+                train_configs=config_dict,
                 evaluate_configs=evaluate_configs,
                 model=model,
                 tokenizer=tokenizer,
@@ -335,11 +340,12 @@ def train(
         config.finish()
         if save_dir:
             save_adapter_weight(model, config, save_dir)
-        if config.evaluate_config_ is not None:
-            evaluate_configs.append(config.evaluate_config_)
+        if config.evaluate_steps is not None:
+            evaluate_configs.extend(config.evaluate_configs_)
 
     evaluate_results.extend(
         _perform_evaluate(
+            train_configs=config_dict,
             evaluate_configs=evaluate_configs,
             model=model,
             tokenizer=tokenizer,

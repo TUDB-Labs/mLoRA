@@ -13,7 +13,7 @@ from transformers.models.phi.modeling_phi import (
 )
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import _backend, get_backend
+from mlora.backends import backend
 from mlora.common import (
     Cache,
     FeedForward,
@@ -253,7 +253,7 @@ class PhiFlashAttention2(PhiAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if _backend.is_bf16_supported():
+            if backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -506,7 +506,7 @@ class PhiForCausalLM(LLMForCausalLM):
         llm_model: modeling_phi.PhiForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().default_device_name(),
+        device: str = backend.default_device_name(),
     ):
         assert not use_sliding_window, "Phi model does not support SWA."
         llm_config: modeling_phi.PhiConfig = llm_model.config

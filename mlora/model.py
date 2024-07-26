@@ -8,7 +8,7 @@ import torch
 from huggingface_hub import snapshot_download
 from transformers import AutoModelForCausalLM
 
-from mlora.backends import get_backend
+from mlora.backends import backend
 from mlora.common import (
     CHECKPOINT_CLASSES,
     AdapterConfig,
@@ -426,7 +426,7 @@ class LLMModel(torch.nn.Module):
             logging.info("Loading model with half precision.")
 
         # BFloat16 is only supported after Ampere GPUs
-        if not get_backend().is_bf16_supported():
+        if not backend.is_bf16_supported():
             if load_dtype == torch.bfloat16:
                 logging.warning("bf16 is not available. deprecated to fp16.")
                 load_dtype = torch.float16

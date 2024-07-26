@@ -263,7 +263,7 @@ def do_evaluate(
     model_dtype: str,
     adapter_names: List[str],
     batch_size: int = 2,
-    device: str = mlora.get_backend().default_device_name(),
+    device: str = mlora.backend.default_device_name(),
     output: str = "mmlu_scores.csv",
 ):
     tokenizer = mlora.Tokenizer(model_name)
@@ -301,9 +301,9 @@ def do_evaluate(
 
 
 def main(config: str):
-    mlora.get_backend().manual_seed(66)
+    mlora.backend.manual_seed(66)
     mlora.setup_logging("INFO")
-    if not mlora.get_backend().check_available():
+    if not mlora.backend.check_available():
         exit(-1)
     with open(config, "r", encoding="utf8") as fp:
         mmlu_config = json.load(fp)

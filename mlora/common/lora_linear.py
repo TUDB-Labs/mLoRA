@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers.utils import is_bitsandbytes_available
 
-from mlora.backends import _backend
+from mlora.backends import backend
 
 from .modelargs import LLMModelInput, LoraConfig
 
@@ -166,7 +166,7 @@ class LoraFunction(torch.autograd.Function):
         if ctx.needs_input_grad[0]:
             grad_result = grad_output
         if ctx.needs_input_grad[1]:
-            grad_data = _backend.init_tensor(data)
+            grad_data = backend.init_tensor(data)
 
         # the lora module is fp32 precision
         grad_output = grad_output.to(torch.float32)
@@ -187,7 +187,7 @@ class LoraFunction(torch.autograd.Function):
             if lora_a is None and lora_b is None:
                 grad_loras += (None, None)
                 if grad_data is not None:
-                    _backend.index_fill(grad_data, 0, lora_range[start_idx:end_idx], 0)
+                    backend.index_fill(grad_data, 0, lora_range[start_idx:end_idx], 0)
                 continue
 
             # lora_data shape is batch_size * seq_len * in_dim
@@ -208,7 +208,7 @@ class LoraFunction(torch.autograd.Function):
             # grad_data shape is batch_size * seq_len * in_dim
             if grad_data is not None:
                 grad_x = bstage @ lora_a
-                _backend.index_copy(grad_data, 0, lora_range[start_idx:end_idx], grad_x)
+                backend.index_copy(grad_data, 0, lora_range[start_idx:end_idx], grad_x)
 
         return (
             grad_result,
@@ -365,7 +365,7 @@ class Linear(nn.Module):
         lora_delta: torch.Tensor,
         input_args: LLMModelInput,
     ):
-        next_states = _backend.init_tensor(residual)
+        next_states = backend.init_tensor(residual)
         lora_range = get_range_tensor(
             next_states.device, batch_size=next_states.shape[0]
         )
@@ -385,9 +385,7 @@ class Linear(nn.Module):
             else:
                 lora_data = residual[start_idx:end_idx] + lora_delta[start_idx:end_idx]
 
-            _backend.index_copy(
-                next_states, 0, lora_range[start_idx:end_idx], lora_data
-            )
+            backend.index_copy(next_states, 0, lora_range[start_idx:end_idx], lora_data)
 
         return next_states
 
@@ -458,7 +456,7 @@ class Linear(nn.Module):
         if len(self.loras_) == 0:
             return residual
 
-        next_states = _backend.init_tensor(residual)
+        next_states = backend.init_tensor(residual)
         lora_range = get_range_tensor(hidden_states.device, hidden_states.shape[0])
 
         for lora_config in input_args.batch_configs_:
@@ -472,7 +470,7 @@ class Linear(nn.Module):
             lora_data = self.loras_[adapter_name].forward(
                 residual[start_idx:end_idx], hidden_states[start_idx:end_idx]
             )
-            _backend.index_copy(next_states, lora_range[start_idx:end_idx], lora_data)
+            backend.index_copy(next_states, lora_range[start_idx:end_idx], lora_data)
 
         return next_states
 

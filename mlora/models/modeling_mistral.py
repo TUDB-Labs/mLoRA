@@ -7,7 +7,7 @@ from transformers.models.mistral import modeling_mistral
 from transformers.models.qwen2 import modeling_qwen2
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import _backend, get_backend
+from mlora.backends import backend
 from mlora.common import Cache, FeedForward, LLMModelInput, flash_attention_forward
 from mlora.models.modeling_llama import (
     LlamaAttention,
@@ -123,7 +123,7 @@ class MistralFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if _backend.is_bf16_supported():
+            if backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -180,7 +180,7 @@ class MistralForCausalLM(LlamaForCausalLM):
         llm_model: modeling_mistral.MistralForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().default_device_name(),
+        device: str = backend.default_device_name(),
     ):
         llm_config: modeling_mistral.MistralConfig = llm_model.config
         llm_args = MistralConfig(

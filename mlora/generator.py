@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from mlora.backends import get_backend
+from mlora.backends import backend
 from mlora.common import LLMBatchConfig, LLMModelInput, Tokens, cache_factory
 from mlora.model import LLMModel
 from mlora.prompter import Prompter
@@ -294,7 +294,7 @@ def _batch_generate(
     max_tokens_len: int,
     min_tokens_len: int,
 ):
-    get_backend().empty_cache()
+    backend.empty_cache()
     device = torch.device(model.device_)
     batch_size = len(input_tokens)
     if max_gen_len is None:

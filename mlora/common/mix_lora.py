@@ -130,16 +130,16 @@ def _mixtral_compatible_forward(
 
 
 class MixtralSparseMoe(torch.nn.Module):
-    def __init__(self, args: LLMModelConfig, config: MixConfig) -> None:
+    def __init__(self, llm_config: LLMModelConfig, config: MixConfig) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
         self.dtype_: torch.dtype = torch.float32
         self.gate_ = torch.nn.Linear(
-            args.dim_,
+            llm_config.dim_,
             config.num_experts_,
             bias=False,
-            device=config.device,
+            device=llm_config.device_,
             dtype=self.dtype_,
         )
         self.act_ = ACT2FN[config.act_fn_]
@@ -324,16 +324,16 @@ class SwitchRouterLoss(torch.nn.Module):
 
 
 class SwitchSparseMoe(torch.nn.Module):
-    def __init__(self, args: LLMModelConfig, config: MixConfig) -> None:
+    def __init__(self, llm_config: LLMModelConfig, config: MixConfig) -> None:
         super().__init__()
 
         self.adapter_name_: str = config.adapter_name
         self.dtype_: torch.dtype = torch.float32
         self.gate_ = torch.nn.Linear(
-            args.dim_,
+            llm_config.dim_,
             config.num_experts_,
             bias=False,
-            device=config.device,
+            device=llm_config.device_,
             dtype=self.dtype_,
         )
         self.act_ = ACT2FN[config.act_fn_]

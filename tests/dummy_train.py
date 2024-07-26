@@ -14,7 +14,7 @@ def main(
 
     model: mlora.LLMModel = mlora.LLMModel.from_pretrained(
         base_model,
-        device=mlora.get_backend().default_device_name(),
+        device=mlora.backend.default_device_name(),
         load_dtype=torch.bfloat16,
     )
     tokenizer = mlora.Tokenizer(base_model)
@@ -32,22 +32,19 @@ def main(
         },
     )
 
-    model.init_adapter(lora_config)
-
     train_config = mlora.TrainConfig(
+        adapter_name=adapter_name,
+        data_path=train_data,
         num_epochs=10,
         batch_size=16,
         micro_batch_size=8,
         learning_rate=1e-4,
-        casual_train_data=train_data,
-    ).init_for(lora_config)
+    )
 
-    mlora.train(model=model, tokenizer=tokenizer, configs=[train_config])
-
-    lora_config, lora_weight = model.unload_adapter(adapter_name)
-
-    model.init_adapter(lora_config, lora_weight)
-    model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
+    with mlora.backends.no_cache():
+        model.init_adapter(lora_config)
+        mlora.train(model=model, tokenizer=tokenizer, configs=[train_config])
+        lora_config, lora_weight = model.unload_adapter(adapter_name)
 
     generate_configs = [
         mlora.GenerateConfig(
@@ -62,18 +59,21 @@ def main(
         ),
     ]
 
-    outputs = mlora.generate(
-        model=model,
-        tokenizer=tokenizer,
-        configs=generate_configs,
-        max_gen_len=128,
-    )
+    with mlora.backends.no_cache():
+        model.init_adapter(lora_config, lora_weight)
+        model.init_adapter(mlora.AdapterConfig(adapter_name="default"))
+        outputs = mlora.generate(
+            model=model,
+            tokenizer=tokenizer,
+            configs=generate_configs,
+            max_gen_len=128,
+        )
 
     print(f"\n{'='*10}\n")
-    print(f"PROMPT: {test_prompt}")
+    print(f"PROMPT: {test_prompt}\n")
     for adapter_name, output in outputs.items():
         print(f"{adapter_name} OUTPUT:")
-        print(output[0])
+        print(f"{output[0]}\n")
     print(f"\n{'='*10}\n")
 
 

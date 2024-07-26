@@ -1,4 +1,4 @@
-from .backends import get_backend
+from .backends import backend
 from .common import (
     AdapterConfig,
     Cache,
@@ -26,7 +26,6 @@ assert is_package_available(
     "transformers", "4.43.0"
 ), "m-LoRA requires transformers>=4.43.0"
 
-
 setup_logging()
 
 __all__ = [
@@ -53,5 +52,5 @@ __all__ = [
     "Prompter",
     "Tokenizer",
     "setup_logging",
-    "get_backend",
+    "backend",
 ]

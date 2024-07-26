@@ -7,7 +7,7 @@ from transformers.models.gemma2 import modeling_gemma2
 from transformers.models.gemma2.modeling_gemma2 import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import _backend, get_backend
+from mlora.backends import backend
 from mlora.common import (
     Cache,
     FeedForward,
@@ -248,7 +248,7 @@ class Gemma2FlashAttention2(Gemma2Attention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
-            if _backend.is_bf16_supported():
+            if backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -435,7 +435,7 @@ class Gemma2ForCausalLM(LLMForCausalLM):
         llm_model: modeling_gemma2.Gemma2PreTrainedModel,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().default_device_name(),
+        device: str = backend.default_device_name(),
     ):
         llm_config: modeling_gemma2.Gemma2Config = llm_model.config
         model_config = Gemma2Config(

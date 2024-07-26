@@ -148,81 +148,36 @@ def init_adapter_config(
         logging.info(f"Setting cutoff_len to {llm_model.max_seq_len_} automatically.")
 
     for lora_config in config["lora"]:
-        lora_weight = None
-        config_class = mlora.lora_config_factory(lora_config)
-        config_class.adapter_name = lora_config["name"]
-        config_class.task_name = lora_config.get("task_name", "casual")
-        config_class.device = args.device
-
-        adapter_file_path = (
-            args.dir + os.sep + config_class.adapter_name + os.sep + "adapter_model.bin"
-        )
-        if args.load_adapter:
-            adapter_config_path = (
-                args.dir
-                + os.sep
-                + config_class.adapter_name
-                + os.sep
-                + "adapter_config.json"
-            )
-            logging.info(f"Load adapter: {adapter_file_path}")
-            with open(adapter_config_path, "r", encoding="utf8") as fp:
-                adapter_config = json.load(fp)
-                base_model_name_or_path = adapter_config.get(
-                    "base_model_name_or_path", ""
-                )
-                if (
-                    base_model_name_or_path != ""
-                    and base_model_name_or_path != llm_model.name_or_path_
-                ):
-                    raise ValueError(
-                        "loading adapter with unmatched base model."
-                        + f" current is {llm_model.name_or_path_}, provided {base_model_name_or_path}"
-                    )
-            lora_weight = torch.load(adapter_file_path, map_location=args.device)
-        elif os.path.isfile(adapter_file_path):
+        adapter_name = lora_config["name"]
+        adapter_path = f"{args.dir}{os.sep}{adapter_name}"
+        if not args.load_adapter and os.path.exists(adapter_path):
             if args.overwrite:
                 logging.warning(
-                    f"Overwriting existed adapter model file: {adapter_file_path}"
+                    f"Overwriting existed adapter model file: {adapter_path}"
                 )
             elif not query_yes_no(
-                f"Existed adapter model file detected: {adapter_file_path}\n"
-                + "Overwrite?"
+                f"Existed adapter model file detected: {adapter_path}\n" + "Overwrite?"
             ):
                 logging.info("User canceled training due to file conflict.")
                 exit(0)
 
-        if args.verbose:
-            logging.info(config_class.__dict__)
+        if args.load_adapter:
+            llm_model.load_adapter(adapter_path, adapter_name)
+        else:
+            llm_model.init_adapter(mlora.lora_config_factory(lora_config))
 
-        llm_model.init_adapter(config_class, lora_weight)
         if args.inference:
-            config_class = mlora.GenerateConfig(adapter_name=config_class.adapter_name)
+            config_class = mlora.GenerateConfig(adapter_name=adapter_name)
             if not args.disable_prompter:
                 config_class.prompt_template = lora_config.get("prompt", None)
             config_list.append(config_class)
         elif args.evaluate:
-            if ";" in config_class.task_name:
-                for task_name in config_class.task_name.split(";"):
-                    config_list.append(
-                        mlora.EvaluateConfig(
-                            adapter_name=config_class.adapter_name,
-                            task_name=task_name,
-                            batch_size=lora_config["evaluate_batch_size"],
-                        )
-                    )
-            else:
-                config_list.append(
-                    mlora.EvaluateConfig(
-                        adapter_name=config_class.adapter_name,
-                        task_name=config_class.task_name,
-                        batch_size=lora_config["evaluate_batch_size"],
-                    )
-                )
+            config_list.extend(mlora.EvaluateConfig.from_config(lora_config))
         else:
-            config_list.append(
-                mlora.TrainConfig().from_config(lora_config).init_for(config_class)
-            )
+            config_list.append(mlora.TrainConfig.from_config(lora_config))
+
+        if args.verbose:
+            logging.info(config_list[-1].__dict__)
 
     return config_list
 
@@ -277,7 +232,7 @@ if __name__ == "__main__":
 
     mlora.setup_logging("INFO", args.log_file)
 
-    mlora_backend = mlora.get_backend()
+    mlora_backend = mlora.backend
 
     if not mlora_backend.check_available():
         exit(-1)
@@ -293,7 +248,7 @@ if __name__ == "__main__":
             args.attn_impl = "eager"
 
     if args.device is None:
-        args.device = mlora.get_backend().default_device_name()
+        args.device = mlora.backend.default_device_name()
 
     mlora_backend.use_deterministic_algorithms(args.deterministic)
     mlora_backend.allow_tf32(args.tf32)

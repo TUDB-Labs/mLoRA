@@ -46,7 +46,7 @@ from .model import (
 # Model Arguments
 from .modelargs import (
     AdapterConfig,
-    DataClass,
+    InputData,
     Labels,
     LLMBatchConfig,
     LLMModelConfig,
@@ -55,6 +55,7 @@ from .modelargs import (
     LoraConfig,
     Masks,
     MixConfig,
+    Prompt,
     Tokens,
     lora_config_factory,
 )
@@ -94,7 +95,8 @@ __all__ = [
     "Tokens",
     "Labels",
     "Masks",
-    "DataClass",
+    "Prompt",
+    "InputData",
     "LLMModelConfig",
     "LLMModelOutput",
     "LLMBatchConfig",

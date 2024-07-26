@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.nn import LayerNorm
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import get_backend
+from mlora.backends import backend
 from mlora.common import (
     Cache,
     FeedForward,
@@ -760,7 +760,7 @@ class GLMForCausalLM(LLMForCausalLM):
         llm_model,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().default_device_name(),
+        device: str = backend.default_device_name(),
     ):
         assert not use_sliding_window, "ChatGLM model does not support SWA."
         # Get the config from LLM model and input args.

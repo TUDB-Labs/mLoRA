@@ -6,7 +6,7 @@ from typing import Dict, List
 
 import torch
 
-from .common import DataClass, LLMBatchConfig, LLMModelInput, MixConfig
+from .common import InputData, LLMBatchConfig, LLMModelInput, MixConfig, Prompt
 from .model import LLMModel
 from .tasks import BasicMetric, BasicTask, CommonSenseTask, task_dict
 from .tokenizer import Tokenizer
@@ -16,15 +16,48 @@ from .tokenizer import Tokenizer
 class EvaluateConfig:
     adapter_name: str = None
     task_name: str = None
+    data_path: str = None
     batch_size: int = 16
     router_profile: bool = False
     # Do not set these manually
     task_: BasicTask = None
-    data_: List[DataClass] = None
+    data_: List[InputData] = None
     metric_: BasicMetric = None
     rollback_start_idx_: int = 0
     batch_start_idx_: int = 0
     batch_end_idx_: int = 0
+
+    def _dataload_fn(self, tokenizer: Tokenizer, **tokenizer_kwargs):
+        data = self.task_.loading_data(False, self.data_path)
+        for idx, data_point in enumerate(data):
+            assert not isinstance(data_point.inputs, Prompt)
+
+            data_point.tokens = tokenizer.encode(data_point.inputs, **tokenizer_kwargs)
+            if idx % 10000 == 0:
+                logging.info(f"Encode text data: {idx}/{len(data)}")
+
+        return data
+
+    @staticmethod
+    def from_config(config: Dict[str, any]) -> List["EvaluateConfig"]:
+        adapter_name = config["name"]
+        data_path = config.get("data", None)
+        task_list = config["task_name"].split(";")
+        path_list = (
+            [None] * len(task_list) if data_path is None else data_path.split(";")
+        )
+        config_list = []
+        for task_name_, data_path_ in zip(task_list, path_list):
+            config_list.append(
+                EvaluateConfig(
+                    adapter_name=adapter_name,
+                    task_name=task_name_,
+                    data_path=data_path_,
+                    batch_size=config["evaluate_batch_size"],
+                )
+            )
+
+        return config_list
 
     def prepare(self, tokenizer: Tokenizer, device: str):
         self.reset_parameters()
@@ -32,7 +65,7 @@ class EvaluateConfig:
             self.task_name != "casual"
         ), "Auto evaluation is not currently available for casual supervised fine-tuning tasks."
         self.task_ = task_dict[self.task_name]
-        self.data_ = self.task_.loading_data(tokenizer, False)
+        self.data_ = self._dataload_fn(tokenizer)
         self.metric_ = self.task_.loading_metric()
         if isinstance(self.task_, CommonSenseTask):
             labels = self.task_.label_list()
@@ -87,8 +120,8 @@ def _dispatch_task_in(tokenizer, configs, concurrent_jobs, max_seq_len):
         for idx in range(config.batch_start_idx_, config.batch_end_idx_):
             if idx >= len(config.data_):
                 break
-            tokens = config.data_[idx].tokens_
-            labels = config.data_[idx].labels_
+            tokens = config.data_[idx].tokens
+            labels = config.data_[idx].labels
             if len(tokens) > max_seq_len:
                 tokens = tokens[:max_seq_len]
             max_tokens_len = max(len(tokens), max_tokens_len)

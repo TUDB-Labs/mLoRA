@@ -22,7 +22,7 @@ def main(
     flash_attn: bool = False,
     max_seq_len: int = None,
     stream: bool = False,
-    device: str = mlora.get_backend().default_device_name(),
+    device: str = mlora.backend.default_device_name(),
 ):
 
     model = mlora.LLMModel.from_pretrained(

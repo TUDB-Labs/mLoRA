@@ -38,7 +38,7 @@ then enter the following code:
 ```python
 import mlora
 mlora.setup_logging("INFO")
-mlora.get_backend().check_available()
+mlora.backend.check_available()
 ```
 
 Expected output:
@@ -88,7 +88,7 @@ then enter the following code:
 ```python
 import mlora
 mlora.setup_logging("INFO")
-mlora.get_backend().check_available()
+mlora.backend.check_available()
 ```
 
 Expected output:
@@ -138,7 +138,7 @@ then enter the following code:
 ```python
 import mlora
 mlora.setup_logging("INFO")
-mlora.get_backend().check_available()
+mlora.backend.check_available()
 ```
 
 Expected output:
@@ -183,7 +183,7 @@ then enter the following code:
 ```python
 import mlora
 mlora.setup_logging("INFO")
-mlora.get_backend().check_available()
+mlora.backend.check_available()
 ```
 
 Expected output:

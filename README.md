@@ -108,6 +108,16 @@ It's crucial to note that regardless of the settings, **LoRA weights are always 
 
 For users with NVIDIA Ampere or newer GPU architectures, the `--tf32` option can be utilized to enable full-precision calculation acceleration.
 
+## Offline Configuration
+
+m-LoRA relies on **HuggingFace Hub** to download necessary models, datasets, etc. If you cannot access the Internet or need to deploy m-LoRA in an offline environment, please refer to the following guide.
+
+1. Use `git-lfs` manually downloads models and datasets from [HuggingFace Hub](https://huggingface.co).
+2. Set `--data_path` to the local path to datasets when executing `launch.py gen`.
+3. Clone the [evaluate](https://github.com/huggingface/evaluate) code repository locally.
+4. Set environment variable `MLORA_METRIC_PATH` to the local path to evaluate code repository.
+5. Set `--base_model` to the local path to models when executing `launch.py run`.
+
 ## Known issues
 
  + Quantization with Qwen2 have no effect (same with transformers).

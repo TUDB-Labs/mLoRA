@@ -9,7 +9,7 @@ from transformers.models.llama import modeling_llama
 from transformers.models.llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
 from transformers.utils import is_flash_attn_2_available
 
-from mlora.backends import _backend, get_backend
+from mlora.backends import backend
 from mlora.common import (
     ROPE_INIT_FUNCTIONS,
     Cache,
@@ -267,7 +267,7 @@ class LlamaFlashAttention(LlamaAttention):
 
         input_dtype = xq.dtype
         if input_dtype == torch.float32:
-            if _backend.is_bf16_supported():
+            if backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -516,7 +516,7 @@ class LlamaForCausalLM(LLMForCausalLM):
         llm_model: modeling_llama.LlamaForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().default_device_name(),
+        device: str = backend.default_device_name(),
     ):
         assert not use_sliding_window, "Llama model does not support SWA."
         llm_config: modeling_llama.LlamaConfig = llm_model.config

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers.models.gemma import modeling_gemma
 
-from mlora.backends import get_backend
+from mlora.backends import backend
 from mlora.common import FeedForward
 from mlora.models.modeling_llama import (
     LLAMA_ATTENTION_CLASSES as GEMMA_ATTENTION_CLASSES,
@@ -66,7 +66,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
         llm_model: modeling_gemma.GemmaForCausalLM,
         attn_impl: str = "eager",
         use_sliding_window: bool = False,
-        device: str = get_backend().default_device_name(),
+        device: str = backend.default_device_name(),
     ):
         assert not use_sliding_window, "Gemma model does not support SWA."
         llm_config: modeling_gemma.GemmaConfig = llm_model.config

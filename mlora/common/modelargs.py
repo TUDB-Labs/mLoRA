@@ -1,21 +1,27 @@
 import copy
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, TypeAlias, Union
 
 import torch
 from transformers.activations import ACT2FN
 
-from mlora.backends import get_backend
-
-Tokens = List[int]
-Labels = List[Any]
-Masks = List[bool]
+Tokens: TypeAlias = List[int]
+Labels: TypeAlias = List[int]
+Masks: TypeAlias = List[bool]
 
 
 @dataclass
-class DataClass:
-    tokens_: Tokens = None
-    labels_: Labels = None
+class Prompt:
+    instruction: str = None
+    input: str = None
+    label: str = None
+
+
+@dataclass
+class InputData:
+    inputs: List[Union[Prompt, List[str], str]] = None
+    tokens: Optional[Tokens] = None
+    labels: Optional[Labels] = None
 
 
 @dataclass
@@ -78,7 +84,34 @@ class LLMModelInput:
 class AdapterConfig:
     adapter_name: str = ""
     task_name: str = "casual"
-    device: str = get_backend().default_device_name()
+
+    @staticmethod
+    def from_config(config: Dict[str, any]) -> "AdapterConfig":
+        return AdapterConfig(
+            adapter_name=config.get("name", None),
+            task_name=config.get("task_name", None),
+        )
+
+
+lora_target_modules = {
+    # LLaMA names
+    "q_proj": False,
+    "k_proj": False,
+    "v_proj": False,
+    "o_proj": False,
+    "gate_proj": False,
+    "down_proj": False,
+    "up_proj": False,
+    # Phi names
+    "dense": False,
+    "fc1": False,
+    "fc2": False,
+    # GLM names
+    "qkv_proj": False,
+    "dense": False,
+    "dense_h_to_4h": False,
+    "dense_4h_to_h": False,
+}
 
 
 @dataclass
@@ -112,44 +145,28 @@ class LoraConfig(AdapterConfig):
 
         return self
 
-    def from_config(self, config: Dict[str, any]) -> "LoraConfig":
-        self.use_dora_ = config.get("use_dora", False)
-        self.use_rslora_ = config.get("use_rslora", False)
-        self.lora_init_ = config.get("lora_init", "original")
-        self.lora_r_ = config["r"]
-        self.lora_alpha_ = config["lora_alpha"]
-        self.lora_dropout_ = config["lora_dropout"]
-        self.target_modules_ = {
-            # LLaMA names
-            "q_proj": False,
-            "k_proj": False,
-            "v_proj": False,
-            "o_proj": False,
-            "gate_proj": False,
-            "down_proj": False,
-            "up_proj": False,
-            # Phi names
-            "dense": False,
-            "fc1": False,
-            "fc2": False,
-            # GLM names
-            "qkv_proj": False,
-            "dense": False,
-            "dense_h_to_4h": False,
-            "dense_4h_to_h": False,
-        }
+    @staticmethod
+    def from_config(config: Dict[str, any]) -> "LoraConfig":
+        lora_config = LoraConfig(**AdapterConfig.from_config(config).__dict__)
+        lora_config.use_dora_ = config.get("use_dora", False)
+        lora_config.use_rslora_ = config.get("use_rslora", False)
+        lora_config.lora_init_ = config.get("lora_init", "original")
+        lora_config.lora_r_ = config["r"]
+        lora_config.lora_alpha_ = config["lora_alpha"]
+        lora_config.lora_dropout_ = config["lora_dropout"]
+        lora_config.target_modules_ = copy.deepcopy(lora_target_modules)
         if isinstance(config["target_modules"], List):
             for target in config["target_modules"]:
-                if target in self.target_modules_:
-                    self.target_modules_[target] = True
+                if target in lora_target_modules:
+                    lora_config.target_modules_[target] = True
         elif isinstance(config["target_modules"], Dict):
             for target, value in config["target_modules"].items():
-                if target in self.target_modules_:
-                    self.target_modules_[target] = value
+                if target in lora_target_modules:
+                    lora_config.target_modules_[target] = value
         else:
             raise ValueError("broken config item: target_modules")
 
-        return self
+        return lora_config
 
     def export(self) -> Dict[str, any]:
         config = {}
@@ -229,38 +246,39 @@ class MixConfig(LoraConfig):
 
         return self
 
-    def from_config(self, config: Dict[str, any]) -> "MixConfig":
-        super().from_config(config)
+    @staticmethod
+    def from_config(config: Dict[str, any]) -> "MixConfig":
+        lora_config = MixConfig(**LoraConfig.from_config(config).__dict__)
         if "expert_lora" in config:
             expert_config = copy.deepcopy(config)
             expert_config.update(config["expert_lora"])
-            self.expert_config_ = LoraConfig().from_config(expert_config)
-        self.router_aux_loss_coef_ = config.get(
+            lora_config.expert_config_ = LoraConfig().from_config(expert_config)
+        lora_config.router_aux_loss_coef_ = config.get(
             "router_aux_loss_coef", 0.001
         )  # for training
-        self.routing_strategy_ = config["routing_strategy"]
-        self.router_loss_ = config.get("router_loss", True)
-        self.num_experts_ = config["num_experts"]
+        lora_config.routing_strategy_ = config["routing_strategy"]
+        lora_config.router_loss_ = config.get("router_loss", True)
+        lora_config.num_experts_ = config["num_experts"]
         # silu for mixtral or gelu_new for switch transformers
         # left blank to automatically use the original act_fn of FFN
-        self.act_fn_ = config.get("act_fn", None)
-        if self.routing_strategy_ == "mixtral":
-            self.router_init_range_ = config.get("router_init_range", 0.02)
-            self.jitter_noise_ = config.get("jitter_noise", 0.0)
-            self.top_k_ = config.get("top_k", 2)
-        elif self.routing_strategy_ == "switch":
-            self.router_init_range_ = config.get("router_init_range", 1.0)
-            self.jitter_noise_ = config.get("jitter_noise", 0.01)
-            self.router_z_loss_coef_ = config.get(
+        lora_config.act_fn_ = config.get("act_fn", None)
+        if lora_config.routing_strategy_ == "mixtral":
+            lora_config.router_init_range_ = config.get("router_init_range", 0.02)
+            lora_config.jitter_noise_ = config.get("jitter_noise", 0.0)
+            lora_config.top_k_ = config.get("top_k", 2)
+        elif lora_config.routing_strategy_ == "switch":
+            lora_config.router_init_range_ = config.get("router_init_range", 1.0)
+            lora_config.jitter_noise_ = config.get("jitter_noise", 0.01)
+            lora_config.router_z_loss_coef_ = config.get(
                 "router_z_loss_coef", 0.001
             )  # for training
             # expert_capacity = (max_sequence_length / num_experts) * capacity_factor
             # common values of capacity_factor: 1.0, 1.25, 2.0
-            self.expert_capacity_ = config.get("expert_capacity", 32)
-            self.ffn_dropout_ = config.get("ffn_dropout", 0.0)
-            self.sparse_step_ = config.get("sparse_step", None)
+            lora_config.expert_capacity_ = config.get("expert_capacity", 32)
+            lora_config.ffn_dropout_ = config.get("ffn_dropout", 0.0)
+            lora_config.sparse_step_ = config.get("sparse_step", None)
 
-        return self
+        return lora_config
 
     def export(self) -> Dict[str, any]:
         config = super().export()
@@ -288,7 +306,6 @@ class MixConfig(LoraConfig):
         else:
             config = copy.deepcopy(self.expert_config_)
         config.adapter_name = f"moe.{self.adapter_name}.experts.{expert_idx}"
-        config.device = self.device
         return config
 
 
@@ -296,6 +313,6 @@ def lora_config_factory(config: Dict[str, any]) -> LoraConfig:
     if (
         "peft_type" in config and config["peft_type"] == "MIXLORA"
     ) or "routing_strategy" in config:
-        return MixConfig().from_config(config).check()
+        return MixConfig.from_config(config).check()
     else:
-        return LoraConfig().from_config(config).check()
+        return LoraConfig.from_config(config).check()

@@ -2,11 +2,11 @@ import logging
 import random
 import sys
 from abc import abstractmethod
-from typing import Callable, Dict, List, Union
+from typing import Callable, Dict, List
 
 import datasets
 
-from .common import DataClass, LLMBatchConfig, LLMModelInput, Masks, Tokens
+from .common import InputData, LLMBatchConfig, LLMModelInput, Masks, Tokens
 from .tokenizer import Tokenizer
 
 
@@ -44,13 +44,8 @@ class TrainTask:
 
     adapter_name_: str = ""
     data_path_: str = ""
-    test_data_path_: str = ""
     dataload_function_: Callable = None
-
-    # the token list for train and test
-    val_set_size: Union[int, float] = -1
-    train_token_data_: List[DataClass] = None
-    test_token_data_: List[DataClass] = None
+    train_token_data_: List[InputData] = None
 
     # train parameter
     total_epoch_num_: int = -1
@@ -87,22 +82,20 @@ class TrainTask:
         self.group_by_length_ = group_by_length
 
     def load_data(self):
-        self.train_token_data_ = self.dataload_function_(self.tokenizer_, True)
+        self.train_token_data_ = self.dataload_function_(self.tokenizer_)
         max_train_tokens_len = 0
         for data in self.train_token_data_:
-            max_train_tokens_len = max(max_train_tokens_len, len(data.tokens_))
-            if len(data.tokens_) > self.train_cutoff_len_:
-                data.tokens_ = data.tokens_[: self.train_cutoff_len_]
+            max_train_tokens_len = max(max_train_tokens_len, len(data.tokens))
+            if len(data.tokens) > self.train_cutoff_len_:
+                data.tokens = data.tokens[: self.train_cutoff_len_]
 
         logging.info(
             f"Max train tokens length: {max_train_tokens_len}/{self.train_cutoff_len_}"
         )
         if self.group_by_length_:
-            self.train_token_data_.sort(key=lambda x: len(x.tokens_), reverse=True)
+            self.train_token_data_.sort(key=lambda x: len(x.tokens), reverse=True)
         else:
             random.shuffle(self.train_token_data_)
-
-        # TODO: Load test data
 
     def is_train_done(self):
         if self.epoch_cnt_ <= self.total_epoch_num_:
@@ -122,10 +115,10 @@ class TrainTask:
         start_idx = self.next_train_data_start_idx_
         assert start_idx < len(self.train_token_data_)
         # in this strategy must sort
-        return len(self.train_token_data_[start_idx].tokens_)
+        return len(self.train_token_data_[start_idx].tokens)
 
     # non reentry function
-    def get_train_data(self) -> List[DataClass]:
+    def get_train_data(self) -> List[InputData]:
         start_idx = self.next_train_data_start_idx_
         end_idx = start_idx + self.max_train_micro_batch_size_
 
@@ -205,7 +198,7 @@ class Dispatcher:
                 )
             )
 
-    def optim_dispatch_strategy(self) -> Dict[str, List[DataClass]]:
+    def optim_dispatch_strategy(self) -> Dict[str, List[InputData]]:
         task_len = {}
         for idx, task in enumerate(self.running_train_task_):
             task_len[idx] = task.get_train_deta_max_seq_len()
@@ -236,7 +229,7 @@ class Dispatcher:
 
         return ret_train_data
 
-    def none_dispatch_strategy(self) -> Dict[str, List[DataClass]]:
+    def none_dispatch_strategy(self) -> Dict[str, List[InputData]]:
         ret_train_data = {}
         cnt = 0
         for task in self.running_train_task_:
@@ -297,7 +290,7 @@ class Dispatcher:
         self.__dispatch_task_in()
 
         # get task train data
-        all_train_data: Dict[str, List[DataClass]] = {}
+        all_train_data: Dict[str, List[InputData]] = {}
         if self.strategy_ == "none":
             all_train_data = self.none_dispatch_strategy()
         elif self.strategy_ == "optim":
@@ -309,7 +302,7 @@ class Dispatcher:
         # to align batch token data
         for adapter in all_train_data:
             for data in all_train_data[adapter]:
-                batch_seq_len = max(batch_seq_len, len(data.tokens_))
+                batch_seq_len = max(batch_seq_len, len(data.tokens))
 
         # all prompts and tokens / config
         batch_tokens: List[Tokens] = []
@@ -322,7 +315,7 @@ class Dispatcher:
         for adapter in all_train_data:
             adapter_end_idx: int = adapter_start_idx + len(all_train_data[adapter])
             for data in all_train_data[adapter]:
-                tokens: Tokens = data.tokens_.copy()
+                tokens: Tokens = data.tokens.copy()
                 pad_side = self.tokenizer_.padding_side_
                 assert pad_side == "right" or pad_side == "left"
                 # pad the tokens to align
@@ -333,7 +326,7 @@ class Dispatcher:
                         tokens.insert(0, self.tokenizer_.pad_id_)
                 batch_tokens.append(tokens)
                 attention_masks.append(self.tokenizer_.mask_from(tokens))
-                labels: List = data.labels_
+                labels = data.labels
                 if labels is None:
                     labels = tokens.copy()
                 else:

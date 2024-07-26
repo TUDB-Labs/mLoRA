@@ -65,13 +65,15 @@ def update_record(dict_: dict, key_, value_):
 def gen_config(
     # essential
     template: str,
-    tasks: str,
+    task_list: str,
     # optional
     adapter_name: str = None,
     file_name: str = "mlora.json",
+    data_path: str = None,
     multi_task: bool = False,
     append: bool = False,
     # default value provided by template
+    prompt_template: str = None,
     cutoff_len: int = None,
     save_step: int = None,
     lr_scheduler: str = None,
@@ -107,14 +109,22 @@ def gen_config(
 
     index = len(template_obj["lora"])
     if multi_task:
-        tasks = [tasks]
+        task_list = [task_list]
+        path_list = [data_path]
     else:
-        tasks = tasks.split(";")
+        task_list = task_list.split(";")
+        path_list = (
+            [None] * len(task_list) if data_path is None else data_path.split(";")
+        )
 
     for lora_template in lora_templates:
-        for task_name in tasks:
+        for task_name, data_path in zip(task_list, path_list):
             lora_config = lora_template.copy()
-            if task_name not in mlora.tasks.task_dict:
+            if multi_task:
+                lora_config["name"] = f"multi_task_{index}"
+                lora_config["task_name"] = task_name
+            elif task_name not in mlora.tasks.task_dict:
+                assert os.path.exists(task_name), f"File '{task_name}' not exist."
                 lora_config["name"] = f"casual_{index}"
                 lora_config["task_name"] = "casual"
                 lora_config["data"] = task_name
@@ -128,6 +138,8 @@ def gen_config(
             if adapter_name is not None:
                 lora_config["name"] = f"{adapter_name}_{index}"
 
+            update_record(lora_config, "data", data_path)
+            update_record(lora_config, "prompt", prompt_template)
             update_record(lora_config, "scheduler_type", lr_scheduler)
             update_record(lora_config, "warmup_steps", warmup_steps)
             update_record(lora_config, "lr", learning_rate)
@@ -173,8 +185,10 @@ def show_help():
         --tasks             task names separate by ';'
         --adapter_name      default is task name
         --file_name         default is 'mlora.json'
+        --data_path         path to input data
         --multi_task        multi-task training
         --append            append to existed config
+        --prompt_template   [alpaca]
         --cutoff_len
         --save_step
         --warmup_steps

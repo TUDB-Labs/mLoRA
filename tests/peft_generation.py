@@ -20,13 +20,10 @@ def main(
         outputs = model.generate(
             input_ids=input_ids,
             max_new_tokens=100,
-            do_sample=True,
-            top_p=1,
-            temperature=1,
         )
         output = tokenizer.batch_decode(
             outputs.detach().cpu().numpy(), skip_special_tokens=True
-        )[0][len(instruction) :]
+        )[0][input_ids.shape[-1] :]
 
         print(f"Prompt:\n{instruction}\n")
         print(f"Generated:\n{output}")
