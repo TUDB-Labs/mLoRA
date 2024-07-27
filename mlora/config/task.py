@@ -10,6 +10,9 @@ class TaskConfig(DictConfig):
     name_: str
     type_: str
 
+    adapter_: AdapterConfig
+    dataset_: DatasetConfig | None
+
     __params_map: Dict[str, str] = {
         "name_": "name",
         "type_": "type",
