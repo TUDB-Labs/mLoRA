@@ -65,7 +65,7 @@ def update_record(dict_: dict, key_, value_):
 def gen_config(
     # essential
     template: str,
-    task_list: str,
+    tasks: str,
     # optional
     adapter_name: str = None,
     file_name: str = "mlora.json",
@@ -109,10 +109,10 @@ def gen_config(
 
     index = len(template_obj["lora"])
     if multi_task:
-        task_list = [task_list]
+        task_list = [tasks]
         path_list = [data_path]
     else:
-        task_list = task_list.split(";")
+        task_list = tasks.split(";")
         path_list = (
             [None] * len(task_list) if data_path is None else data_path.split(";")
         )
