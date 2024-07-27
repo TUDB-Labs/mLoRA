@@ -5,6 +5,7 @@ from .modeling_llama import LlamaForCausalLM
 from .modeling_mistral import MistralForCausalLM
 from .modeling_mistral import MistralForCausalLM as Qwen2ForCausalLM
 from .modeling_phi import PhiForCausalLM
+from .modeling_phi3 import Phi3ForCausalLM
 
 model_dict = {
     "llama": LlamaForCausalLM,
@@ -13,6 +14,7 @@ model_dict = {
     "mistral": MistralForCausalLM,
     "qwen2": Qwen2ForCausalLM,
     "phi": PhiForCausalLM,
+    "phi3": Phi3ForCausalLM,
     "chatglm": GLMForCausalLM,
 }
 
@@ -32,6 +34,7 @@ __all__ = [
     "MistralForCausalLM",
     "Qwen2ForCausalLM",
     "PhiForCausalLM",
+    "Phi3ForCausalLM",
     "from_pretrained",
     "GLMForCausalLM",
 ]
