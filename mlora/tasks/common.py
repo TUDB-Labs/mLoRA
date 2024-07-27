@@ -26,8 +26,7 @@ class AutoMetric(BasicMetric):
         path_prefix = os.getenv("MLORA_METRIC_PATH")
         if path_prefix is None:
             path_prefix = ""
-
-        if not path_prefix.endswith(os.sep):
+        elif not path_prefix.endswith(os.sep):
             path_prefix += os.sep
 
         if ":" in task_name:

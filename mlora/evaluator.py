@@ -42,12 +42,14 @@ class EvaluateConfig:
     def from_config(config: Dict[str, any]) -> List["EvaluateConfig"]:
         adapter_name = config["name"]
         data_path = config.get("data", None)
-        task_list = config["task_name"].split(";")
+        task_list = config.get("task_name", "casual").split(";")
         path_list = (
             [None] * len(task_list) if data_path is None else data_path.split(";")
         )
         config_list = []
         for task_name_, data_path_ in zip(task_list, path_list):
+            if task_name_ not in task_dict:
+                continue
             config_list.append(
                 EvaluateConfig(
                     adapter_name=adapter_name,

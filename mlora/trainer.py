@@ -54,7 +54,6 @@ class TrainConfig(DispatcherConfig):
     @staticmethod
     def from_config(config: Dict[str, any]):
         batch_size = config["batch_size"]
-        evaluate_steps = config.get("evaluate_steps", None)
         return TrainConfig(
             adapter_name=config["name"],
             task_name=config.get("task_name", "casual"),
@@ -72,9 +71,7 @@ class TrainConfig(DispatcherConfig):
             data_path=config.get("data", None),
             prompt_template=config.get("prompt", None),
             evaluate_steps=config.get("evaluate_steps", None),
-            evaluate_configs_=(
-                EvaluateConfig.from_config(config) if evaluate_steps else None
-            ),
+            evaluate_configs_=EvaluateConfig.from_config(config),
         )
 
     def _dataload_fn(self, tokenizer: Tokenizer, **tokenizer_kwargs):
@@ -340,8 +337,7 @@ def train(
         config.finish()
         if save_dir:
             save_adapter_weight(model, config, save_dir)
-        if config.evaluate_steps is not None:
-            evaluate_configs.extend(config.evaluate_configs_)
+        evaluate_configs.extend(config.evaluate_configs_)
 
     evaluate_results.extend(
         _perform_evaluate(
