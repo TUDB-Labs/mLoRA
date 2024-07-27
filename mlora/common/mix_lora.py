@@ -172,7 +172,7 @@ class MixtralSparseMoe(torch.nn.Module):
                 self.profiler_[idx] = (self.profiler_[idx] + pressure) / 2
 
     def forward(self, mlp: LLMFeedForward, hidden_states: torch.Tensor) -> Tuple:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        batch_size, sequence_length, hidden_dim = hidden_states.shape  # [8,139,3072]
 
         if self.jitter_noise_ > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
@@ -192,7 +192,7 @@ class MixtralSparseMoe(torch.nn.Module):
 
         self._profiling(batch_size, sequence_length, selected_experts)
 
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)  # Top-k 时，分给不同专家的权重
 
         final_hidden_states = torch.zeros(
             (batch_size * sequence_length, hidden_dim),

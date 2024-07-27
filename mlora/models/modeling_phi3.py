@@ -551,10 +551,10 @@ class Phi3DecoderLayer(LLMDecoder):
                 past_key_value: Optional[Cache] = None,
                 ):
         residual = hidden_states
-        print("[[modeling_phi3.py][phi3DecoderLayer.forward]].residual shape:\n", residual.shape)
+        # print("[[modeling_phi3.py][phi3DecoderLayer.forward]].residual shape:\n", residual.shape)
         hidden_states = self.input_layernorm_(hidden_states)
         # Self Attention
-        print("[[modeling_phi3.py][phi3DecoderLayer.forward]].hidden_states shape:\n",hidden_states.shape)
+        # print("[[modeling_phi3.py][phi3DecoderLayer.forward]].hidden_states shape:\n",hidden_states.shape)
         hidden_states = self.self_attn_.forward(
             hidden_states, 
             input_args, 
@@ -611,18 +611,18 @@ class Phi3MLP(LLMFeedForward):
      def __init__(self, gate: nn.Module, down: nn.Module, args: LlamaConfig) -> None:
         super().__init__()
         # feed forward
-        self.gate_ = Linear(gate, args.device_)
+        self.gate_up_ = Linear(gate, args.device_)
         self.down_ = Linear(down, args.device_)
         self.act_ = ACT2FN[args.hidden_act_]
 
      def state_dict(self) -> Dict[str, nn.Module]:
         return {
-            "gate_up_proj": self.gate_,
+            "gate_up_proj": self.gate_up_,
             "down_proj": self.down_,
         }
 
      def _batch_forward(self, hidden_states: torch.Tensor, input_args: LLMModelInput) -> torch.Tensor:
-        up_states = self.gate_.forward(hidden_states, input_args)
+        up_states = self.gate_up_.forward(hidden_states, input_args)
 
         gate, up_states = up_states.chunk(2, dim=-1)
         up_states = up_states * self.act_(gate)
@@ -632,27 +632,69 @@ class Phi3MLP(LLMFeedForward):
 
      def _lora_forward(
             self, lora_name: str, act_fn: nn.Module, data: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        # raise NotImplementedError
         # Applying LoRA weights to FFN weights
-        if lora_name in self.w1_.loras_:
-            w1 = self.w1_.loras_[lora_name].forward(
-                self.w1_.base_layer_.forward(data), data)
+        if lora_name in self.gate_up_.loras_:
+            gate = self.gate_up_.loras_[lora_name].forward(
+                self.gate_up_.base_layer_.forward(data), data)
         else:
-            w1 = self.w1_.base_layer_.forward(data)
+            gate = self.gate_up_.base_layer_.forward(data)
 
-        if lora_name in self.w3_.loras_:
-            w3 = self.w3_.loras_[lora_name].forward(
-                self.w3_.base_layer_.forward(data), data)
+        if lora_name in self.gate_up_.loras_:
+            up = self.gate_up_.loras_[lora_name].forward(
+                self.gate_up_.base_layer_.forward(data), data)
         else:
-            w3 = self.w3_.base_layer_.forward(data)
+            up = self.gate_up_.base_layer_.forward(data)
 
-        act_result = act_fn(w1) * w3
-        if lora_name in self.w2_.loras_:
-            return self.w2_.loras_[lora_name].forward(
-                self.w2_.base_layer_.forward(act_result), act_result)
+        act_result = act_fn(gate) * up
+        if lora_name in self.down_.loras_:
+            return self.down_.loras_[lora_name].forward(
+                self.down_.base_layer_.forward(act_result), act_result)
         else:
-            return self.w2_.base_layer_.forward(act_result)
+            return self.down_.base_layer_.forward(act_result)
 
+     def _mixlora_forward(
+        self, moe_name, act_fn, expert_mask, hidden_states, input_dtype
+        ):
+        common_gate = self.gate_up_.base_layer_.forward(hidden_states.to(input_dtype)).to(
+            hidden_states.dtype
+        )
+        common_up = self.gate_up_.base_layer_.forward(hidden_states.to(input_dtype)).to(
+            hidden_states.dtype
+        )
+        final_expert_states = []
+        for expert_idx in range(expert_mask.shape[0]):
+            _, top_x = torch.where(expert_mask[expert_idx])
+
+            lora_name = f"moe.{moe_name}.experts.{expert_idx}"
+            if lora_name in self.gate_up_.loras_:
+                lora_data = _mixtral_slice_tensor(hidden_states, top_x, input_dtype)
+                gate = self.gate_up_.loras_[lora_name].forward(
+                    _mixtral_slice_tensor(common_gate, top_x, input_dtype), lora_data
+                )
+            else:
+                lora_data = None
+                gate = _mixtral_slice_tensor(common_gate, top_x, input_dtype)
+
+            if lora_name in self.gate_up_.loras_:
+                up = self.gate_up_.loras_[lora_name].forward(
+                    _mixtral_slice_tensor(common_up, top_x, input_dtype),
+                    _mixtral_slice_tensor(hidden_states, top_x, input_dtype, lora_data),
+                )
+            else:
+                up = _mixtral_slice_tensor(common_up, top_x, input_dtype)
+
+            act_result = act_fn(gate) * up
+            if lora_name in self.down_.loras_:
+                final_expert_states.append(
+                    self.down_.loras_[lora_name].forward(                       # LoRA a,b
+                        self.down_.base_layer_.forward(act_result), act_result  # down.base_layer.shape should be [16384,3072] not [8192,3072]
+                    )
+                )
+            else:
+                final_expert_states.append(self.down_.base_layer_.forward(act_result))
+
+        return final_expert_states
 
 class Phi3OutputLayer(nn.Module):
     def __init__(self, config: Phi3Config):
