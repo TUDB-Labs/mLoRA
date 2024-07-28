@@ -128,7 +128,7 @@ class Phi3Attention(LLMAttention):
         # self.head_dim = args.head_dim_
         self.dtype_ = args.dtype_
         self.is_causal_ = True
-        # self.scaling_
+        # self.scaling_ = 
         self.sliding_window_ = (
             args.sliding_window_
             if args.use_sliding_window_ and not bool(layer_idx % 2)
@@ -214,15 +214,15 @@ class Phi3FlashAttention2(Phi3Attention):
             layer_idx: int,
             args: Phi3Config,) -> None:
         assert is_flash_attn_2_available(), "Flash Attention is not available"
-        super().__init__(qkv_proj, o_proj, args)
+        super().__init__(qkv_proj, o_proj,layer_idx, args)
         # self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         input_args: LLMModelInput,
+        rotary_emb: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
     ):
@@ -236,33 +236,19 @@ class Phi3FlashAttention2(Phi3Attention):
         key_states = qkv[..., query_pos : query_pos + self.n_kv_heads_ * self.head_dim_]
         value_states = qkv[..., query_pos + self.n_kv_heads_ * self.head_dim_ :]
 
+        # viewing
+        query_states = query_states.view(bsz, q_len, self.n_heads_, self.head_dim_).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.n_kv_heads_, self.head_dim_).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.n_kv_heads_, self.head_dim_).transpose(1, 2)
+
+
         # sin & cos
-        cos, sin = self.rotary_emb_(value_states, cache_position.unsqueeze(0))  # 维度增加
+        cos, sin = rotary_emb
         query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, position_ids
+            query_states, key_states, cos, sin
         )
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} ")
-
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=rotary_seq_len)
-
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
-        # Sliding windows
-        # use_sliding_windows = (
-        #     _flash_supports_window_size
-        #     and getattr(self.config, "sliding_window", None) is not None
-        #     and kv_seq_len > self.config.sliding_window
-        # )
-
-        # Activate kv_cache
+        # Activate slicing cache
         if past_key_value is not None:
             cache_kwargs = {
                 "sin": sin,
@@ -280,7 +266,7 @@ class Phi3FlashAttention2(Phi3Attention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
-            if _backend.is_bf16_supported():
+            if backend.is_bf16_supported():
                 target_dtype = torch.bfloat16
             else:
                 target_dtype = torch.float16
@@ -295,7 +281,9 @@ class Phi3FlashAttention2(Phi3Attention):
             attention_mask,
             q_len,
             is_causal=self.is_causal_,
-            softmax_scale=self.scaling_,
+        ).to(input_dtype)
+
+        """ softmax_scale=self.scaling_,
             sliding_window=(
                 self.sliding_window_ if self.config_.use_sliding_window_ else None
             ),
@@ -303,60 +291,10 @@ class Phi3FlashAttention2(Phi3Attention):
                 self.config_.attn_logit_softcapping_
                 if is_package_available("flash_attn", "2.6.0")
                 else None
-            ),
-        ).to(input_dtype)
+            ), """
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj_(attn_output, input_args)
-
-        return attn_output
-
-
-        # dimosion transposing
-        query_states = query_states.view(bsz, q_len, self.n_heads_, self.head_dim_).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.n_kv_heads_, self.head_dim_).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.n_kv_heads_, self.head_dim_).transpose(1, 2)
-
-        # kv_seq_len = key_states.shape[-2] This part is about sliding windows
-
-        # apply rotary embedding
-        assert key_states.dtype == query_states.dtype
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, q_len, self.cos_, self.sin_)
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if _backend.is_bf16_supported():
-                target_dtype = torch.bfloat16
-            else:
-                target_dtype = torch.float16
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-
-        # repeat k/v heads if n_kv_heads < n_heads
-        # key_states = repeat_kv(key_states, self.n_rep_)
-        # value_states = repeat_kv(value_states, self.n_rep_)
-
-        # attn_dropout = self.attention_dropout if self.training else 0.0
-
-        attn_output = self._flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            q_len,
-            dropout = 0.0,
-            # use_sliding_windows = use_sliding_windows
-        ).to(input_dtype)
-
-        # attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
 
         return attn_output
 
@@ -468,54 +406,11 @@ class Phi3FlashAttention2(Phi3Attention):
                 )
 
         return attn_output
-
-    # Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        batch_size, kv_seq_len, n_heads_, head_dim = key_layer.shape
-
-        # On the first iteration we need to properly re-create the padding mask
-        # by slicing it on the proper place
-        if kv_seq_len != attention_mask.shape[-1]:
-            attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
-
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = get_unpad_data(attention_mask)
-
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, n_heads_, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, n_heads_, head_dim), indices_k)
-
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, n_heads_, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
-    
+   
 
 PHI3_ATTENTION_CLASSES = {
     "eager": Phi3Attention,
-    "flash_attention_2": Phi3FlashAttention2,
+    "flash_attn": Phi3FlashAttention2,
 }
 
 
@@ -656,6 +551,9 @@ class Phi3MLP(LLMFeedForward):
      def _mixlora_forward(
         self, moe_name, act_fn, expert_mask, hidden_states, input_dtype
         ):
+
+        # gate_up = self.gate_up_
+
         common_gate = self.gate_up_.base_layer_.forward(hidden_states.to(input_dtype)).to(
             hidden_states.dtype
         )
@@ -688,7 +586,7 @@ class Phi3MLP(LLMFeedForward):
             if lora_name in self.down_.loras_:
                 final_expert_states.append(
                     self.down_.loras_[lora_name].forward(                       # LoRA a,b
-                        self.down_.base_layer_.forward(act_result), act_result  # down.base_layer.shape should be [16384,3072] not [8192,3072]
+                        self.down_.base_layer_.forward(act_result), act_result  # down.base_layer.[in,out] should be [16384,3072] not [8192,3072]
                     )
                 )
             else:
@@ -821,7 +719,6 @@ class Phi3ForCausalLM(LLMForCausalLM):
                         attn_impl: str = "eager",
                         use_sliding_window: bool = False,
                         device: str = backend.default_device_name()):
-        assert not use_sliding_window, "Phi3 model does not support SWA."
         llm_config = llm_model.config
         llm_args = Phi3Config(
             name_or_path_=llm_config.name_or_path,
@@ -837,9 +734,16 @@ class Phi3ForCausalLM(LLMForCausalLM):
             rope_theta_=llm_config.rope_theta,
             pad_token_id_=llm_config.pad_token_id,
             attn_implementation_=attn_impl,
+            use_sliding_window_=use_sliding_window,
+            sliding_window_=llm_config.sliding_window,
             device_=torch.device(device),
             dtype_=llm_model.dtype,
         )
+
+        if use_sliding_window and attn_impl != "flash_attn":
+            raise ValueError(
+                f"Can not use sliding window attention with {attn_impl} attention."
+            )
 
         if llm_args.pad_token_id_ is None:
             llm_args.pad_token_id_ = -1
