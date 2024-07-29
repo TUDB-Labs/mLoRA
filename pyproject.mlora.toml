@@ -24,7 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ci_test = ["pytest", "flake8", "lizard", "black", "isort", "mypy"]
-test = ["peft", "setuptools"]
+test = ["peft", "setuptools", "llama_recipes"]
 debug = ["graphviz"]
 deploy = ["fastapi", "plyvel", "uvicorn"]
 
