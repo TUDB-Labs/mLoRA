@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
 
@@ -15,7 +16,7 @@ from mlora.model.tokenizer import Tokenizer
 from .task import Task
 
 
-def _get_context_state_from_dir_name(dir_name: str) -> Tuple[int, int, int]:
+def _get_context_state_from_folder_name(dir_name: str) -> Tuple[int, int, int]:
     split_group = dir_name.split("_")
 
     epoch = int(split_group[1])
@@ -44,11 +45,11 @@ class TrainTask(Task):
         self.tokenizer_ = tokenizer
         # prepare the context and the dataset
         # NOTE: how to recover the sort of dataset
-        self._pre_dataset()
         self._pre_context(linears_info)
         self._pre_recover_context()
+        self._pre_dataset()
 
-    def _get_recover_folder(self) -> str | None:
+    def _get_recover_dir(self) -> str | None:
         if not os.path.isdir(self.context_.path_):
             return None
 
@@ -67,31 +68,38 @@ class TrainTask(Task):
             return None
 
         max_step = -1
-        to_recover_folder: str | None = None
+        max_epoch = -1
+        to_recover_dir: str | None = None
         for folder in recover_folders:
             base_folder = os.path.basename(os.path.normpath(folder))
-            step, epoch, data_idx = _get_context_state_from_dir_name(base_folder)
-            if step is not None and step > max_step:
-                max_step = max(max_step, step)
+            step, epoch, data_idx = _get_context_state_from_folder_name(base_folder)
+            # skip checkpoint that do not meet the condition
+            if step is None or epoch > self.config_.num_epochs_:
+                continue
+            # Take maximum step, and take maximum epoch when steps are equal
+            if step > max_step or (step == max_step and epoch > max_epoch):
+                max_step = step
+                max_epoch = epoch
                 self.now_epoch_ = epoch
                 self.now_data_idx_ = data_idx
                 self.now_step_ = step
-                to_recover_folder = os.path.join(self.context_.path_, folder)
-
-        return to_recover_folder
+                self.recover_folder_ = folder
+                to_recover_dir = os.path.join(self.context_.path_, folder)
+        return to_recover_dir
 
     def _pre_recover_context(self):
-        to_recover_folder = self._get_recover_folder()
-        if to_recover_folder is None:
+        to_recover_dir = self._get_recover_dir()
+        if to_recover_dir is None:
             return
 
         logging.info(
-            f"Task {self.task_name()} have recover directory {to_recover_folder}"
+            f"Task {self.task_name()} have recover directory {to_recover_dir}"
             " need to recover."
         )
+        self.checkpoint_ = True
 
         # get the optimizer read the file from now_epoch
-        checkpoint = torch.load(to_recover_folder + os.sep + "checkpoint.bin")
+        checkpoint = torch.load(to_recover_dir + os.sep + "checkpoint.bin")
 
         self.context_.recover_weight(checkpoint["weight_dict"])
         self.context_.recover_optimizer(checkpoint["state_dict"])
@@ -176,14 +184,14 @@ class TrainTask(Task):
     def _save(self, is_checkpoint: bool = False, additional_info: Dict[str, str] = {}):
         output_dir = self.context_.path_
         if is_checkpoint:
-            checkpoint_dir = "checkpoint_" + "_".join(
+            checkpoint_folder = "checkpoint_" + "_".join(
                 [
                     str(self.now_step_),
                     str(self.now_epoch_),
                     str(self.now_data_idx_),
                 ]
             )
-            output_dir = self.context_.path_ + os.sep + checkpoint_dir
+            output_dir = self.context_.path_ + os.sep + checkpoint_folder
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -195,8 +203,14 @@ class TrainTask(Task):
                     "weight_dict": self.context_.weight_dict(),
                     "state_dict": self.context_.state_dict(),
                 },
-                output_dir + os.sep + "checkpoint.bin",
+                output_dir + os.sep + "checkpoint.bin"
             )
+            preprocess_type = self.config_.dataset_.preprocess_
+            if preprocess_type == "shuffle":
+                data_cache_path = ".cache/shuffle_data_" + self.task_name()
+                sheffle_data_path = output_dir + os.sep + "shuffle_data"
+                shutil.copy(data_cache_path, sheffle_data_path)
+
         else:
             torch.save(
                 self.context_.weight_dict(), output_dir + os.sep + "adapter_model.bin"

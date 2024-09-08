@@ -1,4 +1,6 @@
 import logging
+import os
+import shutil
 from abc import abstractmethod
 from collections import OrderedDict
 from typing import Callable, Dict, List, Optional, Tuple
@@ -30,6 +32,8 @@ class Task:
     # need_terminal_ the llm name just for export the config file
     llm_name_: str
 
+    recover_folder_: str | None
+
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         self.config_ = config
 
@@ -40,6 +44,8 @@ class Task:
         self.terminate_ = False
 
         self.llm_name_ = llm_name
+
+        self.recover_folder_ = None
 
     @abstractmethod
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
@@ -72,9 +78,11 @@ class Task:
 
     def _pre_dataset(self):
         preprocess_func: Dict[str, Callable] = {
-            "default": lambda data: data,
-            "shuffle": lambda data: data.shuffle(),
-            "sort": lambda data: data.sort(),
+            "default": lambda data, _: data,
+            "shuffle": lambda data, path: data.shuffle(
+                    indices_cache_file_names={k: path for k in data}
+                    ),
+            "sort": lambda data, _: data.sort(),
         }
 
         if self.config_.dataset_ is None:
@@ -94,7 +102,14 @@ class Task:
         if preprocess_type not in preprocess_func:
             raise NotImplementedError
 
-        data = preprocess_func[preprocess_type](data)
+        if preprocess_type == "shuffle":
+            data_cache_path: str = ".cache/shuffle_data_" + self.task_name()
+            if not os.path.exists(".cache"):
+                os.makedirs(".cache")
+            if self.recover_folder_ is not None:
+                recover_data_path: str = self.context_.path_ + os.sep + self.recover_folder_ + os.sep + "shuffle_data"
+                shutil.copy(recover_data_path, data_cache_path)
+        data = preprocess_func[preprocess_type](data, data_cache_path)
         logging.info(
             f"Adapter {self.config_.adapter_.name_} "
             f"data size: {len(data["data_points"])}"
