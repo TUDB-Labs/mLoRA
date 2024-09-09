@@ -80,8 +80,8 @@ class Task:
         preprocess_func: Dict[str, Callable] = {
             "default": lambda data, _: data,
             "shuffle": lambda data, path: data.shuffle(
-                    indices_cache_file_names={k: path for k in data}
-                    ),
+                indices_cache_file_names={k: path for k in data}
+            ),
             "sort": lambda data, _: data.sort(),
         }
 
@@ -103,11 +103,17 @@ class Task:
             raise NotImplementedError
 
         if preprocess_type == "shuffle":
-            data_cache_path: str = ".cache/shuffle_data_" + self.task_name()
+            data_cache_path = ".cache/shuffle_data_" + self.task_name()
             if not os.path.exists(".cache"):
                 os.makedirs(".cache")
             if self.recover_folder_ is not None:
-                recover_data_path: str = self.context_.path_ + os.sep + self.recover_folder_ + os.sep + "shuffle_data"
+                recover_data_path = (
+                    self.context_.path_
+                    + os.sep
+                    + self.recover_folder_
+                    + os.sep
+                    + "shuffle_data"
+                )
                 shutil.copy(recover_data_path, data_cache_path)
         data = preprocess_func[preprocess_type](data, data_cache_path)
         logging.info(

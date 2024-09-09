@@ -203,9 +203,11 @@ class TrainTask(Task):
                     "weight_dict": self.context_.weight_dict(),
                     "state_dict": self.context_.state_dict(),
                 },
-                output_dir + os.sep + "checkpoint.bin"
+                output_dir + os.sep + "checkpoint.bin",
             )
-            preprocess_type = self.config_.dataset_.preprocess_
+            preprocess_type: str | None = None
+            if self.config_.dataset_ is not None:
+                preprocess_type = self.config_.dataset_.preprocess_
             if preprocess_type == "shuffle":
                 data_cache_path = ".cache/shuffle_data_" + self.task_name()
                 sheffle_data_path = output_dir + os.sep + "shuffle_data"
