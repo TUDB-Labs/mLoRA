@@ -33,6 +33,7 @@ class Task:
     llm_name_: str
 
     recover_folder_: str | None
+    shuffle_data_cache_path_: str | None
 
     def __init__(self, config: TaskConfig, llm_name: str) -> None:
         self.config_ = config
@@ -46,6 +47,7 @@ class Task:
         self.llm_name_ = llm_name
 
         self.recover_folder_ = None
+        self.shuffle_data_cache_path_ = None
 
     @abstractmethod
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
@@ -76,6 +78,18 @@ class Task:
     def is_terminate(self) -> bool:
         return self.terminate_
 
+    def _del_cache_file(self):
+        if self.shuffle_data_cache_path_ is None:
+            return
+        cache_path: str = self.shuffle_data_cache_path_
+        # If exist cache files, then delete them.
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
+        # If the cache folder is empty, delete it.
+        dir, _ = os.path.split(cache_path)
+        if os.path.exists(dir) and len(os.listdir(dir)) == 0:
+            os.rmdir(dir)
+
     def _pre_dataset(self):
         preprocess_func: Dict[str, Callable] = {
             "default": lambda data, _: data,
@@ -102,20 +116,40 @@ class Task:
         if preprocess_type not in preprocess_func:
             raise NotImplementedError
 
+        # If data preprocess_type is shuffle, create a cache folder,
+        # to store shuffled data and use it for saving checkpoints.
         if preprocess_type == "shuffle":
-            data_cache_path = ".cache/shuffle_data_" + self.task_name()
-            if not os.path.exists(".cache"):
-                os.makedirs(".cache")
+            data_name: str = ""
+            if self.config_.dataset_ is not None:
+                data_name = self.config_.dataset_.name_ + "_"
+            # warning: The cache path can only use up to first level dirs,
+            # otherwise will result in an error.
+            self.shuffle_data_cache_path_ = (
+                ".cache/shuffle_" + data_name + self.task_name()
+            )
+            # Clear the cache files before use.
+            self._del_cache_file()
+            cache_dir, _ = os.path.split(self.shuffle_data_cache_path_)
+            if not os.path.exists(cache_dir):
+                os.makedirs(cache_dir)
+
+            # If exist checkpoint, copy the shuffle_data in checkpoint to cache path.
             if self.recover_folder_ is not None:
-                recover_data_path = (
+                recover_data_path: str = (
                     self.context_.path_
                     + os.sep
                     + self.recover_folder_
                     + os.sep
                     + "shuffle_data"
                 )
-                shutil.copy(recover_data_path, data_cache_path)
-        data = preprocess_func[preprocess_type](data, data_cache_path)
+                shutil.copy(recover_data_path, self.shuffle_data_cache_path_)
+                logging.info(
+                    "Found shuffled data successfully, data status has been restored."
+                )
+        # Process data according to the data preprocess_type,
+        # the data_cache_cath parameter only only works on "shuffle".
+        data = preprocess_func[preprocess_type](data, self.shuffle_data_cache_path_)
+
         logging.info(
             f"Adapter {self.config_.adapter_.name_} "
             f"data size: {len(data["data_points"])}"
@@ -145,6 +179,17 @@ class Task:
             ret_batch_masks.append(masks)
 
         return ret_batch_tokens, ret_batch_masks
+
+    def _save_data(self, output_dir: str):
+        if self.config_.dataset_ is None or self.shuffle_data_cache_path_ is None:
+            return
+        preprocess_type: str = self.config_.dataset_.preprocess_
+        cache_path: str = self.shuffle_data_cache_path_
+        # If data preprocess_type is shuffle,
+        # save shuffle data from cache path to the checkpoint.
+        if preprocess_type == "shuffle":
+            sheffle_data_path = output_dir + os.sep + "shuffle_data"
+            shutil.copy(cache_path, sheffle_data_path)
 
     def adapter_model(self) -> List[AdapterModel]:
         return [self.context_.adapter_model()]

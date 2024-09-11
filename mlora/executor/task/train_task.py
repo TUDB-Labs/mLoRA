@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import shutil
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, override
 
@@ -70,6 +69,7 @@ class TrainTask(Task):
         max_step = -1
         max_epoch = -1
         to_recover_dir: str | None = None
+        # Find the most suitable checkpoint as the recovery folder
         for folder in recover_folders:
             base_folder = os.path.basename(os.path.normpath(folder))
             step, epoch, data_idx = _get_context_state_from_folder_name(base_folder)
@@ -83,6 +83,7 @@ class TrainTask(Task):
                 self.now_epoch_ = epoch
                 self.now_data_idx_ = data_idx
                 self.now_step_ = step
+                # Set the recovery_folder name for restoring shuffle_data (if exist).
                 self.recover_folder_ = folder
                 to_recover_dir = os.path.join(self.context_.path_, folder)
         return to_recover_dir
@@ -205,13 +206,8 @@ class TrainTask(Task):
                 },
                 output_dir + os.sep + "checkpoint.bin",
             )
-            preprocess_type: str | None = None
-            if self.config_.dataset_ is not None:
-                preprocess_type = self.config_.dataset_.preprocess_
-            if preprocess_type == "shuffle":
-                data_cache_path = ".cache/shuffle_data_" + self.task_name()
-                sheffle_data_path = output_dir + os.sep + "shuffle_data"
-                shutil.copy(data_cache_path, sheffle_data_path)
+            # Save checkpoint for shuffle_data.
+            self._save_data(output_dir)
 
         else:
             torch.save(
@@ -229,6 +225,8 @@ class TrainTask(Task):
     @override
     def done(self):
         self._save(is_checkpoint=False)
+        # Delete the cache file.
+        self._del_cache_file()
         # release the context
         del self.context_
 
