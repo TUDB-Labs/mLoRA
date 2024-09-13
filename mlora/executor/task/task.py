@@ -90,13 +90,43 @@ class Task:
         if os.path.exists(dir) and len(os.listdir(dir)) == 0:
             os.rmdir(dir)
 
+    def _shuffle_data(self, data):
+        # If data preprocess_type is shuffle, create a cache folder,
+        # to store shuffled data and use it for saving checkpoints.
+        data_name: str = ""
+        if self.config_.dataset_ is not None:
+            data_name = self.config_.dataset_.name_ + "_"
+        # warning: The cache path can only use up to first level dirs,
+        # otherwise will result in an error.
+        self.shuffle_data_cache_path_ = ".cache/shuffle_" + data_name + self.task_name()
+        # Clear the cache files before use.
+        self._del_cache_file()
+        cache_dir, _ = os.path.split(self.shuffle_data_cache_path_)
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+
+        # If exist checkpoint, copy the shuffle_data in checkpoint to cache path.
+        if self.recover_folder_ is not None:
+            recover_data_path: str = (
+                self.context_.path_
+                + os.sep
+                + self.recover_folder_
+                + os.sep
+                + "shuffle_data"
+            )
+            shutil.copy(recover_data_path, self.shuffle_data_cache_path_)
+            logging.info(
+                "Found shuffled data successfully, data status has been restored."
+            )
+        return data.shuffle(
+            indices_cache_file_names={"data_points": self.shuffle_data_cache_path_}
+        )
+
     def _pre_dataset(self):
         preprocess_func: Dict[str, Callable] = {
-            "default": lambda data, _: data,
-            "shuffle": lambda data, path: data.shuffle(
-                indices_cache_file_names={k: path for k in data}
-            ),
-            "sort": lambda data, _: data.sort(),
+            "default": lambda data: data,
+            "shuffle": lambda data: self._shuffle_data(data),
+            "sort": lambda data: data.sort(),
         }
 
         if self.config_.dataset_ is None:
@@ -116,40 +146,8 @@ class Task:
         if preprocess_type not in preprocess_func:
             raise NotImplementedError
 
-        # If data preprocess_type is shuffle, create a cache folder,
-        # to store shuffled data and use it for saving checkpoints.
-        if preprocess_type == "shuffle":
-            data_name: str = ""
-            if self.config_.dataset_ is not None:
-                data_name = self.config_.dataset_.name_ + "_"
-            # warning: The cache path can only use up to first level dirs,
-            # otherwise will result in an error.
-            self.shuffle_data_cache_path_ = (
-                ".cache/shuffle_" + data_name + self.task_name()
-            )
-            # Clear the cache files before use.
-            self._del_cache_file()
-            cache_dir, _ = os.path.split(self.shuffle_data_cache_path_)
-            if not os.path.exists(cache_dir):
-                os.makedirs(cache_dir)
-
-            # If exist checkpoint, copy the shuffle_data in checkpoint to cache path.
-            if self.recover_folder_ is not None:
-                recover_data_path: str = (
-                    self.context_.path_
-                    + os.sep
-                    + self.recover_folder_
-                    + os.sep
-                    + "shuffle_data"
-                )
-                shutil.copy(recover_data_path, self.shuffle_data_cache_path_)
-                logging.info(
-                    "Found shuffled data successfully, data status has been restored."
-                )
-        # Process data according to the data preprocess_type,
-        # the data_cache_cath parameter only only works on "shuffle".
-        data = preprocess_func[preprocess_type](data, self.shuffle_data_cache_path_)
-
+        # Process data according to the data preprocess_type.
+        data = preprocess_func[preprocess_type](data)
         logging.info(
             f"Adapter {self.config_.adapter_.name_} "
             f"data size: {len(data["data_points"])}"
