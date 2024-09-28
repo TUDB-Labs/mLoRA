@@ -1,6 +1,6 @@
 ## How to develop a new adapter
 
-Step1. Create the corresponding adapter configuration data item in `config/adapter.py`.
+Step1. Start by creating the corresponding adapter configuration data item in `config/adapter.py` This will serve as the foundational step in defining your adapter.
 
 Step2. Create your module definition in the `model/modules` folder, like `lora.py` file.
 
