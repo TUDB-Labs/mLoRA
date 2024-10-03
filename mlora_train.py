@@ -22,79 +22,47 @@ import mlora.executor
 import mlora.config
 import logging
 import torch
-from torch.utils.data import DataLoader, Dataset
-import json
+from torch.utils.data import DataLoader
+from dataset_utils import CustomDataset, evaluate_model  # Import from new file
 import yaml
-
-
-# Custom dataset class to load data from JSON
-class CustomDataset(Dataset):
-    def __init__(self, data_path):
-        self.data = self.load_data(data_path)
-
-    def load_data(self, data_path):
-        # Load the dataset from JSON
-        with open(data_path, 'r') as f:
-            data = json.load(f)
-        return data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        item = self.data[idx]
-        return item['input'], item['label']  # Adjust this according to your JSON format
-
-
-# Evaluation function to evaluate the model
-def evaluate_model(model, test_data_loader, device):
-    logging.info("Starting evaluation...")
-    model.eval()  # Setting model to evaluation mode
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for data in test_data_loader:
-            inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)  # Move data to device
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    accuracy = 100 * correct / total
-    logging.info(f"Evaluation completed. Accuracy: {accuracy:.2f}%")
-    return accuracy
-
 
 # Function to create the DataLoader using the dataset
 def get_test_data_loader(config):
     # Creating the dataset using the provided configuration
     dataset = CustomDataset(config['data_path_'])
 
-    # Creating the DataLoader from the dataset
-    data_loader = DataLoader(dataset, batch_size=32, shuffle=False)
+    # Creating the DataLoader from the dataset, using a configurable batch size
+    batch_size = config.get('batch_size', 32)  # Default to 32 if not provided in config
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     return data_loader
 
-
 # Function to load YAML configuration file
 def load_yaml_config(yaml_path):
-    with open(yaml_path, 'r') as file:
-        config = yaml.safe_load(file)
-    return config
-
+    try:
+        with open(yaml_path, 'r') as file:
+            config = yaml.safe_load(file)
+        return config
+    except FileNotFoundError as e:
+        logging.error(f"Configuration file not found: {e}")
+        raise
+    except yaml.YAMLError as e:
+        logging.error(f"Error parsing YAML configuration: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"Unexpected error occurred while loading config: {e}")
+        raise
 
 if __name__ == "__main__":
     args = mlora.utils.get_cmd_args()
 
-    # Setup logging, seed, CUDA, and metric logger
+    #logging, seed, CUDA, and metric logger
     mlora.utils.setup_seed(args.seed)
     mlora.utils.setup_logging(args.log_level, args.log_file)
     mlora.utils.setup_cuda_check()
     mlora.utils.setup_metric_logger(args.metric_file)
 
-    # Determine the device (CUDA if available)
+    # Determining the device (CUDA if available)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Using device: {device}")
 
@@ -111,7 +79,12 @@ if __name__ == "__main__":
 
     # Load configuration from the YAML file
     logging.info(f"Loading configuration from {args.config}...")
-    config = load_yaml_config('demo/vera/vera_case_1.yaml')
+    try:
+        config = load_yaml_config(args.config)  # Use dynamic config path
+    except Exception as e:
+        logging.error(f"Failed to load config: {e}")
+        exit(1)  # Exit if config loading fails
+
     logging.info("Configuration loaded.")
 
     # Initialize and add tasks
