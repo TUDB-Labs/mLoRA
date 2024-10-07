@@ -39,7 +39,10 @@ class LLMModelArgs:
             self.n_kv_heads_ = config.num_key_value_heads
         self.n_layers_ = config.num_hidden_layers
         self.rope_theta_ = 10000.0
-        self.norm_eps_ = config.rms_norm_eps
+        if hasattr(config, "rms_norm_eps"):
+            self.norm_eps_ = config.rms_norm_eps
+        else:
+            self.norm_eps_=1e-6
         self.hidden_dropout_ = 0.0
         self.vocab_size_ = config.vocab_size
         self.pad_token_id_ = config.pad_token_id

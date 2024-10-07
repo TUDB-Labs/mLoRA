@@ -24,7 +24,7 @@ class Linear(torch.nn.Module):
         # the name for debug
         super().__init__()
 
-        if not isinstance(weight, torch.nn.Linear):
+        if not isinstance(weight, torch.nn.Linear) :
             assert isinstance(weight, Linear8bitLt) or isinstance(
                 weight, Linear4bit
             ), f"error type - {type(weight)}."
@@ -115,9 +115,16 @@ class Linear(torch.nn.Module):
                     training=True,
                     inplace=False,
                 )
+                if lora_data.dtype != adapter.lora_a_.dtype:
+                    adapter.lora_a_ = adapter.lora_a_.to(lora_data.dtype)
+
                 lora_data = lora_data.mul(adapter.scaling_)
                 lora_data = lora_data @ adapter.lora_a_.transpose(0, 1)
                 lora_data = lora_data * adapter.d_vec_
+                
+                if lora_data.dtype != adapter.lora_b_.dtype:
+                    adapter.lora_b_ = adapter.lora_b_.to(lora_data.dtype)
+
                 lora_data = lora_data @ adapter.lora_b_.transpose(0, 1)
                 lora_data = lora_data * adapter.b_vec_
                 lora_data = lora_data.to(result.dtype)
@@ -158,14 +165,21 @@ class Linear(torch.nn.Module):
                     training=True,
                     inplace=False,
                 )
+                if dora_data.dtype != adapter.lora_a_.dtype:
+                    adapter.lora_a_ = adapter.lora_a_.to(dora_data.dtype)
+
+                if dora_data.dtype != adapter.lora_b_.dtype:
+                    adapter.lora_b_ = adapter.lora_b_.to(dora_data.dtype)
+
                 lora_result = dora_data @ adapter.lora_a_.transpose(0, 1)
                 lora_result = lora_result @ adapter.lora_b_.transpose(0, 1)
                 lora_result = mag_norm_scale * lora_result * adapter.scaling_
-
+                    
                 base_result = (
                     result[start_idx:end_idx] * (mag_norm_scale - 1) + lora_result
                 )
 
+                base_result = base_result.to(result.dtype)
                 result = result.index_copy(
                     dim=0, index=lora_range[start_idx:end_idx], source=base_result
                 )

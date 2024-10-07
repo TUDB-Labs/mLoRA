@@ -16,9 +16,8 @@ class Tokenizer:
         self.pad_id_ = self.tokenizer_.pad_token_id
         self.unk_id_ = self.tokenizer_.unk_token_id
         # maybe pad id is unk
-        if self.pad_id_ is None:
-            assert self.unk_id_ is not None or self.eos_id_ is not None
-            self.pad_id_ = self.unk_id_ if self.unk_id_ is not None else self.eos_id_
+        if self.pad_id_ is None and self.unk_id_ is not None:
+            self.pad_id_ = self.unk_id_
 
     def encode(self, data: str, bos=True, eos=True, cutoff_len=4096) -> Tokens:
         tokens = self.tokenizer_.encode(data, add_special_tokens=False)
