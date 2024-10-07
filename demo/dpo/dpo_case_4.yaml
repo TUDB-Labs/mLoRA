@@ -1,0 +1,37 @@
+dispatcher:
+  name: "default"
+  concurrency_num: 2
+datasets:
+  - name: "dpo_data"
+    data: "demo/data.json"
+    prompt: "demo/preference_prompt.yaml"
+    prompt_type: "preference"
+    preprocess: "default"
+adapters:
+  - name: "lora_dpo"
+    type: "lora"
+    path: "adapters/lora_base_dpo"
+    optimizer: "adamw"
+    lr: 3e-4
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      query_key_value: true
+      dense: true
+      dense_h_to_4h: false
+      dense_4h_to_h: false
+tasks:
+  - type: "dpo"
+    name: "task_0"
+    adapter: "lora_dpo"
+    reference: "base"
+    dataset: "dpo_data"
+    batch_size: 16
+    mini_batch_size: 16
+    num_epochs: 10
+    cutoff_len: 256
+    save_step: 2000
+    loss_type: "sigmoid"
+    beta: 0.1
+    label_smoothing: 0.0
