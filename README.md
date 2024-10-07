@@ -323,6 +323,18 @@ Please cite the repo if you use the code in this repo.
   note={\textsuperscript{*}: these authors contributed equally to this work.}
 }
 ```
+## Contributing
+Steps to contribute into improving this repo! 
+- Fork the repository.
+- Create a new branch for your feature or fix.
+- Submit a pull request with a detailed explanation of your changes.
+- Example PR title: `[Feature] Add support for XYZ`
+
+You can use the pre-commit to check your code.
+```bash
+# Install requirements
+pip install .[ci_test]
+ln -s ../../.github/workflows/pre-commit .git/hooks/pre-commit
 
 ## Copyright
 Copyright © 2024 All Rights Reserved.
