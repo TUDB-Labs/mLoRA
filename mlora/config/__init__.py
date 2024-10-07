@@ -18,6 +18,7 @@ from .task import (
     TaskConfig,
     TrainTaskConfig,
 )
+from .config_chatglm import ChatGLMConfig
 
 __all__ = [
     "MLoRAConfig",
@@ -37,4 +38,5 @@ __all__ = [
     "ADAPTERCONFIG_CLASS",
     "OptimizerConfig",
     "LRSchedulerConfig",
+    "ChatGLMConfig",
 ]

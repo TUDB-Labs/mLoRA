@@ -1,11 +1,12 @@
 import logging
 from typing import Tuple
 
-from mlora.model.llm import LlamaModel, LLMModel
+from mlora.model.llm import LlamaModel, ChatglmModel, LLMModel
 from mlora.model.tokenizer import Tokenizer
 
 MODEL_TYPE_DICT = {
-    "llama": LlamaModel,
+    #"llama": LlamaModel,
+    "chatglm": ChatglmModel,
 }
 
 

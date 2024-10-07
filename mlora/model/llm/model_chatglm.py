@@ -11,6 +11,8 @@ from mlora.model.checkpoint import CheckpointRecomputeFunction
 from mlora.model.modules import AdapterModel, Decoder, Embedding, OutputLayer, RMSNorm
 from mlora.profiler import nvtx_wrapper, set_backward_tracepoint
 from mlora.utils import is_package_available
+from mlora.config import ChatGLMConfig
+from mlora.model.modules.embedding import RotaryEmbedding
 
 if is_package_available("bitsandbytes"):
     from transformers import BitsAndBytesConfig
@@ -66,7 +68,7 @@ def precompute_mask(
     return mask.to(device=device, dtype=dtype)
 
 
-LlamaSequentialModuleIO = Tuple[
+ChatglmSequentialModuleIO = Tuple[
     torch.Tensor,  # the input batch tokens
     torch.Tensor,  # the mask matrics
     ModelData,  # batch data config
@@ -74,10 +76,10 @@ LlamaSequentialModuleIO = Tuple[
 ]
 LEN_LLAMA_SEQUENTIAL_MODULE_IO = 4
 
-LlamaCompatibleModelTypes = ["mistral", "qwen2", "llama"]
+ChatglmCompatibleModelTypes = ["mistral", "qwen2", "llama", "chatglm"]
 
 
-class LlamaSequentialWrapper(torch.nn.Module):
+class ChatglmSequentialWrapper(torch.nn.Module):
     def __init__(self, module: torch.nn.Module):
         super().__init__()
         self.wrapper_module_ = module
@@ -85,7 +87,7 @@ class LlamaSequentialWrapper(torch.nn.Module):
     def name(self) -> str:
         return type(self.wrapper_module_).__name__
 
-    def forward(self, input: LlamaSequentialModuleIO) -> LlamaSequentialModuleIO:
+    def forward(self, input: ChatglmSequentialModuleIO) -> ChatglmSequentialModuleIO:
         assert len(input) == LEN_LLAMA_SEQUENTIAL_MODULE_IO
         assert isinstance(input[0], torch.Tensor)
         assert isinstance(input[1], torch.Tensor)
@@ -138,31 +140,37 @@ class LlamaSequentialWrapper(torch.nn.Module):
         return forward_func_dict[module_name]()
 
 
-class LlamaModel(LLMModel):
+class ChatglmModel(LLMModel):
     seq_module_: torch.nn.Sequential
 
     def __init__(self, args: LLMModelArgs):
-        self.name_or_path_: str = args.name_or_path_
+        self.name_or_path_: str = args._name_or_path
         # sequential model
 
         self.norm_eps_ = args.norm_eps_
 
         self.device_ = args.device_
-        self.n_heads_ = args.n_heads_
+        self.n_heads_ = args.num_attention_heads
         self.dim_ = args.dim_
         self.vocab_size_ = args.vocab_size_
 
         # need to set
-        self.pad_token_id_ = args.pad_token_id_
+        self.pad_token_id_ = args.pad_token_id
         self.eos_token_id_ = -1
 
     @override
     def forward(self, input: ModelData) -> torch.Tensor:
+        #print(input.batch_tokens_)
+        for i in range(len(input.batch_tokens_)):
+            for j in range(len(input.batch_tokens_[i])):
+                if not isinstance(input.batch_tokens_[i][j], int):
+                    input.batch_tokens_[i][j]=0
+
         # train model or inference model: output is probs
         tokens = torch.tensor(
             input.batch_tokens_, dtype=torch.int64, device=self.device_
         )
-
+        
         mask = precompute_mask(tokens, self.n_heads_, self.device_, input.batch_mask_)
 
         if input.enable_checkpoint_:
@@ -240,66 +248,85 @@ class LlamaModel(LLMModel):
                 bnb_4bit_quant_type=precision,
             )
 
-        llama_model = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True, **additional_load_args)
+        chatglm_model = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True, **additional_load_args)
 
-        if llama_model.config.model_type not in LlamaCompatibleModelTypes:
+        if chatglm_model.config.model_type not in ChatglmCompatibleModelTypes:
             assert f"unsupported model type {
-                llama_model.config.model_type}, loading with llama compatible mode."
+                chatglm_model.config.model_type}, loading with llama compatible mode."
 
         logging.info(
-            f"loading llama compatible model - {llama_model.config.model_type}"
+            f"loading chatglm compatible model - {chatglm_model.config.model_type}"
         )
 
-        llama_args = LLMModelArgs(llama_model.config)
-        if llama_args.pad_token_id_ is None:
-            llama_args.pad_token_id_ = -1
-        llama_args.device_ = device
-        llama_args.dtype_ = llama_model.dtype
+        chatglm_args = ChatGLMConfig(chatglm_model.config)
+        if chatglm_args.pad_token_id is None:
+            chatglm_args.pad_token_id = -1
+        chatglm_args.device_ = device
+        chatglm_args.dtype_ = chatglm_model.dtype
+        chatglm_args.model_type = "chatglm"
+        # print(chatglm_model.config.eos_token_id)
+        # print(chatglm_args.eos_token_id)
+        
+        # Rotary positional embeddings
+        rotary_dim = (
+            chatglm_args.hidden_size // chatglm_args.num_attention_heads if chatglm_args.kv_channels is None else chatglm_args.kv_channels
+        )
 
+        chatglm_model.rotary_pos_emb = RotaryEmbedding(rotary_dim // 2, rope_ratio=chatglm_args.rope_ratio,
+                                              original_impl=chatglm_args.original_rope,
+                                              device=device, dtype=chatglm_args.torch_dtype)
+        
         # load model from pretrained large model
-        model = LlamaModel.convert_model_from_huggingface(llama_model, llama_args)
+        model = ChatglmModel.convert_model_from_huggingface(chatglm_model, chatglm_args)
 
         return model
 
     @staticmethod
     def convert_model_from_huggingface(
-        llama_model: AutoModelForCausalLM, llama_args: LLMModelArgs
+        chatglm_model: AutoModelForCausalLM, chatglm_args: ChatGLMConfig,
     ):
-        llama_model.requires_grad_(False)
+        chatglm_model.requires_grad_(False)
 
         seq_model: OrderedDict[str, torch.nn.Module] = OrderedDict()
 
         seq_model.update(
             {
-                "embedding": LlamaSequentialWrapper(
+                "embedding": ChatglmSequentialWrapper(
                     Embedding(
-                        llama_model.model.embed_tokens.weight, llama_args.pad_token_id_
+                        chatglm_model.transformer.embedding.word_embeddings.weight, chatglm_args.pad_token_id
                     )
                 )
             }
         )
 
-        for idx, target_layer in enumerate(llama_model.model.layers):
-            decoder = Decoder(idx, llama_args)
-            decoder.from_pretrained(target_layer, llama_args.norm_eps_)
-            seq_model.update({f"layer{idx}": LlamaSequentialWrapper(decoder)})
+        rotary_pos_emb = chatglm_model.rotary_pos_emb(chatglm_args.seq_length)
+        rotary_pos_emb = rotary_pos_emb[None, :chatglm_args.seq_length]
+        for idx, target_layer in enumerate(chatglm_model.transformer.encoder.layers):
+            decoder = Decoder(idx, chatglm_args)
+            decoder.from_pretrained(
+                target_layer, 
+                rotary_pos_emb, 
+                chatglm_args.norm_eps_)
+            seq_model.update({f"layer{idx}": ChatglmSequentialWrapper(decoder)})
 
         seq_model.update(
             {
-                "norm": LlamaSequentialWrapper(
-                    RMSNorm(llama_model.model.norm.weight, llama_args.norm_eps_)
-                )
-            }
-        )
-        seq_model.update(
-            {
-                "output": LlamaSequentialWrapper(
-                    OutputLayer(llama_model.lm_head.weight, llama_args)
+                "norm": ChatglmSequentialWrapper(
+                    RMSNorm(chatglm_model.transformer.encoder.final_layernorm.weight, chatglm_args.norm_eps_)
                 )
             }
         )
 
-        model = LlamaModel(llama_args)
+
+        seq_model.update(
+            {
+                "output": ChatglmSequentialWrapper(
+                    OutputLayer(chatglm_model.transformer.output_layer.weight, chatglm_args)
+                )
+            }
+        )
+
+        model = ChatglmModel(chatglm_args)
         model.seq_module_ = torch.nn.Sequential(seq_model)
 
         return model

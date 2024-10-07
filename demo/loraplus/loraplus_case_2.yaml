@@ -1,0 +1,57 @@
+dispatcher:
+  name: "default"
+  concurrency_num: 2
+datasets:
+  - name: "data"
+    data: "demo/data.json"
+    prompt: "demo/prompt.yaml"
+    prompt_type: "instruction"
+    preprocess: "shuffle"
+adapters:
+  - name: "lora_0"
+    type: "loraplus"
+    path: "adapters/loraplus_sft_0"
+    optimizer: "adamw"
+    lr_ratio: 8
+    lr: 3e-4
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      query_key_value: true
+      dense: true
+      dense_h_to_4h: false
+      dense_4h_to_h: false
+  - name: "lora_1"
+    type: "loraplus"
+    path: "adapters/loraplus_sft_1"
+    optimizer: "adamw"
+    lr_ratio: 8
+    lr: 3e-5
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      query_key_value: true
+      dense: true
+      dense_h_to_4h: true
+      dense_4h_to_h: true
+tasks:
+  - type: "train"
+    name: "task_0"
+    adapter: "lora_0"
+    dataset: "data"
+    batch_size: 64
+    mini_batch_size: 64
+    num_epochs: 10
+    cutoff_len: 256
+    save_step: 2000
+  - type: "train"
+    name: "task_1"
+    adapter: "lora_1"
+    dataset: "data"
+    batch_size: 64
+    mini_batch_size: 64
+    num_epochs: 10
+    cutoff_len: 256
+    save_step: 2000
