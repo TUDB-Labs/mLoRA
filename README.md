@@ -77,7 +77,7 @@ python mlora_pp_train.py \
   --device "cuda:0" \
   --rank 0 \
   --balance 12 13 \
-  --recompute False \
+  --no-recompute \
   --precision fp32
 
 # in the second node
@@ -90,7 +90,7 @@ python mlora_pp_train.py \
   --device "cuda:1" \
   --rank 1 \
   --balance 12 13 \
-  --recompute False \
+  --no-recompute \
   --precision fp32
 ```
 
