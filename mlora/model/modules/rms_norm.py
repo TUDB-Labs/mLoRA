@@ -13,4 +13,7 @@ class RMSNorm(torch.nn.Module):
         v = data.to(torch.float32).pow(2).mean(-1, keepdim=True)
         rv = data * torch.rsqrt(v + self.norm_eps_)
 
+        if self.weight_.device != data.device:
+            self.to(data.device)
+        
         return (self.weight_ * rv).to(input_dtype)
