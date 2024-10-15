@@ -33,6 +33,8 @@ def objective(trial):
     learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-3)
     enabled_layers = trial.suggest_categorical('enabled_layers', ['last_2', 'all', 'specific'])
 
+    
+
     # Mock training for testing purposes
     eval_metric = mock_train_model(rank, learning_rate, enabled_layers)
     
