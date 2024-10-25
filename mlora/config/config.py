@@ -1,5 +1,6 @@
 from typing import Dict
 
+
 class DictConfig:
     __params_map: Dict[str, str] = {}
 
@@ -11,4 +12,4 @@ class DictConfig:
             if key in config:
                 setattr(self, key, config[key])
             else:
-                setattr(self, key, None)  
+                setattr(self, key, None)

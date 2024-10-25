@@ -8,11 +8,13 @@ import torch.multiprocessing as mp
 TEST_TIMES = 10
 
 
-def send_msg(worker: RpcTransport,
-             task_type: PipeMessageType,
-             src: str,
-             dst: str,
-             loop_times: int):
+def send_msg(
+    worker: RpcTransport,
+    task_type: PipeMessageType,
+    src: str,
+    dst: str,
+    loop_times: int,
+):
     for i in range(loop_times):
         message = PipeMessage(
             src_=src,
@@ -25,9 +27,7 @@ def send_msg(worker: RpcTransport,
         worker.send_message(message)
 
 
-def recv_msg(worker: RpcTransport,
-             task_type: PipeMessageType,
-             loop_times: int):
+def recv_msg(worker: RpcTransport, task_type: PipeMessageType, loop_times: int):
     passed = True
     for _ in range(loop_times):
         while True:
@@ -35,7 +35,9 @@ def recv_msg(worker: RpcTransport,
             if message is not None:
                 break
         # check the message
-        if not torch.allclose(torch.ones((4096, 4096)).cuda(0) * message.msg_id_, message.tensor_data_):
+        if not torch.allclose(
+            torch.ones((4096, 4096)).cuda(0) * message.msg_id_, message.tensor_data_
+        ):
             passed = False
     return passed
 

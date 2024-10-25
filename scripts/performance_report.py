@@ -6,17 +6,18 @@ import csv
 from typing import List, Dict, Tuple
 
 # Command Line Arguments
-parser = argparse.ArgumentParser(description='Performance report.')
-parser.add_argument('--db', type=str, required=True, help='NSys sqlite file.')
-parser.add_argument('--output', type=str, required=True,
-                    help='Export csv file.')
+parser = argparse.ArgumentParser(description="Performance report.")
+parser.add_argument("--db", type=str, required=True, help="NSys sqlite file.")
+parser.add_argument("--output", type=str, required=True, help="Export csv file.")
 
 args = parser.parse_args()
 
-logging.basicConfig(format="[%(asctime)s] Performance: %(message)s",
-                    level="INFO",
-                    handlers=[logging.StreamHandler()],
-                    force=True)
+logging.basicConfig(
+    format="[%(asctime)s] Performance: %(message)s",
+    level="INFO",
+    handlers=[logging.StreamHandler()],
+    force=True,
+)
 
 G_CREATE_TEMP_TABLE = """
 CREATE TEMPORARY TABLE IF NOT EXISTS TEMP_KERN_INFOS AS
@@ -71,9 +72,9 @@ class KernInfo:
     kern_time_: int = 0
     queue_time_: int = 0
 
-    def __init__(self, name: str,
-                 api_start: int, api_end: int,
-                 kern_start: int, kern_end: int):
+    def __init__(
+        self, name: str, api_start: int, api_end: int, kern_start: int, kern_end: int
+    ):
         self.name_ = name
         self.api_start_ = api_start
         self.api_end_ = api_end
@@ -95,9 +96,9 @@ class KernSummary:
 
     kern_cnt_: int = 0
 
-    def __init__(self, name: str,
-                 api_time: int, queue_time: int, kern_time: int,
-                 kern_cnt: int) -> None:
+    def __init__(
+        self, name: str, api_time: int, queue_time: int, kern_time: int, kern_cnt: int
+    ) -> None:
         self.name_ = name
         self.api_time_ = api_time
         self.queue_time_ = queue_time
@@ -117,9 +118,9 @@ class EventInfo:
         self.cnt_ = 0
         self.kerns_ = {}
 
-    def add_kern(self, name: str,
-                 api_start: int, api_end: int,
-                 kern_start: int, kern_end: int):
+    def add_kern(
+        self, name: str, api_start: int, api_end: int, kern_start: int, kern_end: int
+    ):
         if api_start is None or api_end is None:
             return
         assert kern_start is not None
@@ -127,7 +128,8 @@ class EventInfo:
         if name not in self.kerns_:
             self.kerns_[name] = []
         self.kerns_[name].append(
-            KernInfo(name, api_start, api_end, kern_start, kern_end))
+            KernInfo(name, api_start, api_end, kern_start, kern_end)
+        )
 
     def sum(self) -> Dict[str, KernSummary]:
         summary_ret: Dict[str, KernSummary] = {}
@@ -145,7 +147,8 @@ class EventInfo:
         for kern_name, kern_info in self.kerns_.items():
             t_api_time, t_queue_time, t_kern_time = sum_kern_list(kern_info)
             summary_ret[kern_name] = KernSummary(
-                kern_name, t_api_time, t_queue_time, t_kern_time, len(kern_info))
+                kern_name, t_api_time, t_queue_time, t_kern_time, len(kern_info)
+            )
 
         return summary_ret
 
@@ -216,15 +219,14 @@ if __name__ == "__main__":
             events[event_name] = EventInfo(event_name)
         event_item = events[event_name]
         event_item.cnt_ += 1
-        event_item.ttime_ += (end_time - start_time)
+        event_item.ttime_ += end_time - start_time
     logging.info("Count the NVTX event done.")
 
     logging.info("To get kernel info.")
     for row in conn.execute(G_SELECT_NVTX_KERN):
         event_name, api_start, api_end, kern_start, kern_end, kern_name = row
         event_item = events[event_name]
-        event_item.add_kern(kern_name, api_start,
-                            api_end, kern_start, kern_end)
+        event_item.add_kern(kern_name, api_start, api_end, kern_start, kern_end)
     logging.info("Get kernel info done.")
 
     with open(args.output, "w") as csv_f:

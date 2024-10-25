@@ -16,14 +16,15 @@ G_TEST_ADAPTERS = [
     "adapters/loraplus_sft_dpo",
     # cpo adapter
     "adapters/lora_cpo",
-    "adapters/loraplus_cpo"
+    "adapters/loraplus_cpo",
 ]
 
 
 def get_cmd_args():
-    parser = argparse.ArgumentParser(description='mLoRA test function')
-    parser.add_argument('--base_model', type=str, required=True,
-                        help='Path to or name of base model')
+    parser = argparse.ArgumentParser(description="mLoRA test function")
+    parser.add_argument(
+        "--base_model", type=str, required=True, help="Path to or name of base model"
+    )
     return parser.parse_args()
 
 
@@ -63,6 +64,7 @@ if __name__ == "__main__":
             truncation=True,
         )
 
-        output: str = sequences[0]['generated_text'].strip().replace(
-            "\r", " ").replace("\n", " ")
+        output: str = (
+            sequences[0]["generated_text"].strip().replace("\r", " ").replace("\n", " ")
+        )
         print(f"Adapter {adapter} Output is: {output}")

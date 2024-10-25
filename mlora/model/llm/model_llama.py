@@ -152,7 +152,6 @@ class LlamaModel(LLMModel):
 
         return data[0]
 
- 
     @staticmethod
     def from_pretrained(
         path: str,
@@ -167,7 +166,10 @@ class LlamaModel(LLMModel):
                 config = AutoConfig.from_pretrained(path)
                 weight_map = [
                     "model.embed_tokens",
-                    *[f"model.layers.{layer_id}" for layer_id in range(0, config.num_hidden_layers)],
+                    *[
+                        f"model.layers.{layer_id}"
+                        for layer_id in range(0, config.num_hidden_layers)
+                    ],
                     "model.norm",
                     "lm_head",
                 ]
@@ -185,7 +187,9 @@ class LlamaModel(LLMModel):
         }
 
         logging.info(f"Loading model with precision - {precision}")
-        additional_load_args["torch_dtype"] = load_type_dict.get(precision, torch.float32)
+        additional_load_args["torch_dtype"] = load_type_dict.get(
+            precision, torch.float32
+        )
         llama_model = AutoModelForCausalLM.from_pretrained(path, **additional_load_args)
 
         llama_args = LLMModelArgs(llama_model.config)
@@ -195,7 +199,9 @@ class LlamaModel(LLMModel):
         return LlamaModel.convert_model_from_huggingface(llama_model, llama_args)
 
     @staticmethod
-    def convert_model_from_huggingface(llama_model: AutoModelForCausalLM, llama_args: LLMModelArgs):
+    def convert_model_from_huggingface(
+        llama_model: AutoModelForCausalLM, llama_args: LLMModelArgs
+    ):
         llama_model.requires_grad_(False)
 
         seq_model = OrderedDict()
@@ -261,21 +267,21 @@ class LlamaModel(LLMModel):
         Apply the LoRA adapter with the specified rank to the model layers.
         """
         for layer in self.seq_module_:
-            if isinstance(layer.wrapper_module_, Decoder):  
+            if isinstance(layer.wrapper_module_, Decoder):
                 layer.wrapper_module_.apply_lora(rank=rank)
 
     def enable_layers(self, enabled_layers):
         """
         Enable specific layers for LoRA adaptation.
         """
-        if enabled_layers == 'last_2':
+        if enabled_layers == "last_2":
             for layer in self.seq_module_[-2:]:
                 layer.wrapper_module_.enable_lora()
-        elif enabled_layers == 'all':
+        elif enabled_layers == "all":
             for layer in self.seq_module_:
                 layer.wrapper_module_.enable_lora()
-        elif enabled_layers == 'specific':
-            specific_layers = [1, 3, 5]  
+        elif enabled_layers == "specific":
+            specific_layers = [1, 3, 5]
             for i, layer in enumerate(self.seq_module_):
                 if i in specific_layers:
                     layer.wrapper_module_.enable_lora()

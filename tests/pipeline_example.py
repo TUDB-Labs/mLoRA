@@ -13,10 +13,12 @@ from enum import Enum, auto
 from typing import Dict, List
 
 
-logging.basicConfig(format="[%(asctime)s] [%(threadName)s] m-LoRA: %(message)s",
-                    level="INFO",
-                    handlers=[logging.StreamHandler()],
-                    force=True)
+logging.basicConfig(
+    format="[%(asctime)s] [%(threadName)s] m-LoRA: %(message)s",
+    level="INFO",
+    handlers=[logging.StreamHandler()],
+    force=True,
+)
 
 G_CALC_TOTAL_CNT = 10
 G_TEST_TOTAL_CNT = 10
@@ -34,7 +36,8 @@ class TestModel(torch.nn.Module):
         super(TestModel, self).__init__()
         self.device_ = device
         self.weight_ = torch.rand(
-            (4096, 4096), dtype=torch.float32, device=self.device_, requires_grad=True)
+            (4096, 4096), dtype=torch.float32, device=self.device_, requires_grad=True
+        )
 
     def forward(self, data: torch.Tensor):
         for _ in range(0, G_CALC_TOTAL_CNT):
@@ -44,7 +47,7 @@ class TestModel(torch.nn.Module):
         return data
 
 
-class Pipe():
+class Pipe:
     world_size_: int = -1
     rank_: int = -1
     device_: torch.device = None
@@ -72,19 +75,18 @@ class Pipe():
         else:
             self.role_ = WorkerRole.MID
 
-        self.transport_ = RpcTransport(
-            self.rank_, self.world_size_, self.device_)
+        self.transport_ = RpcTransport(self.rank_, self.world_size_, self.device_)
 
         self.model_ = TestModel(self.device_)
-        self.datas_ = [torch.rand(
-            (4096, 4096), device=self.device_, dtype=torch.float32)] * G_TEST_TOTAL_CNT
+        self.datas_ = [
+            torch.rand((4096, 4096), device=self.device_, dtype=torch.float32)
+        ] * G_TEST_TOTAL_CNT
 
         self.forward_cnt_ = 0
         self.forward_stop_ = False
         self.input_stop_ = False
 
-        self.default_stream_ = CudaStream(
-            torch.cuda.default_stream(self.device_))
+        self.default_stream_ = CudaStream(torch.cuda.default_stream(self.device_))
 
         self.test_grads_: List[torch.Tensor] = []
 
@@ -104,7 +106,11 @@ class Pipe():
             if not self.forward_stop_:
                 self.process_forward()
 
-            if len(self.backward_cache_) == 0 and self.forward_stop_ and self.input_stop_:
+            if (
+                len(self.backward_cache_) == 0
+                and self.forward_stop_
+                and self.input_stop_
+            ):
                 # no froward and backward request
                 break
 
@@ -121,12 +127,12 @@ class Pipe():
     def process_backward(self):
         assert self.role_ != WorkerRole.TAIL
 
-        message = self.transport_.recv_message(
-            PipeMessageType.GRADIENTS, block=False)
+        message = self.transport_.recv_message(PipeMessageType.GRADIENTS, block=False)
         if message is None:
             return
         logging.info(
-            f"Recv the gradients - {str(message.msg_id_)[:8]} from {message.src_}")
+            f"Recv the gradients - {str(message.msg_id_)[:8]} from {message.src_}"
+        )
 
         msg_id = message.msg_id_
 
@@ -143,12 +149,12 @@ class Pipe():
         assert not self.forward_stop_
 
         # recv the tensors from prev-worker
-        message = self.transport_.recv_message(
-            PipeMessageType.ACTIVATIONS, block=False)
+        message = self.transport_.recv_message(PipeMessageType.ACTIVATIONS, block=False)
         if message is None:
             return
         logging.info(
-            f"Recv the activations - {str(message.msg_id_)[:8]} from {message.src_}")
+            f"Recv the activations - {str(message.msg_id_)[:8]} from {message.src_}"
+        )
 
         # use RecvOperator get the real data
         #   the operator also auto send the backward grad to prev worker
@@ -158,12 +164,16 @@ class Pipe():
             logging.info("Forward done be signaled.")
         else:
             data = RecvOperator.apply(
-                torch.tensor(1.0, requires_grad=True), self.transport_, message)
+                torch.tensor(1.0, requires_grad=True), self.transport_, message
+            )
             data.grad_fn.pre_stage_fn = self.default_stream_.poll
             self.forward_cnt_ += 1
             data = self.model_(data)
 
-        if self.stop_signal_ is not None and self.stop_signal_.item() == self.forward_cnt_:
+        if (
+            self.stop_signal_ is not None
+            and self.stop_signal_.item() == self.forward_cnt_
+        ):
             self.forward_stop_ = True
 
         # mid worker need to send the result to next worker
@@ -186,7 +196,8 @@ class Pipe():
         if G_TEST_CNT >= G_TEST_TOTAL_CNT:
             self.input_stop_ = True
             data = torch.tensor(
-                [self.forward_cnt_], dtype=torch.long, device="cpu", requires_grad=False)
+                [self.forward_cnt_], dtype=torch.long, device="cpu", requires_grad=False
+            )
             assert self.is_stop_signal(data)
             logging.info("Forward done be signaled.")
         else:
@@ -209,8 +220,13 @@ class Pipe():
         if self.is_stop_signal(tensor_data):
             msg_id = -1
 
-        phony: torch.Tensor = SendOperator.apply(torch.tensor(
-            1.0, requires_grad=True), tensor_data, self.transport_, msg_id, None)
+        phony: torch.Tensor = SendOperator.apply(
+            torch.tensor(1.0, requires_grad=True),
+            tensor_data,
+            self.transport_,
+            msg_id,
+            None,
+        )
 
         if self.is_stop_signal(tensor_data):
             return
