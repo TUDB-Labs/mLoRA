@@ -153,19 +153,7 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"Unhandled error: {e}")
         raise
-import logging
-import os
-from typing import Dict
 
-import optuna
-import yaml
-
-import mlora.config
-import mlora.executor
-import mlora.model
-import mlora.utils
-from mlora.config.adapter import LoRAConfig
-from mlora.config.task import TrainTaskConfig
 
 # Set up logging
 logging.basicConfig(
