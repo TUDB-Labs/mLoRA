@@ -10,4 +10,3 @@ class DictConfig:
     def init(self, params_map: Dict[str, str], config: Dict[str, str]):
         for key, value in params_map.items():
             setattr(self, key, config[value])
- 
