@@ -16,39 +16,29 @@
 #
 # Github:  https://github.com/TUDB-Labs/mLoRA
 
-import optuna
 import mlora.model
 import mlora.utils
 import mlora.executor
 import mlora.config
 
-def mock_train_model(rank, learning_rate, enabled_layers):
-    # Mock model training
-    score = rank * learning_rate * (1 if enabled_layers == 'last_2' else 2)
-    return score
-
-def objective(trial):
-    #  the hyperparameter search space
-    rank = trial.suggest_categorical('rank', [4, 8, 16])
-    learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-3)
-    enabled_layers = trial.suggest_categorical('enabled_layers', ['last_2', 'all', 'specific'])
-
-    
-
-    # Mock training for testing purposes
-    eval_metric = mock_train_model(rank, learning_rate, enabled_layers)
-    
-    # Return the evaluation metric (for Optuna, we minimize this score)
-    return eval_metric
-
-
 if __name__ == "__main__":
-    # Run hyperparameter search using Optuna
-    study = optuna.create_study(direction='minimize')  # Set to 'minimize' since we want to reduce the score
-    study.optimize(objective, n_trials=10)  # Run 10 trials (adjust as needed)
+    args = mlora.utils.get_cmd_args()
 
-    # Output the best hyperparameters found
-    print(f"Best hyperparameters found: {study.best_params}")
-    print(f"Best evaluation metric: {study.best_value}")
-    print(f"Number of trials completed: {len(study.trials)}")
-    
+    mlora.utils.setup_seed(args.seed)
+    mlora.utils.setup_logging(args.log_level, args.log_file)
+    mlora.utils.setup_cuda_check()
+    mlora.utils.setup_metric_logger(args.metric_file)
+
+    # enable the trace mode for profiling performance
+    if args.trace:
+        mlora.utils.setup_trace_mode()
+
+    tokenizer, model = mlora.model.load_model(args)
+    config = mlora.config.MLoRAConfig(args.config)
+
+    # init all task from config file
+    executor = mlora.executor.Executor(model, tokenizer, config)
+    for item in config.tasks_:
+        executor.add_task(item)
+
+    executor.execute()

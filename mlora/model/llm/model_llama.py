@@ -1,8 +1,10 @@
+import logging
+from collections import OrderedDict
+from typing import Dict, List, Optional, Tuple, override
+
 import torch
 from torch.nn.modules import Sequential
 from transformers import AutoConfig, AutoModelForCausalLM
-from typing import List, Optional, Tuple, Dict
-
 
 from mlora.model.args import LinearInfo, LLMModelArgs, Masks, ModelData
 from mlora.model.checkpoint import CheckpointRecomputeFunction
@@ -18,6 +20,17 @@ else:
 from .model_llm import LLMModel
 
 
+# input_tokens shape is: batch_size * seq_len
+#   default: upper triangular matrix like below, i.e. diagonal = 1
+#            0 -inf -inf
+#            0    0 -inf
+#            0    0    0
+# additional_mask: batch_size * seq_len
+#   default: is None the matrix like default, if set true, the mask metric will be -inf
+#   example: [[True, False, False]]
+#           -inf -inf -inf
+#           -inf    0 -inf
+#           -inf    0    0
 def precompute_mask(
     input_tokens: torch.Tensor,
     n_heads: int,
@@ -55,7 +68,7 @@ def precompute_mask(
 
 LlamaSequentialModuleIO = Tuple[
     torch.Tensor,  # the input batch tokens
-    torch.Tensor,  # the mask matrices
+    torch.Tensor,  # the mask matrics
     ModelData,  # batch data config
     bool,  # whether to use checkpoint
 ]
@@ -117,7 +130,10 @@ class LlamaSequentialWrapper(torch.nn.Module):
         }
 
         module_name = self.name()
-        assert module_name in forward_func_dict, f"error module name {module_name}"
+        assert (
+            module_name in forward_func_dict
+        ), f"error module name {
+            module_name}"
 
         return forward_func_dict[module_name]()
 
@@ -127,15 +143,22 @@ class LlamaModel(LLMModel):
 
     def __init__(self, args: LLMModelArgs):
         self.name_or_path_: str = args.name_or_path_
+        # sequential model
+
         self.norm_eps_ = args.norm_eps_
+
         self.device_ = args.device_
         self.n_heads_ = args.n_heads_
         self.dim_ = args.dim_
         self.vocab_size_ = args.vocab_size_
+
+        # need to set
         self.pad_token_id_ = args.pad_token_id_
         self.eos_token_id_ = -1
 
+    @override
     def forward(self, input: ModelData) -> torch.Tensor:
+        # train model or inference model: output is probs
         tokens = torch.tensor(
             input.batch_tokens_, dtype=torch.int64, device=self.device_
         )
@@ -152,7 +175,7 @@ class LlamaModel(LLMModel):
 
         return data[0]
 
- 
+    @override
     @staticmethod
     def from_pretrained(
         path: str,
@@ -160,19 +183,29 @@ class LlamaModel(LLMModel):
         precision: str,
         partial_model_to_device: Optional[List[int]] = None,
     ) -> LLMModel:
+        # create the device map for parallelism
         def create_device_map() -> str | Dict[str, str]:
+            device_map: str | Dict[str, str]
             if partial_model_to_device is None:
-                return device
+                device_map = device
             else:
                 config = AutoConfig.from_pretrained(path)
+                # Be careful, this is hard coded.
                 weight_map = [
                     "model.embed_tokens",
-                    *[f"model.layers.{layer_id}" for layer_id in range(0, config.num_hidden_layers)],
+                    *[
+                        f"model.layers.{layer_id}"
+                        for layer_id in range(0, config.num_hidden_layers)
+                    ],
                     "model.norm",
                     "lm_head",
                 ]
-                return {map_item: "disk" for map_item in weight_map}
+                device_map = {map_item: "disk" for map_item in weight_map}
+                for partial_weight in partial_model_to_device:
+                    device_map[weight_map[partial_weight]] = device
+            return device_map
 
+        # the argument for the LlamaForCausalLM load the pretrained large model
         load_type_dict = {
             "fp32": torch.float32,
             "fp16": torch.float16,
@@ -185,20 +218,57 @@ class LlamaModel(LLMModel):
         }
 
         logging.info(f"Loading model with precision - {precision}")
-        additional_load_args["torch_dtype"] = load_type_dict.get(precision, torch.float32)
+
+        if precision in load_type_dict:
+            additional_load_args["torch_dtype"] = load_type_dict[precision]
+        else:
+            load_4bit = precision in ["nf4", "fp4"]
+            load_8bit = precision == "int8"
+
+            additional_load_args["torch_dtype"] = torch.float32
+            additional_load_args["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=load_4bit,
+                load_in_8bit=load_8bit,
+                # int8 only for GPU, fp32 for cpu
+                llm_int8_enable_fp32_cpu_offload=True,
+                # do not hold the fp16 part
+                # when forward and backward need to convert int8 to fp16
+                llm_int8_has_fp16_weight=False,
+                # only for qlora 4bit
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type=precision,
+            )
+
         llama_model = AutoModelForCausalLM.from_pretrained(path, **additional_load_args)
 
-        llama_args = LLMModelArgs(llama_model.config)
-        llama_args.pad_token_id_ = llama_args.pad_token_id_ or -1
-        llama_args.device_ = device
+        if llama_model.config.model_type not in LlamaCompatibleModelTypes:
+            assert f"unsupported model type {
+                llama_model.config.model_type}, loading with llama compatible mode."
 
-        return LlamaModel.convert_model_from_huggingface(llama_model, llama_args)
+        logging.info(
+            f"loading llama compatible model - {llama_model.config.model_type}"
+        )
+
+        llama_args = LLMModelArgs(llama_model.config)
+        if llama_args.pad_token_id_ is None:
+            llama_args.pad_token_id_ = -1
+        llama_args.device_ = device
+        llama_args.dtype_ = llama_model.dtype
+
+        # load model from pretrained large model
+        model = LlamaModel.convert_model_from_huggingface(llama_model, llama_args)
+
+        return model
 
     @staticmethod
-    def convert_model_from_huggingface(llama_model: AutoModelForCausalLM, llama_args: LLMModelArgs):
+    def convert_model_from_huggingface(
+        llama_model: AutoModelForCausalLM, llama_args: LLMModelArgs
+    ):
         llama_model.requires_grad_(False)
 
-        seq_model = OrderedDict()
+        seq_model: OrderedDict[str, torch.nn.Module] = OrderedDict()
+
         seq_model.update(
             {
                 "embedding": LlamaSequentialWrapper(
@@ -234,48 +304,31 @@ class LlamaModel(LLMModel):
 
         return model
 
+    @override
     def load_adapter(self, adapter_model: AdapterModel):
+        # module is LlamaSequentialWrapper
         for module in self.seq_module_:
-            if module.name() == "Decoder":
-                module.wrapper_module_.load_adapter(adapter_model)
+            if module.name() != "Decoder":
+                continue
+            module.wrapper_module_.load_adapter(adapter_model)
 
+    @override
     def offload_adapter(self, adapter_name: str):
+        # now only transformers block have adapter
         for module in self.seq_module_:
-            if module.name() == "Decoder":
-                module.wrapper_module_.offload_adapter(adapter_name)
+            if module.name() != "Decoder":
+                continue
+            module.wrapper_module_.offload_adapter(adapter_name)
 
-    def forward(self, input: ModelData) -> torch.Tensor:
-
+    @override
+    def linears_info(self) -> OrderedDict[str, LinearInfo]:
         ret_val = OrderedDict()
         for module in self.seq_module_:
-            if module.name() == "Decoder":
-                ret_val.update(module.wrapper_module_.linears_info())
+            if module.name() != "Decoder":
+                continue
+            ret_val.update(module.wrapper_module_.linears_info())
         return ret_val
 
+    @override
     def sequential(self) -> Sequential:
         return self.seq_module_
-
-    # New methods for applying LoRA rank and enabling specific layers
-    def apply_lora(self, rank):
-        """
-        Apply the LoRA adapter with the specified rank to the model layers.
-        """
-        for layer in self.seq_module_:
-            if isinstance(layer.wrapper_module_, Decoder):  
-                layer.wrapper_module_.apply_lora(rank=rank)
-
-    def enable_layers(self, enabled_layers):
-        """
-        Enable specific layers for LoRA adaptation.
-        """
-        if enabled_layers == 'last_2':
-            for layer in self.seq_module_[-2:]:
-                layer.wrapper_module_.enable_lora()
-        elif enabled_layers == 'all':
-            for layer in self.seq_module_:
-                layer.wrapper_module_.enable_lora()
-        elif enabled_layers == 'specific':
-            specific_layers = [1, 3, 5]  
-            for i, layer in enumerate(self.seq_module_):
-                if i in specific_layers:
-                    layer.wrapper_module_.enable_lora()
