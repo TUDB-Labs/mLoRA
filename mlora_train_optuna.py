@@ -1,8 +1,10 @@
+import logging
 import os
+from typing import Dict
+
 import optuna
 import yaml
-import logging
-from typing import Dict
+
 import mlora.config
 import mlora.executor
 import mlora.model
@@ -25,7 +27,8 @@ def load_model_config(config_path):
         with open(config_path, "r") as config_file:
             return yaml.safe_load(config_file)
     else:
-        logging.info(f"No config found at {config_path}, using default settings.")
+        logging.info(
+            f"No config found at {config_path}, using default settings.")
         return None
 
 
@@ -83,7 +86,8 @@ def objective(trial):
 
     target_modules = {"transformer": True}
     logging.info(
-        f"Running trial with rank={rank}, alpha={alpha}, lr={lr}, " f"dropout={dropout}"
+        f"Running trial with rank={rank}, alpha={alpha}, lr={lr}, "
+        f"dropout={dropout}"
     )
 
     task_config = generate_task_config(
@@ -144,7 +148,8 @@ if __name__ == "__main__":
     except FileNotFoundError as e:
         logging.error(f"Configuration file not found: {e}")
     except AssertionError as e:
-        logging.error(f"Assertion error in model config or exe task addition: {e}")
+        logging.error(
+            f"Assertion error in model config or exe task addition: {e}")
     except Exception as e:
         logging.error(f"Unhandled error: {e}")
         raise
