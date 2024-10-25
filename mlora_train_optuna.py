@@ -1,7 +1,6 @@
-import json
 import os
 import optuna
-import yaml  
+import yaml
 import logging
 from typing import Dict
 import mlora.config
@@ -12,7 +11,11 @@ from mlora.config.adapter import LoRAConfig
 from mlora.config.task import TrainTaskConfig
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 
 def load_model_config(config_path):
     """
@@ -21,10 +24,12 @@ def load_model_config(config_path):
     if os.path.exists(config_path):
         logging.info(f"Loading model config from {config_path}")
         with open(config_path, 'r') as config_file:
-            return yaml.safe_load(config_file) 
+            return yaml.safe_load(config_file)
     else:
-        logging.info(f"No config found at {config_path}, using default settings.")
+        logging.info(
+            f"No config found at {config_path}, using default settings.")
         return None
+
 
 def generate_task_config(
     task_idx: int,
@@ -50,7 +55,7 @@ def generate_task_config(
             }
         )
     }
-    datasets = {f"test_{task_idx}": "demo/data.json"}  
+    datasets = {f"test_{task_idx}": "demo/data.json"}
 
     return TrainTaskConfig(
         {
@@ -68,6 +73,7 @@ def generate_task_config(
         datasets,
     )
 
+
 def objective(trial):
     """
     Objective function for Optuna hyperparameter tuning.
@@ -77,18 +83,32 @@ def objective(trial):
     lr = float(trial.suggest_loguniform('learning_rate', 1e-5, 1e-2))
     dropout = float(trial.suggest_float('dropout', 0.0, 0.5))
 
-    target_modules = {"transformer": True}  
-    logging.info(f"Running trial with rank={rank}, alpha={alpha}, lr={lr}, dropout={dropout}")
-
-    task_config = generate_task_config(
-        task_idx=0, rank=rank, alpha=alpha, dropout=dropout, target_modules=target_modules, lr=lr
+    target_modules = {"transformer": True}
+    logging.info(
+        f"Running trial with rank={rank}, alpha={alpha}, lr={lr}, "
+        f"dropout={dropout}"
     )
 
-    model_config = load_model_config(args.config)
+    task_config = generate_task_config(
+        task_idx=0, rank=rank, alpha=alpha, dropout=dropout,
+        target_modules=target_modules, lr=lr
+    )
 
+    # Load model config and initialize training
+    load_model_config(args.config)
+
+    # Load model and tokenizer
     tokenizer, model = mlora.model.load_model(args)
-    config = mlora.config.MLoRAConfig(args.config)
 
+    # Log trainable parameters
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            logging.info(
+                f"Parameter: {name} requires_grad=True"
+            )
+
+    # Initialize other components
+    config = mlora.config.MLoRAConfig(args.config)
     executor = mlora.executor.Executor(model, tokenizer, config)
     executor.add_task(task_config)
 
@@ -102,6 +122,7 @@ def objective(trial):
     executor.execute()
 
     return loss_dict["test_0"]
+
 
 if __name__ == "__main__":
     args = mlora.utils.get_cmd_args()
@@ -119,12 +140,18 @@ if __name__ == "__main__":
     try:
         study = optuna.create_study(direction='minimize')
         study.optimize(objective, n_trials=20)
-        logging.info(f"Best hyperparameters found: {study.best_params}")
+        logging.info(
+            f"Best hyperparameters found: {study.best_params}"
+        )
 
     except FileNotFoundError as e:
-        logging.error(f"Configuration file not found: {e}")
+        logging.error(
+            f"Configuration file not found: {e}"
+        )
     except AssertionError as e:
-        logging.error(f"Assertion error in model configuration or executor task addition: {e}")
+        logging.error(
+            f"Assertion error in model config or exe task addition: {e}"
+        )
     except Exception as e:
         logging.error(f"Unhandled error: {e}")
         raise
