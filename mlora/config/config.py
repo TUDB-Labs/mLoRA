@@ -1,5 +1,6 @@
 from typing import Dict
 
+
 class DictConfig:
     __params_map: Dict[str, str] = {}
 
@@ -8,7 +9,4 @@ class DictConfig:
 
     def init(self, params_map: Dict[str, str], config: Dict[str, str]):
         for key, value in params_map.items():
-            if key in config:
-                setattr(self, key, config[key])
-            else:
-                setattr(self, key, None)  
+            setattr(self, key, config[value])
