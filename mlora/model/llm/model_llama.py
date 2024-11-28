@@ -217,6 +217,10 @@ class LlamaModel(LLMModel):
             "torch_dtype": torch.float32,
         }
 
+        # If it is an H100 device, set precision to nf4
+        if torch.cuda.is_available() and "H100" in torch.cuda.get_device_name(torch.cuda.current_device()):
+            precision = "nf4"
+
         logging.info(f"Loading model with precision - {precision}")
 
         if precision in load_type_dict:
