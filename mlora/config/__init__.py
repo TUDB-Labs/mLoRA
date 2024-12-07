@@ -17,6 +17,7 @@ from .task import (
     DPOTaskConfig,
     TaskConfig,
     TrainTaskConfig,
+    PPOTaskConfig,
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     "ADAPTERCONFIG_CLASS",
     "OptimizerConfig",
     "LRSchedulerConfig",
+    "PPOTaskConfig",
 ]
