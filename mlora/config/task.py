@@ -27,7 +27,8 @@ class TaskConfig(DictConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
-        self.adapter_ = adapters[config["adapter"]]
+        if(type(config["adapter"])==str): self.adapter_ = adapters[config["adapter"]]
+        else : self.adapter_=adapters[config["adapter"][0]]
         self.dataset_: DatasetConfig | None = datasets[config["dataset"]]
 
 
@@ -147,10 +148,58 @@ class CITTaskConfig(TrainTaskConfig):
         self.lambda_ = float(self.lambda_)
         self.temperature_ = float(self.temperature_)
 
+class PPOTaskConfig(TrainTaskConfig):
+    gamma_: float
+    lamdb_: float
+    entropy_coef_: float
+    entropy_coef_decay_: float
+    K_epochs_: int
+    T_horizon_: int
+    loss_type1_:str
+    loss_type2_:str
+    clip_rate_: float
+    adapter__: AdapterConfig
+    generate_num_: int
+
+    __params_map: Dict[str, str] = {
+        "gamma_": "gamma",
+        "lamdb_": "lamdb",
+        "entropy_coef_": "entropy_coef",
+        "entropy_coef_decay_": "entropy_coef_decay",
+        "K_epochs_": "K_epochs",
+        "T_horizon_": "T_horizon",
+        "optim_num_": "optim_num",
+        "loss_type1_": "loss_type1",
+        "loss_type2_": "loss_type2",
+        "clip_rate_": "clip_rate",
+        "generate_num_": "generate_num",
+    }
+
+    def __init__(
+        self,
+        config: Dict[str, str],
+        adapters: Mapping[str, AdapterConfig],
+        datasets: Mapping[str, DatasetConfig],
+    ):
+        super().__init__(config, adapters, datasets)
+        self.init(self.__params_map, config)
+
+        self.gamma_ = float(self.gamma_)
+        self.lamdb_ = float(self.lamdb_)
+        self.entropy_coef_ = float(self.entropy_coef_)
+        self.entropy_coef_decay_ = float(self.entropy_coef_decay_)
+        self.clip_rate_=float(self.clip_rate_)
+        self.K_epochs_=int(self.K_epochs_)
+        self.T_horizon_=int(self.T_horizon_)
+        self.optim_num_=int(self.optim_num_)
+        self.adapter__=adapters[config["adapter"][1]]
+        self.generate_num_=int(self.generate_num_)
+        
 
 TASKCONFIG_CLASS: Dict[str, Type[TaskConfig]] = {
     "train": TrainTaskConfig,
     "dpo": DPOTaskConfig,
     "cpo": CPOTaskConfig,
     "cit": CITTaskConfig,
+    "ppo":PPOTaskConfig,
 }
