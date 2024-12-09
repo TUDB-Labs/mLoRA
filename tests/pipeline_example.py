@@ -3,7 +3,6 @@ from mlora.executor.pipeline.function import SendOperator, RecvOperator
 from mlora.executor.pipeline.messages import PipeMessageType
 from mlora.executor.pipeline.stream import CudaStream
 from mlora.utils import setup_seed
-#test
 
 import os
 import torch
