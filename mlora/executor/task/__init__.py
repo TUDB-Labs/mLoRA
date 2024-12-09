@@ -4,6 +4,7 @@ from typing import MutableMapping, Type
 from .cit_task import CITTask
 from .cpo_task import CPOTask
 from .dpo_task import DPOTask
+from .ppo_task import PPOTask
 from .task import Task
 from .train_task import TrainTask
 
@@ -12,6 +13,7 @@ TASK_CLASS: MutableMapping[str, Type[Task]] = {
     "dpo": DPOTask,
     "cpo": CPOTask,
     "cit": CITTask,
+    "ppo": PPOTask,
 }
 
 
@@ -32,5 +34,6 @@ __all__ = [
     "DPOTask",
     "CPOTask",
     "CITTask",
+    "PPOTask",
     "register_task_class",
 ]
