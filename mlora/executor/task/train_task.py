@@ -182,7 +182,12 @@ class TrainTask(Task):
 
         return ret_batch_tokens, ret_batch_masks
 
-    def _save(self, is_checkpoint: bool = False, is_pipeline: Optional[int] = None, additional_info: Dict[str, str] = {}):
+    def _save(
+        self,
+        is_checkpoint: bool = False,
+        is_pipeline: Optional[int] = None,
+        additional_info: Dict[str, str] = {},
+    ):
         output_dir = self.context_.path_
         if is_pipeline is not None:
             output_dir = output_dir + os.sep + f"rank_{is_pipeline}"
