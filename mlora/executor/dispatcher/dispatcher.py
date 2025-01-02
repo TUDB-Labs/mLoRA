@@ -114,22 +114,29 @@ class Dispatcher:
             self.done_event_.notify(task)
 
     def _align_batch_tokens(
-        self, batch_tokens: List[Tokens], configs: List[MLoRADataConfig]
-    ) -> Tuple[List[Tokens], List[Masks]]:
+        self, batch_tokens: List[Tokens], batch_label: List[Tokens], configs: List[MLoRADataConfig]
+    ) -> Tuple[List[Tokens], List[Tokens], List[Masks]]:
         max_seq_len = max(map(lambda x: len(x), batch_tokens))
+        max_seq_len= max(max_seq_len,max(map(lambda x: len(x), batch_label)))
         max_seq_len = math.ceil(max_seq_len / 8) * 8
+    
 
         batch_masks: List[Masks] = []
 
         for data_config in configs:
             s_idx = data_config.batch_start_idx_
             e_idx = data_config.batch_end_idx_
+            label_s_idx=data_config.label_start_idx
+            label_e_idx=data_config.label_end_idx
             batch_tokens[s_idx:e_idx], masks = data_config.expand_fn_(
                 batch_tokens[s_idx:e_idx], max_seq_len
             )
+            batch_label[label_s_idx:label_e_idx], _= data_config.expand_fn_(
+                batch_label[label_s_idx:label_e_idx], max_seq_len
+            )
             batch_masks.extend(masks)
 
-        return batch_tokens, batch_masks
+        return batch_tokens, batch_label, batch_masks
 
     def data(self) -> MLoRAData | None:
         self._dispatch_task_in()
@@ -137,20 +144,25 @@ class Dispatcher:
         batch_tokens: List[Tokens] = []
         batch_masks: List[Masks] = []
         data_configs: List[MLoRADataConfig] = []
+        batch_label: List[Tokens]= []
 
         # get all train data
         start_idx: int = 0
+        label_start_idx: int =0
+
         for task in self.running_:
-            data, data_config = task.data(start_idx)
+            data,label, data_config = task.data(start_idx,label_start_idx)
             data_configs.extend(data_config)
             batch_tokens.extend(data)
+            batch_label.extend(label)
             start_idx = start_idx + len(data)
+            label_start_idx = label_start_idx + len(label)
 
         # post process this batch data
-        batch_tokens, batch_masks = self._align_batch_tokens(batch_tokens, data_configs)
+        batch_tokens, batch_label, batch_masks = self._align_batch_tokens(batch_tokens,batch_label, data_configs)
 
         return MLoRAData(
-            batch_tokens=batch_tokens, batch_mask=batch_masks, data_config=data_configs
+            batch_tokens=batch_tokens, batch_mask=batch_masks, data_config=data_configs, label=batch_label,
         )
 
     def step(self):
