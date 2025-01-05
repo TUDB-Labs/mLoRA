@@ -164,6 +164,7 @@ class PPOTaskConfig(TrainTaskConfig):
     critic_adapter_: AdapterConfig
     actor_adapter_: AdapterConfig
     kl_coefficient_: float
+    optim_num_: int 
     
     __params_map: Dict[str, str] = {
         "gamma_": "gamma",

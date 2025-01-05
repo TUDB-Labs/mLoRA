@@ -7,22 +7,20 @@ class PpoDataPrompter(Prompter):
     def __init__(self, template: str):
         super().__init__(template)
 
-    def __generate_prompt(self, data_point: Dict[str, str], optional: str) -> Tuple[str, str]:
+    def __generate_prompt(self, data_point: Dict[str, str], optional: str) -> str:
         data = self.template_.render(data_point=data_point, Optional=optional)
         return data
 
     @override
-    def generate_prompt(self, data_points: List[Dict[str, str]], optional: str) -> List[str]:
+    def generate_prompt(self, data_points: List[Dict[str, str]]) -> List[str]:
         instru_data = []
         chosen_data = []
         reject_data = []
         data=[]
 
         for data_point in data_points:
-            if optional=="instruction":
                 data_str = self.__generate_prompt(data_point,"instruction")
                 instru_data.append(data_str)
-            else:
                 chosen_str = self.__generate_prompt(data_point,"chosen")
                 reject_str = self.__generate_prompt(data_point,"reject")
                 chosen_data.append(chosen_str)
@@ -31,5 +29,4 @@ class PpoDataPrompter(Prompter):
         data.extend(instru_data)
         data.extend(chosen_data)
         data.extend(reject_data)
-        return data
-                                                                 
+        return data                                                                 
