@@ -3,11 +3,27 @@ dispatcher:
   concurrency_num: 2
 datasets:
   - name: "ppo_data"
-    data: "demo/data1.json"
-    prompt: "demo/generate_prompt.yaml"
-    prompt_type: "instruction"
+    data: "demo/data.json"
+    prompt: "demo/ppo_prompt.yaml"
+    prompt_type: "ppo"
     preprocess: "default"
 adapters:
+  - name: "lora_ppo_reward"
+    type: "lora"
+    path: "adapters/lora_ppo_reward"
+    optimizer: "adamw"
+    lr: 3e-4
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: false
+      down_proj: false
+      up_proj: false
   - name: "lora_ppo_critic"
     type: "lora"
     path: "adapters/lora_ppo_critic"
@@ -43,11 +59,15 @@ adapters:
 tasks:
   - type: "ppo"
     name: "task_0"
-    adapter: ["lora_ppo_critic","lora_ppo_actor"]
+    adapter: 
+    reward_adapter: "lora_ppo_reward"
+    critic_adapter: "lora_ppo_critic"
+    actor_adapter: "lora_ppo_actor"
+    reference: "base"
     dataset: "ppo_data"
     batch_size: 4
     mini_batch_size: 4
-    num_epochs: 100
+    num_epochs: 10
     cutoff_len: 256
     save_step: 2000
     gamma: 0.99
@@ -58,7 +78,9 @@ tasks:
     K_epochs: 2
     T_horizon: 2048
     optim_num: 2
-    loss_type1: "mse"
-    loss_type2: "adv_loss"
+    critic_loss_type: "mse"
+    actor_loss_type: "adv_loss"
+    reward_loss_type: "reward_loss"
     adv_normalization: True
     generate_num: 10
+    kl_coefficient: 0.99

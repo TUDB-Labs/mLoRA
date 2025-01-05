@@ -6,7 +6,6 @@ from typing import Callable, List, Optional, Tuple
 import torch
 from transformers import PretrainedConfig
 
-
 Tokens = List[int]
 Masks = List[bool]
 
@@ -27,7 +26,6 @@ class LLMModelArgs:
     max_seq_len_: int
     device_: str
     dtype_: torch.dtype
-    fixed_weight: torch.Tensor = None
 
     def __init__(self, config: PretrainedConfig):
         self.__from_pretrained_config(config)
@@ -64,11 +62,6 @@ class LLMModelArgs:
         self.device_ = ""
         self.dtype_ = torch.float32
 
-        if hasattr(config, "rope_theta"):
-            self.rope_theta_ = config.rope_theta
-
-        if self.fixed_weight is None or self.vocab_size_!=self.fixed_weight.shape[-1]:
-            self.fixed_weight = torch.rand(1,self.vocab_size_,requires_grad=False)
 
 @dataclass
 class LinearInfo:
@@ -85,7 +78,6 @@ class ModelDataConfig:
 
     batch_start_idx_: int
     batch_end_idx_: int
-
 
 
 @dataclass
@@ -107,8 +99,6 @@ class MLoRADataConfig:
 
     batch_start_idx_: int
     batch_end_idx_: int
-    label_start_idx: int
-    label_end_idx: int
 
     expand_fn_: Callable[
         [List[Tokens], Optional[int]], Tuple[List[Tokens], List[Masks]]
@@ -117,15 +107,7 @@ class MLoRADataConfig:
         [torch.Tensor, torch.Tensor, torch.Tensor], Optional[torch.Tensor]
     ]
 
-    select_action: Optional[Callable]
-    R_dataset: Optional[Callable]
-
     task_name_: str
-    task_type_: str
-
-    idx: int
-
-    bool_strategy: bool
 
     def __init__(
         self,
@@ -136,9 +118,6 @@ class MLoRADataConfig:
         expand_fn: Callable,
         loss_fn: Callable,
         task_name: str,
-        label_start_idx: int,
-        label_end_idx: int,
-        task_type: Optional[str] = None,
     ) -> None:
         self.adapter_name_ = adapter_name
         self.adapter_type_ = adapter_type
@@ -149,10 +128,6 @@ class MLoRADataConfig:
         self.loss_fn_ = loss_fn
 
         self.task_name_ = task_name
-        self.task_type_ = task_type
-
-        self.label_start_idx=label_start_idx
-        self.label_end_idx=label_end_idx
 
     def model_data_config(self) -> ModelDataConfig:
         return ModelDataConfig(
@@ -163,11 +138,9 @@ class MLoRADataConfig:
         )
 
 
-
 class MLoRAData:
     # the datas: batch_size * token
     batch_tokens_: List[Tokens]
-    label: List[Tokens]
     batch_mask_: List[Masks]
     data_config_: List[MLoRADataConfig]
 
@@ -179,13 +152,11 @@ class MLoRAData:
         batch_tokens: List[Tokens],
         batch_mask: List[Masks],
         data_config: List[MLoRADataConfig],
-        label: List[Tokens],
     ) -> None:
         self.batch_tokens_ = batch_tokens
         self.batch_mask_ = batch_mask
         self.data_config_ = data_config
         self.random_id_ = uuid.uuid4().int
-        self.label=label
 
     def model_data(self) -> ModelData:
         return ModelData(

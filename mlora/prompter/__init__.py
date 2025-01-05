@@ -5,12 +5,14 @@ from mlora.config import DatasetConfig
 from .contrastive_instruction_data_prompter import ContrastiveInstructionDataPrompter
 from .instruction_data_prompter import InstructionDataPrompter
 from .preference_data_prompter import PreferenceDataPrompter
+from .ppo_data_prompter import PpoDataPrompter
 from .prompter import Prompter
 
 _PROMPTER_CLASS: Mapping[str, Type[Prompter]] = {
     "instruction": InstructionDataPrompter,
     "preference": PreferenceDataPrompter,
     "contrastive_instruction": ContrastiveInstructionDataPrompter,
+    "ppo": PpoDataPrompter
 }
 
 
@@ -27,4 +29,5 @@ __all__ = [
     "PreferenceDataPrompter",
     "InstructionDataPrompter",
     "ContrastiveInstructionDataPrompter",
+    "PpoDataPrompter",
 ]

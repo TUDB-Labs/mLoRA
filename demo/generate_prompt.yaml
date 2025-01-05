@@ -1,2 +1,0 @@
-template: |
-  {{ data_point['instruction']+'_'+data_point['chosen']+'_'+data_point['reject']}}

@@ -6,7 +6,7 @@ import torch
 from torch.nn.modules import Sequential
 from transformers import AutoConfig, AutoModelForCausalLM
 
-from mlora.model.args import LinearInfo, LLMModelArgs, Masks, ModelData, Tokens
+from mlora.model.args import LinearInfo, LLMModelArgs, Masks, ModelData
 from mlora.model.checkpoint import CheckpointRecomputeFunction
 from mlora.model.modules import AdapterModel, Decoder, Embedding, OutputLayer, RMSNorm
 from mlora.profiler import nvtx_wrapper, set_backward_tracepoint
@@ -76,9 +76,6 @@ LEN_LLAMA_SEQUENTIAL_MODULE_IO = 4
 
 LlamaCompatibleModelTypes = ["mistral", "qwen2", "llama"]
 
-class Default:
-    def __init__(self):
-        return
 
 class LlamaSequentialWrapper(torch.nn.Module):
     def __init__(self, module: torch.nn.Module):
@@ -91,8 +88,8 @@ class LlamaSequentialWrapper(torch.nn.Module):
     def forward(self, input: LlamaSequentialModuleIO) -> LlamaSequentialModuleIO:
         assert len(input) == LEN_LLAMA_SEQUENTIAL_MODULE_IO
         assert isinstance(input[0], torch.Tensor)
-        assert isinstance(input[1], (torch.Tensor,Default))
-        assert isinstance(input[2], (ModelData,Default))
+        assert isinstance(input[1], torch.Tensor)
+        assert isinstance(input[2], ModelData)
         assert isinstance(input[3], bool)
 
         # auto catch the input argument
@@ -135,7 +132,8 @@ class LlamaSequentialWrapper(torch.nn.Module):
         module_name = self.name()
         assert (
             module_name in forward_func_dict
-        ), f"error module name {module_name}"
+        ), f"error module name {
+            module_name}"
 
         return forward_func_dict[module_name]()
 
@@ -159,7 +157,7 @@ class LlamaModel(LLMModel):
         self.eos_token_id_ = -1
 
     @override
-    def forward(self, input: ModelData) -> tuple[torch.Tensor,torch.Tensor]:
+    def forward(self, input: ModelData) -> torch.Tensor:
         # train model or inference model: output is probs
         tokens = torch.tensor(
             input.batch_tokens_, dtype=torch.int64, device=self.device_
@@ -172,14 +170,10 @@ class LlamaModel(LLMModel):
         else:
             data = (tokens, mask, input, False)
 
-        data1=None
-        data2=None
         for seq_layer in self.seq_module_:
-            data1=data2
             data = seq_layer.forward(data)
-            data2=data[0]
 
-        return data1,data2
+        return data[0]
 
     @override
     @staticmethod
@@ -249,7 +243,8 @@ class LlamaModel(LLMModel):
         llama_model = AutoModelForCausalLM.from_pretrained(path, **additional_load_args)
 
         if llama_model.config.model_type not in LlamaCompatibleModelTypes:
-            assert f"unsupported model type {llama_model.config.model_type}, loading with llama compatible mode."
+            assert f"unsupported model type {
+                llama_model.config.model_type}, loading with llama compatible mode."
 
         logging.info(
             f"loading llama compatible model - {llama_model.config.model_type}"
@@ -304,20 +299,6 @@ class LlamaModel(LLMModel):
             }
         )
 
-        dim_=llama_args.dim_
-        v_=llama_args.vocab_size_
-        llama_args.dim_=v_
-        llama_args.vocab_size_=1
-        seq_model.update(
-            {
-                "outputt": LlamaSequentialWrapper(
-                    OutputLayer(llama_args.fixed_weight, llama_args)
-                )
-            }
-        )
-        llama_args.dim_=dim_
-        llama_args.vocab_size_=v_
-
         model = LlamaModel(llama_args)
         model.seq_module_ = torch.nn.Sequential(seq_model)
 
@@ -351,38 +332,3 @@ class LlamaModel(LLMModel):
     @override
     def sequential(self) -> Sequential:
         return self.seq_module_
-
-    def compute_similarity(self,text1, text2):
-        text1_norm = text1 / text1.norm(dim=-1, keepdim=True)
-        text2_norm = text2 / text2.norm(dim=-1, keepdim=True)
-        similarity = (text1 * text2).sum(dim=-1)
-        return similarity
-
-    def calculate_reward(self, text_: List[Tokens], labels: List[Tokens], beta=1.0):
-
-        labels_len=len(labels)
-        l=labels_len/2
-        l=int(l)
-
-        text_=torch.tensor(text_,device=self.device_)
-        labels=torch.tensor(labels,device=self.device_)
-        data = (torch.tensor(text_), Default(), Default(), False)
-        data1 = (torch.tensor(labels[:l]), Default(), Default(), False)
-        data2 = (torch.tensor(labels[l:]), Default(), Default(), False)
-        
-        # include chosen and reject data
-        assert labels_len%2==0
-        text=self.seq_module_[0](data)[0]
-        chosen_text=self.seq_module_[0](data1)[0]
-        reject_text = self.seq_module_[0](data2)[0]
-
-        # 计算生成文本与chosen文本之间的相似度
-        similarity_chosen = self.compute_similarity(text, chosen_text)
-
-        # 计算生成文本与reject文本之间的相似度
-        similarity_reject = self.compute_similarity(text, reject_text)
-
-        # 计算奖励
-        reward = beta * similarity_chosen - similarity_reject
-                
-        return reward[:,1:]

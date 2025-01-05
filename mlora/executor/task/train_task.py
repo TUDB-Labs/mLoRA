@@ -109,7 +109,7 @@ class TrainTask(Task):
         self.context_.recover_lr(lr_epoch)
 
     @override
-    def data(self, start_idx: int,label_s_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
+    def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
         logging.info(
             f"Adapter {self.context_.name_} "
             f"epoch: {self.now_epoch_}/{self.config_.num_epochs_} "
@@ -131,7 +131,6 @@ class TrainTask(Task):
             )
         )
         end_idx = start_idx + len(ret_tokens)
-        label_e_idx=label_s_idx+len(ret_tokens)
 
         def loss_fn(
             input: torch.Tensor, target: torch.Tensor, _: torch.Tensor
@@ -164,11 +163,9 @@ class TrainTask(Task):
             self._expand_batch_tokens,
             loss_fn,
             self.task_name(),
-            label_end_idx=label_e_idx,
-            label_start_idx=label_s_idx,
         )
 
-        return ret_tokens,ret_tokens, [data_config]
+        return ret_tokens, [data_config]
 
     def _expand_batch_tokens(
         self, batch_tokens: List[Tokens], align_len: Optional[int] = None

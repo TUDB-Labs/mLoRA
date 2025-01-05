@@ -23,3 +23,4 @@ class PreferenceDataPrompter(Prompter):
             reject_data.append(reject_str)
 
         return chosen_data + reject_data
+                                                                 
