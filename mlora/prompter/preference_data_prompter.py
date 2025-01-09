@@ -20,7 +20,6 @@ class PreferenceDataPrompter(Prompter):
         for data_point in data_points:
             chosen_str, reject_str = self.__generate_prompt(data_point)
             chosen_data.append(chosen_str)
-            reject_data.append(reject_str)
-
+            reject_data.append(reject_str)    
+        
         return chosen_data + reject_data
-                                                                 

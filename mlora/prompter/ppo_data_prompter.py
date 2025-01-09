@@ -21,12 +21,12 @@ class PpoDataPrompter(Prompter):
         for data_point in data_points:
                 data_str = self.__generate_prompt(data_point,"instruction")
                 instru_data.append(data_str)
-                chosen_str = self.__generate_prompt(data_point,"chosen")
-                reject_str = self.__generate_prompt(data_point,"reject")
+                chosen_str = self.__generate_prompt(data_point, "chosen")
+                reject_str = self.__generate_prompt(data_point, "reject")
                 chosen_data.append(chosen_str)
                 reject_data.append(reject_str)
 
         data.extend(instru_data)
         data.extend(chosen_data)
         data.extend(reject_data)
-        return data                                                                 
+        return data                                                   

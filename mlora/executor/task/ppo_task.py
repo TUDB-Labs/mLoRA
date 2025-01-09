@@ -424,7 +424,7 @@ class PPOTask(TrainTask):
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
 
         logging.info(
-            f"Task - {self.reward_context_.name_,self.actor_context_.name_, self.critic_context_.name_} "
+            f"Task - {self.reward_context_.name_, self.actor_context_.name_, self.critic_context_.name_} "
             f"epoch: {self.now_epoch_}/{self.config_.num_epochs_} "
             f"iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_} "
             f"state: {self.state_} "
@@ -439,12 +439,14 @@ class PPOTask(TrainTask):
 
     @override
     def step(self):
-        if self.state_==Stage.policy_training_init or self.state_==Stage.policy_training_decision:
+        if self.state_ == Stage.policy_training_init:
+            return
+        if self.state_ == Stage.policy_training_decision:
             return
 
         stepd: bool = False
         need_checkpoint: bool = False
-        is_reward_training: bool = (self.state_==Stage.reward_model_training)
+        is_reward_training: bool = (self.state_ == Stage.reward_model_training)
 
         if self.now_step_ % self.config_.accumulate_step_ == 0:
             stepd = True
@@ -539,9 +541,9 @@ class PPOTask(TrainTask):
             json.dump(adapter_config, f, indent=4)
 
     def _save(self, is_checkpoint: bool = False, additional_info: Dict[str, str] = {}):
-       self.__save(self.actor_context_, is_checkpoint, additional_info)
-       self.__save(self.critic_context_, is_checkpoint, additional_info)
-       self.__save(self.reward_context_, is_checkpoint, additional_info)
+        self.__save(self.actor_context_, is_checkpoint, additional_info)
+        self.__save(self.critic_context_, is_checkpoint, additional_info)
+        self.__save(self.reward_context_, is_checkpoint, additional_info)
 
     @override
     def done(self):
