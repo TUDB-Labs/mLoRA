@@ -439,57 +439,63 @@ class PPOTask(TrainTask):
 
     @override
     def step(self):
-        if self.state_ == Stage.policy_training_init:
-            return
-        if self.state_ == Stage.policy_training_decision:
+        if self.state_ in [Stage.policy_training_init, Stage.policy_training_decision]:
             return
 
-        stepd: bool = False
-        need_checkpoint: bool = False
-        is_reward_training: bool = (self.state_ == Stage.reward_model_training)
+        stepd, need_checkpoint = False, False
+        is_reward_training = (self.state_ == Stage.reward_model_training)
 
+        # Perform training step if necessary
         if self.now_step_ % self.config_.accumulate_step_ == 0:
             stepd = True
-            if is_reward_training:
-                self.reward_context_.step()
-            else:
-                self.critic_context_.step()
-                self.actor_context_.step()
+            self._perform_training_step(is_reward_training)
 
+        # Check if checkpoint is needed
         if self.now_step_ % self.config_.save_step_ == 0:
             need_checkpoint = True
 
+        # Increment the step counter
         self.now_step_ += 1
 
-        if self.state_==Stage.reward_model_training:
-            self.now_data_idx_ += self.config_.mini_batch_size_            
+        # Handle specific state changes
+        self._update_data_idx_and_state(is_reward_training)
 
-        if self.state_==Stage.policy_training_iteration: 
-            self.now_data_idx_ += self.config_.mini_batch_size_
-            self.state_=Stage.policy_training_init
-            self.idx=1
-
+        # Check if data is exhausted, increment epoch
         if self.now_data_idx_ >= len(self.data_):
             self.now_epoch_ += 1
             self.now_data_idx_ = 0
 
-        # to save the checkpoint, must ensure the order
-        # beacuse we need recover the state
+        # Save checkpoint if needed
         if need_checkpoint:
             self._save(is_checkpoint=True)
 
-        # task finish we also need to step
+        # Final step if training has finished
         if not stepd and self.now_epoch_ == self.config_.num_epochs_:
-            if is_reward_training:
-                self.reward_context_.step()
-            else:    
-                self.actor_context_.step()
-                self.critic_context_.step()
+            self._perform_training_step(is_reward_training)
 
+        # Reset state after completing reward training
         if is_reward_training and self.now_epoch_ == self.config_.num_epochs_:
-            self.state_=Stage.policy_training_init
-            self.now_epoch_=0
-            self.now_step_=1
+            self._reset_training_state()
+
+    def _perform_training_step(self, is_reward_training):
+        if is_reward_training:
+            self.reward_context_.step()
+        else:
+            self.critic_context_.step()
+            self.actor_context_.step()
+
+    def _update_data_idx_and_state(self, is_reward_training):
+        if self.state_ == Stage.reward_model_training:
+            self.now_data_idx_ += self.config_.mini_batch_size_
+        elif self.state_ == Stage.policy_training_iteration:
+            self.now_data_idx_ += self.config_.mini_batch_size_
+            self.state_ = Stage.policy_training_init
+            self.idx = 1
+
+    def _reset_training_state(self):
+        self.state_ = Stage.policy_training_init
+        self.now_epoch_ = 0
+        self.now_step_ = 1
 
     def __save(self, context_:TrainTaskContext, is_checkpoint: bool = False, 
     additional_info: Dict[str, str] = {}):
