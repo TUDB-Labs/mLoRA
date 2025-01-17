@@ -8,11 +8,9 @@ import torch
 from peft import LoraConfig, PeftModelForCausalLM, TaskType, get_peft_model
 from torch.distributed._tensor import DeviceMesh, Replicate, Shard
 from torch.distributed.device_mesh import DeviceMesh
-from torch.distributed.tensor.parallel import (
-    ColwiseParallel,
-    RowwiseParallel,
-    parallelize_module,
-)
+from torch.distributed.tensor.parallel import (ColwiseParallel,
+                                               RowwiseParallel,
+                                               parallelize_module)
 from transformers import LlamaForCausalLM
 
 

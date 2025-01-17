@@ -1,9 +1,8 @@
-from mlora.pipeline.transport import RpcTransport
-from mlora.pipeline.messages import PipeMessageType, PipeMessage
-
 import torch
 import torch.multiprocessing as mp
 
+from mlora.pipeline.messages import PipeMessage, PipeMessageType
+from mlora.pipeline.transport import RpcTransport
 
 TEST_TIMES = 10
 

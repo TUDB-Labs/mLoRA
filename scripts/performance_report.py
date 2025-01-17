@@ -1,9 +1,8 @@
 import argparse
-import sqlite3
-import logging
 import csv
-
-from typing import List, Dict, Tuple
+import logging
+import sqlite3
+from typing import Dict, List, Tuple
 
 # Command Line Arguments
 parser = argparse.ArgumentParser(description='Performance report.')

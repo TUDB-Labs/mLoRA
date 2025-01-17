@@ -148,6 +148,7 @@ class CITTaskConfig(TrainTaskConfig):
         self.lambda_ = float(self.lambda_)
         self.temperature_ = float(self.temperature_)
 
+
 class PPOTaskConfig(TrainTaskConfig):
     gamma_: float
     lamdb_: float
@@ -155,17 +156,17 @@ class PPOTaskConfig(TrainTaskConfig):
     entropy_coef_decay_: float
     K_epochs_: int
     T_horizon_: int
-    critic_loss_type_:str
-    actor_loss_type_:str
-    reward_loss_type_:str
+    critic_loss_type_: str
+    actor_loss_type_: str
+    reward_loss_type_: str
     clip_rate_: float
     generate_num_: int
     reward_adapter_: AdapterConfig
     critic_adapter_: AdapterConfig
     actor_adapter_: AdapterConfig
     kl_coefficient_: float
-    optim_num_: int 
-    
+    optim_num_: int
+
     __params_map: Dict[str, str] = {
         "gamma_": "gamma",
         "lamdb_": "lamdb",
@@ -195,28 +196,27 @@ class PPOTaskConfig(TrainTaskConfig):
         self.lamdb_ = float(self.lamdb_)
         self.entropy_coef_ = float(self.entropy_coef_)
         self.entropy_coef_decay_ = float(self.entropy_coef_decay_)
-        self.clip_rate_=float(self.clip_rate_)
-        self.K_epochs_=int(self.K_epochs_)
-        self.T_horizon_=int(self.T_horizon_)
-        self.optim_num_=int(self.optim_num_)
-        self.generate_num_=int(self.generate_num_)
-        self.kl_coefficient_=float(self.kl_coefficient_)
+        self.clip_rate_ = float(self.clip_rate_)
+        self.K_epochs_ = int(self.K_epochs_)
+        self.T_horizon_ = int(self.T_horizon_)
+        self.optim_num_ = int(self.optim_num_)
+        self.generate_num_ = int(self.generate_num_)
+        self.kl_coefficient_ = float(self.kl_coefficient_)
 
-        self.reward_adapter_=adapters[config["reward_adapter"]]
-        self.actor_adapter_=adapters[config["actor_adapter"]]
-        self.critic_adapter_=adapters[config["critic_adapter"]]
+        self.reward_adapter_ = adapters[config["reward_adapter"]]
+        self.actor_adapter_ = adapters[config["actor_adapter"]]
+        self.critic_adapter_ = adapters[config["critic_adapter"]]
         if config["reference"] not in adapters:
             self.reference_ = None
-            logging.info(
-                f"DPOTask - use the base model as reference model."
-            )
+            logging.info("PPOTask - use the base model as reference model.")
             return
         self.reference_ = adapters[config["reference"]]
+
 
 TASKCONFIG_CLASS: Dict[str, Type[TaskConfig]] = {
     "train": TrainTaskConfig,
     "dpo": DPOTaskConfig,
     "cpo": CPOTaskConfig,
     "cit": CITTaskConfig,
-    "ppo":PPOTaskConfig,
+    "ppo": PPOTaskConfig,
 }

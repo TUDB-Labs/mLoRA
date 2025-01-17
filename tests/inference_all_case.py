@@ -1,7 +1,8 @@
-import torch
 import argparse
+
+import torch
 import transformers
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 G_TEST_ADAPTERS = [
     # lora adapter

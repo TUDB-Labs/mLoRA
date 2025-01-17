@@ -16,10 +16,10 @@
 #
 # Github:  https://github.com/TUDB-Labs/mLoRA
 
+import mlora.config
+import mlora.executor
 import mlora.model
 import mlora.utils
-import mlora.executor
-import mlora.config
 
 if __name__ == "__main__":
     args = mlora.utils.get_cmd_args()

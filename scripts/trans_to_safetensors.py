@@ -1,7 +1,8 @@
-import torch
+import argparse
 import json
 import os
-import argparse
+
+import torch
 from safetensors.torch import save_file
 
 

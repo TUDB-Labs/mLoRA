@@ -1,11 +1,11 @@
-from pipeline_example import Pipe, TestModel
-from mlora.utils import setup_seed
-
-from torch.nn import Sequential
 from typing import List
 
-import torch.multiprocessing as mp
 import torch
+import torch.multiprocessing as mp
+from pipeline_example import Pipe, TestModel
+from torch.nn import Sequential
+
+from mlora.utils import setup_seed
 
 
 def pipe_process(rank: int, world_size: int):

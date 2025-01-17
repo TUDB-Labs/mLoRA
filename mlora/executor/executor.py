@@ -106,7 +106,7 @@ class Executor:
 
             batch_size = data.batch_size()
             token_len = data.token_len()
-            
+
             output = self.model_.forward(data.model_data())
             labels = torch.tensor(data.batch_tokens_, dtype=torch.long)
 

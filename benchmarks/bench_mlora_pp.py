@@ -3,12 +3,13 @@ import random
 import time
 from typing import List, Tuple, override
 
+import torch
+
 import mlora.config
 import mlora.executor
 import mlora.executor.dispatcher
 import mlora.model
 import mlora.utils
-import torch
 from mlora.config.adapter import LoRAConfig
 from mlora.config.dispatcher import DispatcherConfig
 from mlora.config.task import TrainTaskConfig
