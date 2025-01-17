@@ -182,8 +182,15 @@ class TrainTask(Task):
 
         return ret_batch_tokens, ret_batch_masks
 
-    def _save(self, is_checkpoint: bool = False, additional_info: Dict[str, str] = {}):
+    def _save(
+        self,
+        is_checkpoint: bool = False,
+        is_pipeline: Optional[int] = None,
+        additional_info: Dict[str, str] = {},
+    ):
         output_dir = self.context_.path_
+        if is_pipeline is not None:
+            output_dir = output_dir + os.sep + f"rank_{is_pipeline}"
         if is_checkpoint:
             checkpoint_folder = "checkpoint_" + "_".join(
                 [
@@ -223,8 +230,8 @@ class TrainTask(Task):
             json.dump(adapter_config, f, indent=4)
 
     @override
-    def done(self):
-        self._save(is_checkpoint=False)
+    def done(self, is_pipeline: Optional[int] = None):
+        self._save(is_checkpoint=False, is_pipeline=is_pipeline)
         # Delete the cache file.
         self._del_cache_file()
         # release the context

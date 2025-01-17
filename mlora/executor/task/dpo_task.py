@@ -202,8 +202,8 @@ class DPOTask(TrainTask):
         return ret_tokens, [ref_model_config, policy_model_config]
 
     @override
-    def done(self):
-        self._save()
+    def done(self, is_pipeline: Optional[int] = None):
+        self._save(is_pipeline=is_pipeline)
         # release the context
         del self.context_
         if self.ref_context_ is not None:

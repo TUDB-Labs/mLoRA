@@ -390,7 +390,7 @@ class PipeExecutor(Executor):
                 if partial_layer.name() != "Decoder":
                     continue
                 partial_layer.wrapper_module_.offload_adapter(adapter_name)
-        task.done()
+        task.done(is_pipeline=self.rank_)
 
     def __task_to_terminate_hook(self, task: Task):
         logging.info(f"Task - {task.task_name()} terminate.")
