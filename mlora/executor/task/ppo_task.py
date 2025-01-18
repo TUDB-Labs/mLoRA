@@ -2,7 +2,6 @@ import copy
 import json
 import logging
 import os
-import time
 from enum import Enum
 from functools import partial
 from typing import Dict, List, Optional, OrderedDict, Tuple, override
@@ -68,7 +67,6 @@ class PPOTask(TrainTask):
         self.now_epoch_ = 0
 
     def init_tensor(self, dim: int):
-        torch.manual_seed(42)
         device = self.td_target.device
         PPOTask.reward_tensor = torch.randn(
             (dim, 1), requires_grad=False, device=device
@@ -76,7 +74,6 @@ class PPOTask(TrainTask):
         PPOTask.critic_tensor = torch.randn(
             (dim, 1), requires_grad=False, device=device
         )
-        torch.manual_seed(int(time.time() * 1000) % (2**32))  # 用时间戳设置新的种子
 
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
@@ -224,7 +221,7 @@ class PPOTask(TrainTask):
             mask = mask.to(self.td_target.device)
             reward_chosen = reward[:reward_batch] * mask[:reward_batch]
             reward_reject = reward[reward_batch:] * mask[reward_batch:]
-            loss = torch.mean((reward_chosen - reward_reject))
+            loss = torch.mean(-torch.log(reward_chosen - reward_reject))
 
             return loss
 
@@ -318,9 +315,9 @@ class PPOTask(TrainTask):
 
         batch_num = int(len(self.policy_tokens) / 2)
         ref_len = int(len(self.policy_tokens[0]))
-        actor_len = int(len(self.policy_tokens[0]))  # the real actor's len
-        critic_len = int(len(self.policy_tokens[-1]))  # the real critic's len
-        reward_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
+        actor_len = int(len(self.policy_tokens[0]))
+        critic_len = int(len(self.policy_tokens[-1]))
+        reward_tokens = copy.deepcopy(self.policy_tokens[batch_num:])
         ref_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
         p_tokens: List[List[int]] = []
         p_tokens.extend(reward_tokens)
@@ -367,7 +364,8 @@ class PPOTask(TrainTask):
             ref_log_prob = log_ref_p.gather(-1, action).squeeze(-1)
             r = -(log_prob - ref_log_prob)
             r[:, -1] += torch.tanh(
-                input[reward_start_idx:reward_end_idx, -1] @ PPOTask.reward_tensor
+                input[reward_start_idx:reward_end_idx, critic_len - 1]
+                @ PPOTask.reward_tensor
             ).squeeze(dim=-1)
 
             v = torch.tanh(
