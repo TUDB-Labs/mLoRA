@@ -22,9 +22,7 @@ def test_by_pipe():
     ctx = mp.get_context("spawn")
     args = ((rank, world_size) for rank in range(world_size))
     with ctx.Pool(world_size) as pool:
-        res = pool.starmap(
-            pipe_process,
-            args)
+        res = pool.starmap(pipe_process, args)
 
     res_1, res_2 = res
 
@@ -74,5 +72,5 @@ def test_pipe():
         assert torch.allclose(expected_grads_2[i], grads_2[i])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_pipe()

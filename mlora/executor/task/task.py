@@ -148,7 +148,7 @@ class Task:
 
         # Process data according to the data preprocess_type.
         data = preprocess_func[preprocess_type](data)
-        if hasattr(self.config_, 'name'):
+        if hasattr(self.config_, "name"):
             logging.info(
                 f"Adapter {self.config_.adapter_.name_} "
                 f"data size: {len(data["data_points"])}"

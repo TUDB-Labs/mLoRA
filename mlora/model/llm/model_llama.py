@@ -8,8 +8,7 @@ from transformers import AutoConfig, AutoModelForCausalLM
 
 from mlora.model.args import LinearInfo, LLMModelArgs, Masks, ModelData
 from mlora.model.checkpoint import CheckpointRecomputeFunction
-from mlora.model.modules import (AdapterModel, Decoder, Embedding, OutputLayer,
-                                 RMSNorm)
+from mlora.model.modules import AdapterModel, Decoder, Embedding, OutputLayer, RMSNorm
 from mlora.profiler import nvtx_wrapper, set_backward_tracepoint
 from mlora.utils import is_package_available
 
@@ -241,8 +240,8 @@ class LlamaModel(LLMModel):
         llama_model = AutoModelForCausalLM.from_pretrained(path, **additional_load_args)
 
         if llama_model.config.model_type not in LlamaCompatibleModelTypes:
-            assert f'''unsupported model type {
-                llama_model.config.model_type}, loading with llama compatible mode.'''
+            assert f"""unsupported model type {
+                llama_model.config.model_type}, loading with llama compatible mode."""
 
         logging.info(
             f"loading llama compatible model - {llama_model.config.model_type}"

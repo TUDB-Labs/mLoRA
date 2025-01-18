@@ -2,8 +2,7 @@ from typing import Mapping, Type
 
 from mlora.config import DatasetConfig
 
-from .contrastive_instruction_data_prompter import \
-    ContrastiveInstructionDataPrompter
+from .contrastive_instruction_data_prompter import ContrastiveInstructionDataPrompter
 from .instruction_data_prompter import InstructionDataPrompter
 from .ppo_data_prompter import PpoDataPrompter
 from .preference_data_prompter import PreferenceDataPrompter
@@ -13,7 +12,7 @@ _PROMPTER_CLASS: Mapping[str, Type[Prompter]] = {
     "instruction": InstructionDataPrompter,
     "preference": PreferenceDataPrompter,
     "contrastive_instruction": ContrastiveInstructionDataPrompter,
-    "ppo": PpoDataPrompter
+    "ppo": PpoDataPrompter,
 }
 
 

@@ -11,8 +11,12 @@ import torch
 from torch.distributions import Categorical
 
 from mlora.config import PPOTaskConfig
-from mlora.executor.context import (INFERENCECONTEXT_CLASS, TRAINCONTEXT_CLASS,
-                                    TaskContext, TrainTaskContext)
+from mlora.executor.context import (
+    INFERENCECONTEXT_CLASS,
+    TRAINCONTEXT_CLASS,
+    TaskContext,
+    TrainTaskContext,
+)
 from mlora.model.args import LinearInfo, MLoRADataConfig, Tokens
 from mlora.model.modules import AdapterModel
 from mlora.model.tokenizer import Tokenizer

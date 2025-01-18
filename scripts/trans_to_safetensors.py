@@ -23,7 +23,9 @@ def trans_to_safetensor(path: str):
     # trans weigth_map
     for weight_name, weight_path in json_data["weight_map"].items():
         postfix = weight_path.split(".")[-1]
-        json_data["weight_map"][weight_name] = weight_path.replace(f".{postfix}", ".safetensors")
+        json_data["weight_map"][weight_name] = weight_path.replace(
+            f".{postfix}", ".safetensors"
+        )
         weights_paths.add(os.path.join(path, weight_path))
 
     # save json data to safetensors_json_path
@@ -46,9 +48,10 @@ def trans_to_safetensor(path: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='m-LoRA trans to safetensors program')
-    parser.add_argument('--model_path', type=str, required=True,
-                        help='local path of the base model')
+    parser = argparse.ArgumentParser(description="m-LoRA trans to safetensors program")
+    parser.add_argument(
+        "--model_path", type=str, required=True, help="local path of the base model"
+    )
     args = parser.parse_args()
     model_path = args.model_path
 
