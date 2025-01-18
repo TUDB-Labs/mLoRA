@@ -577,9 +577,12 @@ class PPOTask(TrainTask):
         self,
         context_: TrainTaskContext,
         is_checkpoint: bool = False,
+        is_pipeline: Optional[int] = None,
         additional_info: Dict[str, str] = {},
     ):
         output_dir = context_.path_
+        if is_pipeline is not None:
+            output_dir = output_dir + os.sep + f"rank_{is_pipeline}"
         if is_checkpoint:
             checkpoint_folder = "checkpoint_" + "_".join(
                 [
@@ -626,14 +629,19 @@ class PPOTask(TrainTask):
         with open(output_dir + os.sep + "adapter_config.json", "w") as f:
             json.dump(adapter_config, f, indent=4)
 
-    def _save(self, is_checkpoint: bool = False, additional_info: Dict[str, str] = {}):
-        self.__save(self.actor_context_, is_checkpoint, additional_info)
-        self.__save(self.critic_context_, is_checkpoint, additional_info)
-        self.__save(self.reward_context_, is_checkpoint, additional_info)
+    def _save(
+        self,
+        is_checkpoint: bool = False,
+        is_pipeline: Optional[int] = None,
+        additional_info: Dict[str, str] = {},
+    ):
+        self.__save(self.actor_context_, is_checkpoint, is_pipeline, additional_info)
+        self.__save(self.critic_context_, is_checkpoint, is_pipeline, additional_info)
+        self.__save(self.reward_context_, is_checkpoint, is_pipeline, additional_info)
 
     @override
-    def done(self):
-        self._save(is_checkpoint=False)
+    def done(self, is_pipeline: Optional[int] = None):
+        self._save(is_checkpoint=False, is_pipeline=is_pipeline)
         # Delete the cache file.
         self._del_cache_file()
         # release the context
