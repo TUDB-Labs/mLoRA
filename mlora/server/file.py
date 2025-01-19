@@ -2,9 +2,13 @@ import logging
 import os
 import uuid
 
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter, Form, UploadFile, File
+from pydantic import BaseModel
 
 from .storage import db_del, db_get_str, db_it_str, db_put_str, root_dir_list
+
+class DeleteDataRequest(BaseModel):
+    name: str
 
 router = APIRouter()
 
@@ -47,22 +51,20 @@ def get_data():
 
 
 @router.post("/data")
-def post_data(name: str, data_file: UploadFile):
+def post_data(name: str = Form(...), data_file: UploadFile = File(...)):
     file_name = save_local_file("data", name, data_file)
-
     db_put_str(f"__data__{name}", file_name)
-
     return {"message": "success"}
 
 
 @router.delete("/data")
-def delete_data(name: str):
-    file_name: str | None = db_get_str(f"__data__{name}")
+def delete_data(request: DeleteDataRequest):
+    file_name = db_get_str(f"__data__{request.name}")
 
     if file_name is None:
         return {"message": "file not exist"}
 
-    db_del(f"__data__{name}")
+    db_del(f"__data__{request.name}")
 
     return {"message": "delete success"}
 
@@ -73,7 +75,7 @@ def get_prompt():
 
 
 @router.post("/prompt")
-def post_prompt(name: str, data_file: UploadFile):
+def post_prompt(name: str = Form(...), data_file: UploadFile = File(...)):
     file_name = save_local_file("prompt", name, data_file)
 
     db_put_str(f"__prompt__{name}", file_name)
@@ -82,12 +84,12 @@ def post_prompt(name: str, data_file: UploadFile):
 
 
 @router.delete("/prompt")
-def delete_prompt(name: str):
-    file_name: str | None = db_get_str(f"__prompt__{name}")
+def delete_prompt(request: DeleteDataRequest):
+    file_name = db_get_str(f"__prompt__{request.name}")
 
     if file_name is None:
         return {"message": "file not exist"}
 
-    db_del(f"__prompt__{name}")
+    db_del(f"__prompt__{request.name}")
 
     return {"message": "delete success"}

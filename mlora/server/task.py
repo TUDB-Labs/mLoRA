@@ -2,6 +2,7 @@ import logging
 import os
 
 from fastapi import APIRouter, Request
+from pydantic import BaseModel
 
 from mlora.config import ADAPTERCONFIG_CLASS, TASKCONFIG_CLASS, DatasetConfig
 
@@ -14,6 +15,9 @@ from .storage import (
     db_put_obj,
     root_dir_list,
 )
+
+class DeleteDataRequest(BaseModel):
+    name: str
 
 router = APIRouter()
 
@@ -86,19 +90,19 @@ async def post_task(request: Request):
 
 
 @router.delete("/task")
-def terminate_task(name: str):
-    task = db_get_obj(f"__task__{name}")
+def terminate_task(request:DeleteDataRequest):
+    task = db_get_obj(f"__task__{request.name}")
 
     if task is None:
         return {"message": "the task not exist"}
 
     if task["state"] == "DONE":
-        db_del(f"__task__{name}")
+        db_del(f"__task__{request.name}")
         return {"message": "delete the done task."}
 
-    g_s_notify_terminate_task.send(name)
+    g_s_notify_terminate_task.send(request.name)
 
     task["state"] = "TERMINATING"
-    db_put_obj(f"__task__{name}", task)
+    db_put_obj(f"__task__{request.name}", task)
 
-    return {"message": f"to terminate the task {name}, wait."}
+    return {"message": f"to terminate the task {request.name}, wait."}

@@ -2,7 +2,8 @@ import logging
 import os
 
 from datasets import load_dataset
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Query
+from pydantic import BaseModel
 
 from mlora.config import DatasetConfig
 from mlora.prompter import PrompterFactory
@@ -16,6 +17,9 @@ from .storage import (
     root_dir_list,
 )
 
+class DeleteDataRequest(BaseModel):
+    name: str
+
 router = APIRouter()
 
 
@@ -28,7 +32,7 @@ def get_dataset():
 
 
 @router.get("/showcase")
-def showcase_dataset(name: str):
+def showcase_dataset(name: str = Query(...)):
     dataset = db_get_obj(f"__dataset__{name}")
 
     if dataset is None:
@@ -86,12 +90,12 @@ async def post_dataset(request: Request):
 
 
 @router.delete("/dataset")
-def delete_dataset(name: str):
-    dataset = db_get_obj(f"__dataset__{name}")
+def delete_dataset(request:DeleteDataRequest):
+    dataset = db_get_obj(f"__dataset__{request.name}")
 
     if dataset is None:
         return {"message": "the dataset not exist"}
 
-    db_del(f"__dataset__{name}")
+    db_del(f"__dataset__{request.name}")
 
     return {"message": "delete the dataset"}
