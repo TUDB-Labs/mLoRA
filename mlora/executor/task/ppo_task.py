@@ -65,6 +65,13 @@ class PPOTask(TrainTask):
         self.td_target = torch.zeros(1)
         self.perm = torch.zeros(1)
         self.now_epoch_ = 0
+        self.eps = 1e-6
+
+    def normalize(self, loss: torch.Tensor) -> torch.Tensor:
+        loss_mean = loss.mean()
+        loss_std = loss.std()
+        normalized_loss = (loss - loss_mean) / (loss_std + self.eps)
+        return normalized_loss
 
     def init_tensor(self, dim: int):
         device = self.td_target.device
@@ -74,6 +81,12 @@ class PPOTask(TrainTask):
         PPOTask.critic_tensor = torch.randn(
             (dim, 1), requires_grad=False, device=device
         )
+
+    def reward_func(self, reward_t: torch.Tensor) -> torch.Tensor:
+        return self.normalize(reward_t @ PPOTask.reward_tensor)
+
+    def critic_func(self, critic_t: torch.Tensor) -> torch.Tensor:
+        return self.normalize(critic_t @ PPOTask.critic_tensor)
 
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
@@ -151,7 +164,11 @@ class PPOTask(TrainTask):
     def ppo_reward_loss(
         self, reward_chosen: torch.Tensor, reward_reject: torch.Tensor
     ) -> torch.Tensor:
-        return reward_chosen - reward_reject
+        effective_reward = torch.maximum(
+            reward_chosen - reward_reject, torch.tensor(0.0)
+        )
+        loss = -torch.mean(torch.log(torch.sigmoid(effective_reward)))
+        return loss
 
     @override
     def adapter_model(self) -> List[AdapterModel]:
@@ -215,13 +232,15 @@ class PPOTask(TrainTask):
                 self.init_tensor(input.shape[-1])
 
             mask = ~mask[reward_start_idx:reward_end_idx]
-            reward = torch.softmax(input, dim=-1) @ PPOTask.reward_tensor
+            reward = self.reward_func(input)
             reward = reward.squeeze(dim=-1)
             reward_batch = int(len(reward) / 2)
             mask = mask.to(self.td_target.device)
             reward_chosen = reward[:reward_batch] * mask[:reward_batch]
             reward_reject = reward[reward_batch:] * mask[reward_batch:]
-            loss = -torch.mean(reward_chosen - reward_reject)
+            loss = self.reward_context_.loss_fn_(reward_chosen, reward_reject)
+
+            logging.info(f"Adapter {self.reward_context_.name_} loss: {loss} ")
 
             return loss
 
@@ -367,20 +386,21 @@ class PPOTask(TrainTask):
             log_prob = log_p.gather(-1, action).squeeze(-1)
             ref_log_prob = log_ref_p.gather(-1, action).squeeze(-1)
             r = -(log_prob - ref_log_prob)
-            r[:, -1] += torch.tanh(
-                input[reward_start_idx:reward_end_idx, generate_text_len - 1]
-                @ PPOTask.reward_tensor
+            r[:, -1] += (
+                self.reward_func(
+                    input[reward_start_idx:reward_end_idx, generate_text_len - 1]
+                )
             ).squeeze(dim=-1)
 
-            v = torch.tanh(
-                (
+            v = (
+                self.critic_func(
                     input[
                         critic_start_idx:critic_end_idx,
                         critic_len - generate_text_len - 1 : critic_len,
                     ]
-                    @ PPOTask.critic_tensor
-                ).squeeze(dim=-1)
-            )
+                )
+            ).squeeze(dim=-1)
+
             v_ = v.clone().detach()
             v_[:, -1] = 0
 
@@ -398,6 +418,7 @@ class PPOTask(TrainTask):
                         deltas[:, j]
                         + self.config_.gamma_ * self.config_.lamdb_ * adv[:, j + 1]
                     )
+                adv = self.normalize(adv)
 
                 adv = torch.flip(adv, [-1])
                 adv = adv[:, 0:-1]
