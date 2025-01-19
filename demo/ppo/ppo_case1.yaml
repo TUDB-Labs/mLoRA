@@ -65,8 +65,8 @@ tasks:
     actor_adapter: "lora_ppo_actor"
     reference: "base"
     dataset: "ppo_data"
-    batch_size: 4
-    mini_batch_size: 4
+    batch_size: 16
+    mini_batch_size: 16
     num_epochs: 10
     cutoff_len: 256
     save_step: 2000
