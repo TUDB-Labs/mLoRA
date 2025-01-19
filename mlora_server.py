@@ -30,6 +30,7 @@ import uvicorn
 import threading
 import multiprocessing
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 m_task_done, s_task_done = multiprocessing.Pipe(True)
 m_task_step, s_task_step = multiprocessing.Pipe(True)
@@ -88,6 +89,15 @@ def backend_server_run_fn(args):
     mlora.server.set_db(plyvel.DB(root_dir_list["db"], create_if_missing=True))
 
     mLoRAServer = FastAPI()
+    origins = ["*"]
+    mLoRAServer.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     mLoRAServer.include_router(mlora.server.dispatcher_router)
     mLoRAServer.include_router(mlora.server.file_router)
     mLoRAServer.include_router(mlora.server.dataset_router)
@@ -150,7 +160,6 @@ def task_step_callback_fn(task: mlora.executor.task.Task):
 def task_terminate_callback_fn(task: mlora.executor.task.Task):
     task_name = task.task_name()
     m_task_terminate.send(task_name)
-
 
 if __name__ == "__main__":
     args = mlora.utils.get_server_cmd_args()
