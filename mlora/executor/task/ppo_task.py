@@ -58,7 +58,7 @@ class PPOTask(TrainTask):
         super().__init__(config, llm_name)
         self.policy_tokens = []
         self.state_ = Stage.reward_model_training
-        self.idx = 1
+        self.idx = 0
         self.now_K_epochs = 0
         self.now_optim_iter_num = 0
         self.adv = torch.zeros(1)
@@ -215,13 +215,13 @@ class PPOTask(TrainTask):
                 self.init_tensor(input.shape[-1])
 
             mask = ~mask[reward_start_idx:reward_end_idx]
-            reward = input @ PPOTask.reward_tensor
-            reward = torch.sigmoid(reward).squeeze(dim=-1)
+            reward = torch.softmax(input, dim=-1) @ PPOTask.reward_tensor
+            reward = reward.squeeze(dim=-1)
             reward_batch = int(len(reward) / 2)
             mask = mask.to(self.td_target.device)
             reward_chosen = reward[:reward_batch] * mask[:reward_batch]
             reward_reject = reward[reward_batch:] * mask[reward_batch:]
-            loss = torch.mean(-torch.log(reward_chosen - reward_reject))
+            loss = -torch.mean(reward_chosen - reward_reject)
 
             return loss
 
@@ -275,8 +275,8 @@ class PPOTask(TrainTask):
         actor_end_idx: int,
         deterministic: bool = False,
     ):
-        critic_len = int(len(self.policy_tokens[-1]))
-        if self.idx == critic_len - 1:
+        generate_text_len = int(len(self.policy_tokens[-1]))
+        if self.idx == generate_text_len:
             self.state_ = Stage.policy_training_update
         if self.state_ != Stage.policy_training_decision:
             return
@@ -316,13 +316,17 @@ class PPOTask(TrainTask):
         batch_num = int(len(self.policy_tokens) / 2)
         ref_len = int(len(self.policy_tokens[0]))
         actor_len = int(len(self.policy_tokens[0]))
-        critic_len = int(len(self.policy_tokens[-1]))
+        critic_len = actor_len
+        generate_text_len = int(len(self.policy_tokens[-1]))
         reward_tokens = copy.deepcopy(self.policy_tokens[batch_num:])
         ref_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
+        actor_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
+        critic_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
         p_tokens: List[List[int]] = []
         p_tokens.extend(reward_tokens)
         p_tokens.extend(ref_tokens)
-        p_tokens.extend(self.policy_tokens)
+        p_tokens.extend(actor_tokens)
+        p_tokens.extend(critic_tokens)
 
         reward_start_idx = start_idx
         reward_end_idx = reward_start_idx + batch_num
@@ -343,34 +347,37 @@ class PPOTask(TrainTask):
                 return None
 
             # Dividing a long trajectory into shorter trajectories for updating
-            assert (self.config_.generate_num_) % self.config_.optim_num_ == 0
-            data_len = int(self.config_.generate_num_ / self.config_.optim_num_)
+            assert generate_text_len % self.config_.optim_num_ == 0
+            data_len = int(generate_text_len / self.config_.optim_num_)
 
             p = input[
                 actor_start_idx:actor_end_idx,
-                actor_len - critic_len + 1 : actor_len - 1,
+                actor_len - generate_text_len - 1 : actor_len - 1,
             ].softmax(dim=-1)
             log_p = input[
                 actor_start_idx:actor_end_idx,
-                actor_len - critic_len + 1 : actor_len - 1,
+                actor_len - generate_text_len - 1 : actor_len - 1,
             ].log_softmax(dim=-1)
             log_ref_p = input[
-                ref_start_idx:ref_end_idx, ref_len - critic_len + 1 : ref_len - 1
+                ref_start_idx:ref_end_idx, ref_len - generate_text_len - 1 : ref_len - 1
             ].log_softmax(dim=-1)
             action = torch.tensor(
                 self.policy_tokens[batch_num:], device=self.adv.device
-            )[:, 1:-1].unsqueeze(dim=-1)
+            )[:, :].unsqueeze(dim=-1)
             log_prob = log_p.gather(-1, action).squeeze(-1)
             ref_log_prob = log_ref_p.gather(-1, action).squeeze(-1)
             r = -(log_prob - ref_log_prob)
             r[:, -1] += torch.tanh(
-                input[reward_start_idx:reward_end_idx, critic_len - 1]
+                input[reward_start_idx:reward_end_idx, generate_text_len - 1]
                 @ PPOTask.reward_tensor
             ).squeeze(dim=-1)
 
             v = torch.tanh(
                 (
-                    input[critic_start_idx:critic_end_idx, 1:critic_len]
+                    input[
+                        critic_start_idx:critic_end_idx,
+                        critic_len - generate_text_len - 1 : critic_len,
+                    ]
                     @ PPOTask.critic_tensor
                 ).squeeze(dim=-1)
             )
@@ -406,7 +413,7 @@ class PPOTask(TrainTask):
             adv_ = self.adv[:, self.perm].clone().detach()
             td_target_ = self.td_target[:, self.perm].clone().detach()
             old_p = self.old_p[:, self.perm].clone().detach()
-            p = torch.softmax(p, dim=-1)
+            # p = torch.softmax(p, dim=-1)
             p = p[:, self.perm]
             v_ = v_[:, self.perm]
             action = action.to(self.adv.device)
