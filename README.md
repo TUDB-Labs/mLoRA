@@ -32,6 +32,9 @@ The end-to-end architecture of the mLoRA is shown in the figure:
 <img src="./docs/assets/architecture.jpg" width=70%">
 </div>
 
+## Latest News
+
+* [2025/01] mLoRA has been accepted by VLDB'25
 
 ## Quickstart
 
@@ -314,13 +317,14 @@ Or just call the script to check your code
 ## Citation
 Please cite the repo if you use the code in this repo.
 ```bibtex
-@misc{m-LoRA,
-  author = {Zhengmao, Ye\textsuperscript{*} and Dengchun, Li\textsuperscript{*} and Jingqi, Tian and Tingfeng, Lan and Yanbo, Liang and Yexi, Jiang and Jie, Zuo and Hui, Lu and Lei, Duan and Mingjie, Tang},
-  title = {m-LoRA: Efficient LLM Model Fine-tune and Inference via Multi-Lora Optimization},
-  year = {2023},
-  publisher = {GitHub},
-  howpublished = {\url{https://github.com/TUDB-Labs/mLoRA}},
-  note={\textsuperscript{*}: these authors contributed equally to this work.}
+@misc{ye2024mlorafinetuningloraadapters,
+      title={mLoRA: Fine-Tuning LoRA Adapters via Highly-Efficient Pipeline Parallelism in Multiple GPUs}, 
+      author={Zhengmao Ye and Dengchun Li and Zetao Hu and Tingfeng Lan and Jian Sha and Sicong Zhang and Lei Duan and Jie Zuo and Hui Lu and Yuanchun Zhou and Mingjie Tang},
+      year={2024},
+      eprint={2312.02515},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2312.02515}, 
 }
 ```
 
