@@ -1,10 +1,9 @@
-import unittest
+from mlora.model.modules import LoRAFunction
+from mlora.model.args import ModelData, ModelDataConfig
 
 import torch
+import unittest
 import torch.nn.functional as F
-
-from mlora.model.args import ModelData, ModelDataConfig
-from mlora.model.modules import LoRAFunction
 
 
 class TestLoraFunction(unittest.TestCase):

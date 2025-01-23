@@ -1,6 +1,7 @@
-import argparse
+import torch
 import os
 import re
+import argparse
 import shutil
 
 
@@ -12,8 +13,6 @@ def get_rank_folders(base_path):
             rank_folders.append(full_path)
     return rank_folders
 
-
-import torch
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="m-LoRA merge pipeline model")

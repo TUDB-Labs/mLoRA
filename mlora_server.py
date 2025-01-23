@@ -16,21 +16,20 @@
 #
 # Github:  https://github.com/TUDB-Labs/mLoRA
 
-import logging
-import multiprocessing
-import os
-import threading
-
-import plyvel
-import uvicorn
-from fastapi import FastAPI
-
-import mlora.config
+import mlora.model
+import mlora.utils
 import mlora.executor
 import mlora.executor.task
-import mlora.model
+import mlora.config
 import mlora.server
-import mlora.utils
+
+import os
+import plyvel
+import logging
+import uvicorn
+import threading
+import multiprocessing
+from fastapi import FastAPI
 
 m_task_done, s_task_done = multiprocessing.Pipe(True)
 m_task_step, s_task_step = multiprocessing.Pipe(True)
