@@ -3,11 +3,12 @@ import json
 import logging
 import os
 from enum import Enum
-from functools import partial
-from typing import Dict, List, Optional, OrderedDict, Tuple, override
+from typing import Callable, Dict, List, Optional, OrderedDict, Tuple, override
 
 import torch
+from datasets import load_dataset
 from torch.distributions import Categorical
+from tqdm import tqdm
 
 from mlora.config import PPOTaskConfig
 from mlora.executor.context import (
@@ -19,74 +20,73 @@ from mlora.executor.context import (
 from mlora.model.args import LinearInfo, MLoRADataConfig, Tokens
 from mlora.model.modules import AdapterModel
 from mlora.model.tokenizer import Tokenizer
+from mlora.prompter import PrompterFactory
 
 from .train_task import TrainTask
 
 
-class Stage(Enum):
-    reward_model_training = 0
-    policy_training_init = 1
-    policy_training_decision = 2
-    policy_training_update = 3
-    policy_training_iteration = 4
-
-    # 重载 __eq__ 方法，使得可以直接比较枚举成员与数字值
-    def __eq__(self, other):
-        if isinstance(other, int):
-            return self.value == other
-        return super().__eq__(other)
+class PPOTrainStage(Enum):
+    REWARD_MODEL_TRAINING = 0
+    INIT = 1
+    DECISION = 2
+    UPDATE = 3
+    ITERATION = 4
 
 
 class PPOTask(TrainTask):
 
+    reward_linear_tensor: torch.Tensor = torch.zeros((1, 1), requires_grad=False)
+    critic_linear_tensor: torch.Tensor = torch.zeros((1, 1), requires_grad=False)
+
     reward_context_: TrainTaskContext
-    reward_tensor: Optional[torch.Tensor] = None
     critic_context_: TrainTaskContext
-    critic_tensor: Optional[torch.Tensor] = None
     actor_context_: TrainTaskContext
     ref_context_: Optional[TaskContext]
     config_: PPOTaskConfig
-    idx: int  # generate index
+    generate_index: int
     now_K_epochs: int
     now_optim_iter_num: int
-    adv: torch.Tensor
+    advantage: torch.Tensor
     td_target: torch.Tensor
     policy_tokens: list[list[int]]
-    state_: Stage
+    stage: PPOTrainStage
 
     def __init__(self, config: PPOTaskConfig, llm_name: str) -> None:
         super().__init__(config, llm_name)
         self.policy_tokens = []
-        self.state_ = Stage.reward_model_training
-        self.idx = 0
+        self.stage = PPOTrainStage.REWARD_MODEL_TRAINING
+        self.now_epoch_ = 0
         self.now_K_epochs = 0
         self.now_optim_iter_num = 0
-        self.adv = torch.zeros(1)
+        self.eps = 1e-6
+        self.generate_index = 0
+        self.advantage = torch.zeros(1)
         self.td_target = torch.zeros(1)
         self.perm = torch.zeros(1)
-        self.now_epoch_ = 0
-        self.eps = 1e-6
 
-    def normalize(self, loss: torch.Tensor) -> torch.Tensor:
+    def __normalize(self, loss: torch.Tensor) -> torch.Tensor:
         loss_mean = loss.mean()
         loss_std = loss.std()
         normalized_loss = (loss - loss_mean) / (loss_std + self.eps)
         return normalized_loss
 
-    def init_tensor(self, dim: int):
-        device = self.td_target.device
-        PPOTask.reward_tensor = torch.randn(
-            (dim, 1), requires_grad=False, device=device
-        )
-        PPOTask.critic_tensor = torch.randn(
-            (dim, 1), requires_grad=False, device=device
-        )
-
     def reward_func(self, reward_t: torch.Tensor) -> torch.Tensor:
-        return self.normalize(reward_t @ PPOTask.reward_tensor)
+        dim = reward_t.shape[-1]
+        device = self.td_target.device
+        if PPOTask.reward_linear_tensor.shape[0] != dim:
+            PPOTask.reward_linear_tensor = torch.randn(
+                (dim, 1), requires_grad=False, device=device
+            )
+        return self.__normalize(reward_t @ PPOTask.reward_linear_tensor)
 
     def critic_func(self, critic_t: torch.Tensor) -> torch.Tensor:
-        return self.normalize(critic_t @ PPOTask.critic_tensor)
+        dim = critic_t.shape[-1]
+        device = self.td_target.device
+        if PPOTask.critic_linear_tensor.shape[0] != dim:
+            PPOTask.critic_linear_tensor = torch.randn(
+                (dim, 1), requires_grad=False, device=device
+            )
+        return self.__normalize(critic_t @ PPOTask.critic_linear_tensor)
 
     def prepare(self, linears_info: OrderedDict[str, LinearInfo], tokenizer: Tokenizer):
         self.tokenizer_ = tokenizer
@@ -97,13 +97,53 @@ class PPOTask(TrainTask):
         self.ppo_pre_context(linears_info)
 
         LOSS_CLASS = {
-            "mse": partial(self.ppo_mse),
-            "adv_loss": partial(self.ppo_adv_loss),
-            "reward_loss": partial(self.ppo_reward_loss),
+            "mse": PPOTask.ppo_mse,
+            "adv_loss": PPOTask.ppo_adv_loss,
+            "reward_loss": PPOTask.ppo_reward_loss,
         }
-        self.critic_context_.set_loss_fn(LOSS_CLASS[self.config_.critic_loss_type_])
-        self.actor_context_.set_loss_fn(LOSS_CLASS[self.config_.actor_loss_type_])
-        self.reward_context_.set_loss_fn(LOSS_CLASS[self.config_.reward_loss_type_])
+        self.critic_context_.set_loss_fn(
+            LOSS_CLASS[self.config_.critic_loss_type_]  # type: ignore
+        )
+        self.actor_context_.set_loss_fn(
+            LOSS_CLASS[self.config_.actor_loss_type_]  # type: ignore
+        )
+        self.reward_context_.set_loss_fn(
+            LOSS_CLASS[self.config_.reward_loss_type_]  # type: ignore
+        )
+
+    def _pre_dataset(self):
+        preprocess_func: Dict[str, Callable] = {
+            "default": lambda data: data,
+            "shuffle": lambda data: self._shuffle_data(data),
+            "sort": lambda data: data.sort(),
+        }
+
+        if self.config_.dataset_ is None:
+            logging.info(
+                "Task dataset is empty, maybe in pipeline we do not load dataset."
+            )
+            return
+
+        self.prompter_ = PrompterFactory.create(self.config_.dataset_)
+
+        logging.info(f"Task load data from {self.config_.dataset_.data_path_}")
+        data = load_dataset(
+            "json", data_files={"data_points": self.config_.dataset_.data_path_}
+        )
+
+        preprocess_type = self.config_.dataset_.preprocess_
+        if preprocess_type not in preprocess_func:
+            raise NotImplementedError
+
+        # Process data according to the data preprocess_type.
+        data = preprocess_func[preprocess_type](data)
+        logging.info(
+            f"Adapters {', '.join(self.adapter_name())} "
+            f"data size: {len(data['data_points'])}"
+        )
+
+        for _, data_point in tqdm(enumerate(data["data_points"])):
+            self.data_.append(data_point)
 
     def _pre_ref_context(self, linears_info: OrderedDict[str, LinearInfo]):
         if self.config_.reference_ is None:
@@ -135,34 +175,33 @@ class PPOTask(TrainTask):
         )
         self._pre_ref_context(linears_info)
 
-    def ppo_mse(self, data: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+    @staticmethod
+    def ppo_mse(data: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
         return (data - label).pow(2).mean()
 
+    @staticmethod
     def ppo_adv_loss(
-        self,
         prob: torch.Tensor,
         old_prob: torch.Tensor,
-        adv: torch.Tensor,
-        a: torch.Tensor,
+        advantage: torch.Tensor,
+        action: torch.Tensor,
     ) -> torch.Tensor:
-        entropy = Categorical(prob.view(-1, prob.shape[-1])).entropy().mean(dim=-1)
-        prob_a = prob.gather(-1, a).squeeze(-1)
-        old_prob_a = old_prob.gather(-1, a).squeeze(-1)
-        ratio = torch.exp(torch.log(prob_a) - torch.log(old_prob_a))
-        # a/b == exp(log(a)-log(b))
 
-        surr1 = ratio * adv
-        surr2 = (
-            torch.clamp(ratio, 1 - self.config_.clip_rate_, 1 + self.config_.clip_rate_)
-            * adv
-        )
-        loss1 = -torch.min(surr1, surr2) - self.config_.entropy_coef_ * entropy
+        clip_rate_ = 0.2
+        prob_a = prob.gather(-1, action).squeeze(-1)
+        old_prob_a = old_prob.gather(-1, action).squeeze(-1)
+        ratio = torch.exp(torch.log(prob_a) - torch.log(old_prob_a))
+
+        surr1 = ratio * advantage
+        surr2 = torch.clamp(ratio, 1 - clip_rate_, 1 + clip_rate_) * advantage
+        loss1 = -torch.min(surr1, surr2)
         loss1 = loss1.view(-1).mean()
 
         return loss1
 
+    @staticmethod
     def ppo_reward_loss(
-        self, reward_chosen: torch.Tensor, reward_reject: torch.Tensor
+        reward_chosen: torch.Tensor, reward_reject: torch.Tensor
     ) -> torch.Tensor:
         effective_reward = torch.maximum(
             reward_chosen - reward_reject, torch.tensor(0.0)
@@ -173,28 +212,28 @@ class PPOTask(TrainTask):
     @override
     def adapter_model(self) -> List[AdapterModel]:
 
-        sq = [
+        adapter_model_sequence = [
             self.reward_context_.adapter_model(),
             self.actor_context_.adapter_model(),
             self.critic_context_.adapter_model(),
         ]
         if self.ref_context_ is not None:
-            sq.append(self.ref_context_.adapter_model())
+            adapter_model_sequence.append(self.ref_context_.adapter_model())
 
-        return sq
+        return adapter_model_sequence
 
     @override
     def adapter_name(self) -> list[str]:
 
-        sq = [
+        adapter_name_sequence = [
             self.config_.reward_adapter_.name_,
             self.config_.actor_adapter_.name_,
             self.config_.critic_adapter_.name_,
         ]
         if self.config_.reference_ is not None:
-            sq.append(self.config_.reference_.name_)
+            adapter_name_sequence.append(self.config_.reference_.name_)
 
-        return sq
+        return adapter_name_sequence
 
     @override
     def switch_device(self, device: str):
@@ -203,11 +242,14 @@ class PPOTask(TrainTask):
         self.critic_context_.switch_device(device)
         self.actor_context_.switch_device(device)
         self.reward_context_.switch_device(device)
-        self.adv = self.adv.to(device)
+        self.advantage = self.advantage.to(device)
         self.td_target = self.td_target.to(device)
         self.perm = self.perm.to(device)
 
-    def stage_0(self, start_idx: int):
+        PPOTask.reward_linear_tensor = PPOTask.reward_linear_tensor.to(device)
+        PPOTask.critic_linear_tensor = PPOTask.critic_linear_tensor.to(device)
+
+    def stage_reward_training(self, start_idx: int):
 
         data_idx_s = self.now_data_idx_
         data_idx_e = self.now_data_idx_ + self.config_.mini_batch_size_
@@ -228,8 +270,6 @@ class PPOTask(TrainTask):
         reward_end_idx = reward_start_idx + len(reward_tokens)
 
         def loss_fn(input: torch.Tensor, _: torch.Tensor, mask: torch.Tensor):
-            if PPOTask.reward_tensor is None:
-                self.init_tensor(input.shape[-1])
 
             mask = ~mask[reward_start_idx:reward_end_idx]
             reward = self.reward_func(input)
@@ -256,7 +296,7 @@ class PPOTask(TrainTask):
 
         return reward_tokens, [reward_data_config]
 
-    def stage_1(self, start_idx: int):
+    def stage_init(self, start_idx: int):
         logging.info("reward_model's ready")
 
         data_idx_s = self.now_data_idx_
@@ -275,36 +315,31 @@ class PPOTask(TrainTask):
 
         actor_tokens_batch = int(len(actor_tokens) / 3)
         actor_tokens = actor_tokens[:actor_tokens_batch]
-        batch_num = int(len(actor_tokens))
-        generate_num = self.config_.generate_num_
-        BOS = actor_tokens[0][0]
-        EOS = actor_tokens[0][-1]
-        critic_tokens = [[BOS] + [0] * generate_num + [EOS] for i in range(batch_num)]
 
-        self.policy_tokens = []
-        self.policy_tokens.extend(actor_tokens)
-        self.policy_tokens.extend(critic_tokens)
+        self.policy_tokens = actor_tokens
 
-        self.state_ = Stage.policy_training_decision
+        self.stage = PPOTrainStage.DECISION
 
-    def stage_2(
+        return self.stage_decision(start_idx)
+
+    def stage_decision(
         self,
-        input: torch.Tensor,
-        actor_start_idx: int,
-        actor_end_idx: int,
-        deterministic: bool = False,
+        start_idx: int,
     ):
-        generate_text_len = int(len(self.policy_tokens[-1]))
-        if self.idx == generate_text_len:
-            self.state_ = Stage.policy_training_update
-        if self.state_ != Stage.policy_training_decision:
-            return
-
-        batch_num = int(len(self.policy_tokens) / 2)
+        batch_num = int(len(self.policy_tokens))
         actor_len = int(len(self.policy_tokens[0]))
+        generate_text_len = self.config_.generate_num_
+        actor_start_idx = start_idx
+        actor_end_idx = actor_start_idx + batch_num
+        actor_tokens = copy.deepcopy(self.policy_tokens)
 
-        idx = self.idx
-        with torch.no_grad():
+        def loss_fn(
+            input: torch.Tensor,
+            _: torch.Tensor,
+            __: torch.Tensor,
+            deterministic: bool = False,
+        ) -> Optional[torch.Tensor]:
+
             if deterministic:
                 a = torch.argmax(
                     input[actor_start_idx:actor_end_idx, actor_len - 1], dim=-1
@@ -320,32 +355,41 @@ class PPOTask(TrainTask):
                 a = m.sample()
                 a = a.view(batch_num, -1)
 
-        for i in range(batch_num):
-            self.policy_tokens[i].append(int(a[i].item()))
-        for i in range(batch_num, 2 * batch_num):
-            self.policy_tokens[i][idx] = int(a[i - batch_num].item())
-        self.idx += 1
+            for token_list, action in zip(self.policy_tokens, a):
+                token_list.append(int(action.item()))
+            self.generate_index += 1
 
-    def stage_3(self, start_idx: int):
+            if self.generate_index == generate_text_len:
+                self.stage = PPOTrainStage.UPDATE
 
-        if self.state_ == Stage.policy_training_init:
-            self.stage_1(start_idx)
-            self.state_ = Stage.policy_training_decision
+            return None
 
-        batch_num = int(len(self.policy_tokens) / 2)
+        actor_data_config = MLoRADataConfig(
+            self.actor_context_.name_,
+            self.actor_context_.type_,
+            actor_start_idx,
+            actor_end_idx,
+            self._expand_batch_tokens,
+            loss_fn,
+            self.task_name(),
+        )
+
+        return actor_tokens, [actor_data_config]
+
+    def stage_update(self, start_idx: int):
+
+        batch_num = int(len(self.policy_tokens))
         ref_len = int(len(self.policy_tokens[0]))
         actor_len = int(len(self.policy_tokens[0]))
         critic_len = actor_len
-        generate_text_len = int(len(self.policy_tokens[-1]))
-        reward_tokens = copy.deepcopy(self.policy_tokens[batch_num:])
-        ref_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
-        actor_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
-        critic_tokens = copy.deepcopy(self.policy_tokens[:batch_num])
-        p_tokens: List[List[int]] = []
-        p_tokens.extend(reward_tokens)
-        p_tokens.extend(ref_tokens)
-        p_tokens.extend(actor_tokens)
-        p_tokens.extend(critic_tokens)
+        generate_text_len = self.config_.generate_num_
+        reward_tokens = copy.deepcopy(self.policy_tokens)
+        ref_tokens = copy.deepcopy(self.policy_tokens)
+        actor_tokens = copy.deepcopy(self.policy_tokens)
+        critic_tokens = copy.deepcopy(self.policy_tokens)
+        p_tokens: List[List[int]] = (
+            reward_tokens + ref_tokens + actor_tokens + critic_tokens
+        )
 
         reward_start_idx = start_idx
         reward_end_idx = reward_start_idx + batch_num
@@ -360,36 +404,28 @@ class PPOTask(TrainTask):
             input: torch.Tensor, _: torch.Tensor, __: torch.Tensor
         ) -> Optional[torch.Tensor]:
 
-            if self.state_ == Stage.policy_training_decision:
-                self.stage_2(input, actor_start_idx, actor_end_idx)
-            if self.state_ == Stage.policy_training_decision:
-                return None
-
             # Dividing a long trajectory into shorter trajectories for updating
             assert generate_text_len % self.config_.optim_num_ == 0
             data_len = int(generate_text_len / self.config_.optim_num_)
 
-            p = input[
+            actor_slice = input[
                 actor_start_idx:actor_end_idx,
                 actor_len - generate_text_len - 1 : actor_len - 1,
-            ].softmax(dim=-1)
-            log_p = input[
-                actor_start_idx:actor_end_idx,
-                actor_len - generate_text_len - 1 : actor_len - 1,
-            ].log_softmax(dim=-1)
-            log_ref_p = input[
+            ]
+            ref_slice = input[
                 ref_start_idx:ref_end_idx, ref_len - generate_text_len - 1 : ref_len - 1
-            ].log_softmax(dim=-1)
-            action = torch.tensor(
-                self.policy_tokens[batch_num:], device=self.adv.device
-            )[:, :].unsqueeze(dim=-1)
+            ]
+            p = actor_slice.softmax(dim=-1)
+            log_p = actor_slice.log_softmax(dim=-1)
+            log_ref_p = ref_slice.log_softmax(dim=-1)
+            action = torch.tensor(self.policy_tokens, device=self.advantage.device)[
+                :, actor_len - generate_text_len :
+            ].unsqueeze(dim=-1)
             log_prob = log_p.gather(-1, action).squeeze(-1)
             ref_log_prob = log_ref_p.gather(-1, action).squeeze(-1)
-            r = -(log_prob - ref_log_prob)
+            r = -self.config_.kl_coefficient_ * (log_prob - ref_log_prob)
             r[:, -1] += (
-                self.reward_func(
-                    input[reward_start_idx:reward_end_idx, generate_text_len - 1]
-                )
+                self.reward_func(input[reward_start_idx:reward_end_idx, actor_len - 1])
             ).squeeze(dim=-1)
 
             v = (
@@ -404,6 +440,7 @@ class PPOTask(TrainTask):
             v_ = v.clone().detach()
             v_[:, -1] = 0
 
+            # For multiple updates,we need to record the initial advantage
             if self.now_K_epochs == 0 and self.now_optim_iter_num == 0:
                 deltas = torch.zeros_like(v_)
                 for j in range(1, len(deltas[0])):
@@ -411,47 +448,50 @@ class PPOTask(TrainTask):
                         r[:, j - 1] + self.config_.gamma_ * v_[:, j] - v_[:, j - 1]
                     )
 
-                adv = torch.zeros_like(v_)
+                advantage = torch.zeros_like(v_)
 
-                for j in range(len(adv[0]) - 2, -1, -1):
-                    adv[:, j] = (
+                for j in range(len(advantage[0]) - 2, -1, -1):
+                    advantage[:, j] = (
                         deltas[:, j]
-                        + self.config_.gamma_ * self.config_.lamdb_ * adv[:, j + 1]
+                        + self.config_.gamma_
+                        * self.config_.lamdb_
+                        * advantage[:, j + 1]
                     )
-                adv = self.normalize(adv)
+                advantage = self.__normalize(advantage)
 
-                adv = torch.flip(adv, [-1])
-                adv = adv[:, 0:-1]
+                advantage = torch.flip(advantage, [-1])
+                advantage = advantage[:, 0:-1]
                 v_ = v_[:, 0:-1]
-                td_target = adv + v_
-                self.adv = adv
+                td_target = advantage + v_
+                self.advantage = advantage
                 self.td_target = td_target
                 self.old_p = p
 
             if self.now_optim_iter_num == 0:
-                self.perm = torch.randperm(len(self.adv[0]))
+                self.perm = torch.randperm(len(self.advantage[0]))
 
-            adv_ = self.adv[:, self.perm].clone().detach()
+            advantage_ = self.advantage[:, self.perm].clone().detach()
             td_target_ = self.td_target[:, self.perm].clone().detach()
             old_p = self.old_p[:, self.perm].clone().detach()
-            # p = torch.softmax(p, dim=-1)
             p = p[:, self.perm]
             v_ = v_[:, self.perm]
-            action = action.to(self.adv.device)
+            action = action.to(self.advantage.device)
             action = action[:, self.perm]
 
             index = [
                 i
                 for i in range(
                     self.now_optim_iter_num * data_len,
-                    min((self.now_optim_iter_num + 1) * data_len, len(self.adv[0])),
+                    min(
+                        (self.now_optim_iter_num + 1) * data_len, len(self.advantage[0])
+                    ),
                 )
             ]
             loss1 = self.critic_context_.loss_fn_(
                 v_[:, index].view(-1), td_target_[:, index].view(-1)
             )
             loss2 = self.actor_context_.loss_fn_(
-                p[:, index], old_p[:, index], adv_[:, index], action[:, index]
+                p[:, index], old_p[:, index], advantage_[:, index], action[:, index]
             )
             loss = loss1 + loss2
 
@@ -462,7 +502,7 @@ class PPOTask(TrainTask):
 
             if self.now_K_epochs == self.config_.K_epochs_:
                 self.now_K_epochs = 0
-                self.state_ = Stage.policy_training_iteration
+                self.stage = PPOTrainStage.ITERATION
 
             logging.info(
                 f"Adapter {self.critic_context_.name_} loss: {loss1} "
@@ -524,28 +564,35 @@ class PPOTask(TrainTask):
     @override
     def data(self, start_idx: int) -> Tuple[List[Tokens], List[MLoRADataConfig]]:
 
+        stages = [
+            self.stage_reward_training,
+            self.stage_init,
+            self.stage_decision,
+            self.stage_update,
+        ]
+
+        data, data_config = stages[self.stage.value](start_idx)
+
         logging.info(
             f"Task - {self.reward_context_.name_}, "
             f"{self.actor_context_.name_}, {self.critic_context_.name_} "
             f"epoch: {self.now_epoch_}/{self.config_.num_epochs_} "
             f"iteration: {self.now_data_idx_}/{len(self.data_)} step: {self.now_step_} "
-            f"state: {self.state_} "
-            f"idx: {self.idx} "
+            f"state: {self.stage} "
+            f"generate_index: {self.generate_index} "
             f"now_K_epoch: {self.now_K_epochs} "
             f"now_optim_num: {self.now_optim_iter_num}"
         )
 
-        stages = [self.stage_0, self.stage_3, self.stage_3, self.stage_3]
-
-        return stages[self.state_.value](start_idx)
+        return data, data_config
 
     @override
     def step(self):
-        if self.state_ in [Stage.policy_training_init, Stage.policy_training_decision]:
+        if self.stage in [PPOTrainStage.INIT, PPOTrainStage.DECISION]:
             return
 
         stepd, need_checkpoint = False, False
-        is_reward_training = self.state_ == Stage.reward_model_training
+        is_reward_training = self.stage == PPOTrainStage.REWARD_MODEL_TRAINING
 
         # Perform training step if necessary
         if self.now_step_ % self.config_.accumulate_step_ == 0:
@@ -587,17 +634,16 @@ class PPOTask(TrainTask):
             self.actor_context_.step()
 
     def _update_data_idx_and_state(self, is_reward_training):
-        if self.state_ == Stage.reward_model_training:
+        if self.stage == PPOTrainStage.REWARD_MODEL_TRAINING:
             self.now_data_idx_ += self.config_.mini_batch_size_
-        elif self.state_ == Stage.policy_training_iteration:
+        elif self.stage == PPOTrainStage.ITERATION:
             self.now_data_idx_ += self.config_.mini_batch_size_
-            self.state_ = Stage.policy_training_init
-            self.idx = 1
+            self.stage = PPOTrainStage.INIT
+            self.generate_index = 0
 
     def _reset_training_state(self):
-        self.state_ = Stage.policy_training_init
+        self.stage = PPOTrainStage.INIT
         self.now_epoch_ = 0
-        self.now_step_ = 1
 
     def __save(
         self,

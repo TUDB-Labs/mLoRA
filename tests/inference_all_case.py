@@ -17,6 +17,8 @@ G_TEST_ADAPTERS = [
     # cpo adapter
     "adapters/lora_cpo",
     "adapters/loraplus_cpo"
+    # ppo adapter
+    "adapters/lora_ppo_actor"
 ]
 
 
@@ -63,6 +65,7 @@ if __name__ == "__main__":
             truncation=True,
         )
 
+        print(sequences)
         output: str = sequences[0]['generated_text'].strip().replace(
             "\r", " ").replace("\n", " ")
         print(f"Adapter {adapter} Output is: {output}")

@@ -11,6 +11,7 @@ declare -a test_case_yamls=(
     "demo/dpo/dpo_case_2.yaml"
     "demo/dpo/dpo_case_3.yaml"
     "demo/cit/cit_case_1.yaml"
+    "demo/ppo/ppo_case1.yaml"
 )
 
 set -x

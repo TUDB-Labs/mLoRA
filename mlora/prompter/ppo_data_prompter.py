@@ -3,7 +3,7 @@ from typing import Dict, List, override
 from .prompter import Prompter
 
 
-class PpoDataPrompter(Prompter):
+class PPODataPrompter(Prompter):
     def __init__(self, template: str):
         super().__init__(template)
 
@@ -16,7 +16,6 @@ class PpoDataPrompter(Prompter):
         instru_data = []
         chosen_data = []
         reject_data = []
-        data = []
 
         for data_point in data_points:
             data_str = self.__generate_prompt(data_point, "instruction")
@@ -26,7 +25,6 @@ class PpoDataPrompter(Prompter):
             chosen_data.append(chosen_str)
             reject_data.append(reject_str)
 
-        data.extend(instru_data)
-        data.extend(chosen_data)
-        data.extend(reject_data)
+        data = instru_data + chosen_data + reject_data
+
         return data

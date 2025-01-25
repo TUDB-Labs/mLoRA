@@ -27,8 +27,13 @@ class TaskConfig(DictConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
-        if config["adapter"] is not None:
+        if isinstance(config["adapter"], dict):
+            self.reward_adapter_ = adapters[config["adapter"]["reward_adapter"]]
+            self.actor_adapter_ = adapters[config["adapter"]["actor_adapter"]]
+            self.critic_adapter_ = adapters[config["adapter"]["critic_adapter"]]
+        else:
             self.adapter_ = adapters[config["adapter"]]
+
         self.dataset_: DatasetConfig | None = datasets[config["dataset"]]
 
 
@@ -152,8 +157,6 @@ class CITTaskConfig(TrainTaskConfig):
 class PPOTaskConfig(TrainTaskConfig):
     gamma_: float
     lamdb_: float
-    entropy_coef_: float
-    entropy_coef_decay_: float
     K_epochs_: int
     T_horizon_: int
     critic_loss_type_: str
@@ -170,15 +173,11 @@ class PPOTaskConfig(TrainTaskConfig):
     __params_map: Dict[str, str] = {
         "gamma_": "gamma",
         "lamdb_": "lamdb",
-        "entropy_coef_": "entropy_coef",
-        "entropy_coef_decay_": "entropy_coef_decay",
         "K_epochs_": "K_epochs",
-        "T_horizon_": "T_horizon",
         "optim_num_": "optim_num",
         "critic_loss_type_": "critic_loss_type",
         "actor_loss_type_": "actor_loss_type",
         "reward_loss_type_": "reward_loss_type",
-        "clip_rate_": "clip_rate",
         "generate_num_": "generate_num",
         "kl_coefficient_": "kl_coefficient",
     }
@@ -194,23 +193,16 @@ class PPOTaskConfig(TrainTaskConfig):
 
         self.gamma_ = float(self.gamma_)
         self.lamdb_ = float(self.lamdb_)
-        self.entropy_coef_ = float(self.entropy_coef_)
-        self.entropy_coef_decay_ = float(self.entropy_coef_decay_)
-        self.clip_rate_ = float(self.clip_rate_)
         self.K_epochs_ = int(self.K_epochs_)
-        self.T_horizon_ = int(self.T_horizon_)
         self.optim_num_ = int(self.optim_num_)
         self.generate_num_ = int(self.generate_num_)
         self.kl_coefficient_ = float(self.kl_coefficient_)
 
-        self.reward_adapter_ = adapters[config["reward_adapter"]]
-        self.actor_adapter_ = adapters[config["actor_adapter"]]
-        self.critic_adapter_ = adapters[config["critic_adapter"]]
         if config["reference"] not in adapters:
             self.reference_ = None
             logging.info("PPOTask - use the base model as reference model.")
-            return
-        self.reference_ = adapters[config["reference"]]
+        else:
+            self.reference_ = adapters[config["reference"]]
 
 
 TASKCONFIG_CLASS: Dict[str, Type[TaskConfig]] = {

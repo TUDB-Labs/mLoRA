@@ -148,11 +148,10 @@ class Task:
 
         # Process data according to the data preprocess_type.
         data = preprocess_func[preprocess_type](data)
-        if hasattr(self.config_, "name"):
-            logging.info(
-                f"Adapter {self.config_.adapter_.name_} "
-                f"data size: {len(data["data_points"])}"
-            )
+        logging.info(
+            f"Adapter {self.config_.adapter_.name_} "
+            f"data size: {len(data["data_points"])}"
+        )
 
         for _, data_point in tqdm(enumerate(data["data_points"])):
             self.data_.append(data_point)

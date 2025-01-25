@@ -12,7 +12,7 @@ adapters:
     type: "lora"
     path: "adapters/lora_ppo_reward"
     optimizer: "adamw"
-    lr: 3e-4
+    lr: 1e-4
     r: 32
     alpha: 64
     dropout: 0.05
@@ -28,7 +28,7 @@ adapters:
     type: "lora"
     path: "adapters/lora_ppo_critic"
     optimizer: "adamw"
-    lr: 3e-4
+    lr: 5e-5
     r: 32
     alpha: 64
     dropout: 0.05
@@ -44,7 +44,7 @@ adapters:
     type: "lora"
     path: "adapters/lora_ppo_actor"
     optimizer: "adamw"
-    lr: 3e-4
+    lr: 5e-5
     r: 32
     alpha: 64
     dropout: 0.05
@@ -60,27 +60,22 @@ tasks:
   - type: "ppo"
     name: "task_0"
     adapter: 
-    reward_adapter: "lora_ppo_reward"
-    critic_adapter: "lora_ppo_critic"
-    actor_adapter: "lora_ppo_actor"
+      reward_adapter: "lora_ppo_reward"
+      actor_adapter: "lora_ppo_actor"
+      critic_adapter: "lora_ppo_critic"
     reference: "base"
     dataset: "ppo_data"
     batch_size: 16
     mini_batch_size: 16
-    num_epochs: 10
+    num_epochs: 20
+    K_epochs: 5
+    optim_num: 2
     cutoff_len: 256
-    save_step: 2000
+    save_step: 100
     gamma: 0.99
     lamdb: 0.99
-    entropy_coef: 0
-    entropy_coef_decay: 0.99
-    clip_rate: 0.2
-    K_epochs: 2
-    T_horizon: 2048
-    optim_num: 2
+    kl_coefficient: 0.99
+    generate_num: 32
     critic_loss_type: "mse"
     actor_loss_type: "adv_loss"
     reward_loss_type: "reward_loss"
-    adv_normalization: True
-    generate_num: 10
-    kl_coefficient: 0.99
