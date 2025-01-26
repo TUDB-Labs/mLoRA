@@ -1,0 +1,8 @@
+template: |
+  {% if Optional=="instruction" %}
+  ### Instruction: {{ data_point['instruction'] + '\n'}}
+  {% elif Optional=="chosen" %}
+  ### Instruction: {{ data_point['instruction'] + '\n'}} ### Output: {{ data_point['chosen'] + '\n'}}
+  {% else %}
+  ### Instruction: {{ data_point['instruction'] + '\n'}} ### Output: {{ data_point['reject'] + '\n'}}
+  {% endif %}

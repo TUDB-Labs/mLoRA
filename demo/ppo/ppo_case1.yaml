@@ -1,0 +1,81 @@
+dispatcher:
+  name: "default"
+  concurrency_num: 2
+datasets:
+  - name: "ppo_data"
+    data: "demo/data.json"
+    prompt: "demo/ppo_prompt.yaml"
+    prompt_type: "ppo"
+    preprocess: "default"
+adapters:
+  - name: "lora_ppo_reward"
+    type: "lora"
+    path: "adapters/lora_ppo_reward"
+    optimizer: "adamw"
+    lr: 1e-4
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: false
+      down_proj: false
+      up_proj: false
+  - name: "lora_ppo_critic"
+    type: "lora"
+    path: "adapters/lora_ppo_critic"
+    optimizer: "adamw"
+    lr: 5e-5
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: false
+      down_proj: false
+      up_proj: false
+  - name: "lora_ppo_actor"
+    type: "lora"
+    path: "adapters/lora_ppo_actor"
+    optimizer: "adamw"
+    lr: 5e-5
+    r: 32
+    alpha: 64
+    dropout: 0.05
+    target_modules:
+      q_proj: true
+      k_proj: true
+      v_proj: true
+      o_proj: true
+      gate_proj: false
+      down_proj: false
+      up_proj: false
+tasks:
+  - type: "ppo"
+    name: "task_0"
+    adapter: 
+      reward_adapter: "lora_ppo_reward"
+      actor_adapter: "lora_ppo_actor"
+      critic_adapter: "lora_ppo_critic"
+    reference: "base"
+    dataset: "ppo_data"
+    batch_size: 16
+    mini_batch_size: 16
+    num_epochs: 20
+    K_epochs: 5
+    optim_num: 2
+    cutoff_len: 256
+    save_step: 100
+    gamma: 0.99
+    lamdb: 0.99
+    kl_coefficient: 0.99
+    generate_num: 32
+    critic_loss_type: "mse"
+    actor_loss_type: "adv_loss"
+    reward_loss_type: "reward_loss"

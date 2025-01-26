@@ -27,7 +27,13 @@ class TaskConfig(DictConfig):
         super().__init__(config)
         self.init(self.__params_map, config)
 
-        self.adapter_ = adapters[config["adapter"]]
+        if isinstance(config["adapter"], dict):
+            self.reward_adapter_ = adapters[config["adapter"]["reward_adapter"]]
+            self.actor_adapter_ = adapters[config["adapter"]["actor_adapter"]]
+            self.critic_adapter_ = adapters[config["adapter"]["critic_adapter"]]
+        else:
+            self.adapter_ = adapters[config["adapter"]]
+
         self.dataset_: DatasetConfig | None = datasets[config["dataset"]]
 
 
@@ -148,9 +154,61 @@ class CITTaskConfig(TrainTaskConfig):
         self.temperature_ = float(self.temperature_)
 
 
+class PPOTaskConfig(TrainTaskConfig):
+    gamma_: float
+    lamdb_: float
+    K_epochs_: int
+    T_horizon_: int
+    critic_loss_type_: str
+    actor_loss_type_: str
+    reward_loss_type_: str
+    clip_rate_: float
+    generate_num_: int
+    reward_adapter_: AdapterConfig
+    critic_adapter_: AdapterConfig
+    actor_adapter_: AdapterConfig
+    kl_coefficient_: float
+    optim_num_: int
+
+    __params_map: Dict[str, str] = {
+        "gamma_": "gamma",
+        "lamdb_": "lamdb",
+        "K_epochs_": "K_epochs",
+        "optim_num_": "optim_num",
+        "critic_loss_type_": "critic_loss_type",
+        "actor_loss_type_": "actor_loss_type",
+        "reward_loss_type_": "reward_loss_type",
+        "generate_num_": "generate_num",
+        "kl_coefficient_": "kl_coefficient",
+    }
+
+    def __init__(
+        self,
+        config: Dict[str, str],
+        adapters: Mapping[str, AdapterConfig],
+        datasets: Mapping[str, DatasetConfig],
+    ):
+        super().__init__(config, adapters, datasets)
+        self.init(self.__params_map, config)
+
+        self.gamma_ = float(self.gamma_)
+        self.lamdb_ = float(self.lamdb_)
+        self.K_epochs_ = int(self.K_epochs_)
+        self.optim_num_ = int(self.optim_num_)
+        self.generate_num_ = int(self.generate_num_)
+        self.kl_coefficient_ = float(self.kl_coefficient_)
+
+        if config["reference"] not in adapters:
+            self.reference_ = None
+            logging.info("PPOTask - use the base model as reference model.")
+        else:
+            self.reference_ = adapters[config["reference"]]
+
+
 TASKCONFIG_CLASS: Dict[str, Type[TaskConfig]] = {
     "train": TrainTaskConfig,
     "dpo": DPOTaskConfig,
     "cpo": CPOTaskConfig,
     "cit": CITTaskConfig,
+    "ppo": PPOTaskConfig,
 }
